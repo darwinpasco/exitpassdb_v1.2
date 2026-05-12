@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 02. Enum / Type Definitions
 -- Generated from ExitPass v1.2 DDL
 -- ============================================================
@@ -136,7 +136,7 @@ CREATE TYPE identity.role_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', '
 
 CREATE TYPE identity.role_type_enum AS ENUM ('SYSTEM', 'OPERATIONS', 'MERCHANT', 'FINANCE', 'COMPLIANCE', 'SUPPORT', 'SECURITY', 'SERVICE', 'OTHER');
 
-CREATE TYPE identity.service_credential_type_enum AS ENUM ('CLIENT_SECRET_REFERENCE', 'CERTIFICATE_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'API_KEY_REFERENCE', 'JWT_SIGNING_KEY_REFERENCE', 'KEY_VAULT_REFERENCE', 'NONE');
+CREATE TYPE identity.service_credential_type_enum AS ENUM ('CLIENT_SECRET_REFERENCE', 'CERTIFICATE_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'API_KEY_REFERENCE', 'JWT_SIGNING_KEY_REFERENCE', 'KEY_VAULT_REFERENCE', 'WEBHOOK_SECRET_REFERENCE', 'NONE');
 
 CREATE TYPE identity.service_identity_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
 
@@ -275,4 +275,5 @@ CREATE TYPE sites.site_group_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED'
 CREATE TYPE sites.site_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
 
 CREATE TYPE sites.site_type_enum AS ENUM ('OPEN_LOT', 'STRUCTURED_PARKING', 'MALL_PARKING', 'MIXED_USE_PROPERTY', 'TERMINAL', 'CAMPUS', 'OTHER');
+
 

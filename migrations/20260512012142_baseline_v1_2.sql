@@ -2696,7 +2696,7 @@ CREATE TYPE "identity"."role_status_enum" AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED
 -- Create enum type "role_type_enum"
 CREATE TYPE "identity"."role_type_enum" AS ENUM ('SYSTEM', 'OPERATIONS', 'MERCHANT', 'FINANCE', 'COMPLIANCE', 'SUPPORT', 'SECURITY', 'SERVICE', 'OTHER');
 -- Create enum type "service_credential_type_enum"
-CREATE TYPE "identity"."service_credential_type_enum" AS ENUM ('CLIENT_SECRET_REFERENCE', 'CERTIFICATE_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'API_KEY_REFERENCE', 'JWT_SIGNING_KEY_REFERENCE', 'KEY_VAULT_REFERENCE', 'NONE');
+CREATE TYPE "identity"."service_credential_type_enum" AS ENUM ('CLIENT_SECRET_REFERENCE', 'CERTIFICATE_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'API_KEY_REFERENCE', 'JWT_SIGNING_KEY_REFERENCE', 'KEY_VAULT_REFERENCE', 'WEBHOOK_SECRET_REFERENCE', 'NONE');
 -- Create enum type "service_identity_status_enum"
 CREATE TYPE "identity"."service_identity_status_enum" AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
 -- Create enum type "service_identity_type_enum"
@@ -5876,3 +5876,4 @@ COMMENT ON COLUMN "sites"."sites"."updated_by_user_id" IS 'User who last updated
 COMMENT ON COLUMN "sites"."sites"."updated_by_service_identity_id" IS 'Service identity that last updated the site.';
 -- Set comment to column: "row_version" on table: "sites"
 COMMENT ON COLUMN "sites"."sites"."row_version" IS 'Optimistic concurrency version.';
+
