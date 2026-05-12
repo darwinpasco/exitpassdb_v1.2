@@ -1,351 +1,446 @@
--- ============================================================
--- ExitPass Database Schema v1.2
--- Canonical Atlas State-Based Schema
--- ============================================================
+-- ExitPass Full Database Creation DDL v1.2 draft 1.4
+-- Generated from ExitPass Database Design v1.2 draft 1.6 / locked v1.2 baseline.
+-- PostgreSQL target. Review before production use; this is draft 1.4 with corrected semantic uniqueness and partial unique indexes aligned to Database Design v1.2 Section 13.
 
--- ============================================================
--- 00. Extensions
--- ============================================================
+BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- ============================================================
--- 01. Schemas
--- ============================================================
-
-CREATE SCHEMA IF NOT EXISTS audit;
-CREATE SCHEMA IF NOT EXISTS config;
 CREATE SCHEMA IF NOT EXISTS core;
+CREATE SCHEMA IF NOT EXISTS payments;
+CREATE SCHEMA IF NOT EXISTS sessions;
 CREATE SCHEMA IF NOT EXISTS coupons;
 CREATE SCHEMA IF NOT EXISTS discounts;
-CREATE SCHEMA IF NOT EXISTS events;
 CREATE SCHEMA IF NOT EXISTS gates;
-CREATE SCHEMA IF NOT EXISTS identity;
-CREATE SCHEMA IF NOT EXISTS integration;
-CREATE SCHEMA IF NOT EXISTS merchants;
 CREATE SCHEMA IF NOT EXISTS operations;
-CREATE SCHEMA IF NOT EXISTS payments;
 CREATE SCHEMA IF NOT EXISTS reconciliation;
-CREATE SCHEMA IF NOT EXISTS sessions;
 CREATE SCHEMA IF NOT EXISTS sites;
+CREATE SCHEMA IF NOT EXISTS merchants;
+CREATE SCHEMA IF NOT EXISTS identity;
+CREATE SCHEMA IF NOT EXISTS audit;
+CREATE SCHEMA IF NOT EXISTS integration;
+CREATE SCHEMA IF NOT EXISTS config;
+CREATE SCHEMA IF NOT EXISTS events;
 
 -- ============================================================
--- 02. Enum / Type Definitions
+-- ENUM TYPES
+-- ============================================================
+DO $$ BEGIN
+    CREATE TYPE audit.audit_change_type_enum AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'ACTIVATE', 'SUSPEND', 'REVOKE', 'RETIRE', 'APPROVE', 'REJECT', 'CONFIGURE', 'ROTATE_CREDENTIAL_REFERENCE', 'CORRECT', 'MIGRATE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.audit_event_category_enum AS ENUM ('DOMAIN_STATE_CHANGE', 'ACCESS', 'CONFIGURATION_CHANGE', 'POLICY_CHANGE', 'SECURITY_RELEVANT', 'INTEGRATION', 'RECONCILIATION', 'MANUAL_OPERATION', 'EVIDENCE_ACCESS', 'EVENTING', 'SYSTEM');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.audit_event_result_enum AS ENUM ('SUCCESS', 'FAILED', 'DENIED', 'REJECTED', 'EXPIRED', 'CANCELLED', 'DUPLICATE', 'NO_OP', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.evidence_access_classification_enum AS ENUM ('INTERNAL', 'RESTRICTED', 'HIGHLY_RESTRICTED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.evidence_link_status_enum AS ENUM ('ACTIVE', 'REDACTED', 'PURGED', 'HASH_ONLY', 'REVOKED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.evidence_redaction_status_enum AS ENUM ('NOT_REDACTED', 'PARTIALLY_REDACTED', 'FULLY_REDACTED', 'HASH_ONLY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.evidence_storage_type_enum AS ENUM ('OBJECT_STORAGE', 'EVIDENCE_VAULT', 'HASH_ONLY', 'EXTERNAL_REFERENCE', 'REDACTED_REFERENCE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.evidence_type_enum AS ENUM ('PROVIDER_PAYLOAD', 'PROVIDER_RESPONSE', 'STATUTORY_DISCOUNT_EVIDENCE', 'MANUAL_GATE_EVIDENCE', 'INCIDENT_EVIDENCE', 'RECONCILIATION_EVIDENCE', 'SETTLEMENT_EVIDENCE', 'CONFIGURATION_CHANGE_EVIDENCE', 'SECURITY_EVIDENCE', 'SCREENSHOT', 'DOCUMENT', 'HASH_ONLY_REFERENCE', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.security_event_category_enum AS ENUM ('AUTHENTICATION', 'AUTHORIZATION', 'REPLAY', 'RATE_LIMIT', 'WEBHOOK_TRUST', 'TOKEN_VALIDATION', 'EVIDENCE_ACCESS', 'PRIVILEGED_ACCESS', 'CREDENTIAL_REFERENCE', 'SERVICE_IDENTITY', 'SUSPICIOUS_ACTIVITY', 'DATA_ACCESS', 'CONFIGURATION_SECURITY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.security_event_result_enum AS ENUM ('ALLOWED', 'DENIED', 'FAILED', 'BLOCKED', 'REJECTED', 'DETECTED', 'ESCALATED', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.security_event_status_enum AS ENUM ('OPEN', 'ACKNOWLEDGED', 'UNDER_REVIEW', 'RESOLVED', 'FALSE_POSITIVE', 'ESCALATED', 'CLOSED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE audit.security_severity_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.controlled_code_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.feature_flag_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.rate_limit_enforcement_mode_enum AS ENUM ('MONITOR_ONLY', 'ENFORCE', 'BLOCK', 'CHALLENGE', 'DISABLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.rate_limit_policy_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.rate_limit_scope_type_enum AS ENUM ('PUBLIC_LOOKUP', 'PAYMENT_CREATE', 'PROVIDER_CALLBACK', 'GATE_CONSUME', 'ADMIN_API', 'SUPPORT_TOOL', 'EVIDENCE_ACCESS', 'SERVICE_TO_SERVICE', 'MERCHANT_USER', 'DEVICE', 'CUSTOM');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.system_parameter_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.system_parameter_type_enum AS ENUM ('TEXT', 'NUMERIC', 'BOOLEAN', 'JSON_REFERENCE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.ttl_expiry_action_enum AS ENUM ('EXPIRE_RECORD', 'INVALIDATE_RECORD', 'RELEASE_RESERVATION', 'REQUIRE_RECHECK', 'BLOCK_USE', 'PURGE_OR_ARCHIVE', 'NOTIFY_ONLY', 'CUSTOM_WORKFLOW');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.ttl_policy_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE config.ttl_scope_type_enum AS ENUM ('TARIFF_SNAPSHOT', 'PAYMENT_ATTEMPT', 'PROVIDER_SESSION', 'COUPON_RESERVATION', 'STATUTORY_DISCOUNT_VALIDATION', 'SESSION_LOOKUP_CACHE', 'EXIT_AUTHORIZATION', 'PROVIDER_CALLBACK_REPLAY_WINDOW', 'EVIDENCE_RETENTION', 'OUTBOX_RETRY', 'CUSTOM');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE core.exit_authorization_status_enum AS ENUM ('ISSUED', 'EXPIRED', 'INVALIDATED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE core.parking_session_status_enum AS ENUM ('ACTIVE', 'CLOSED', 'EXPIRED', 'INVALIDATED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE core.payment_attempt_status_enum AS ENUM ('REQUESTED', 'PENDING_PROVIDER', 'PENDING_FINALIZATION', 'CONFIRMED', 'FAILED', 'EXPIRED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE core.payment_confirmation_status_enum AS ENUM ('RECORDED', 'VOIDED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE core.tariff_snapshot_status_enum AS ENUM ('ACTIVE', 'CONSUMED', 'EXPIRED', 'SUPERSEDED', 'INVALIDATED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_application_status_enum AS ENUM ('REQUESTED', 'RESERVED', 'APPLIED', 'COMMITTED', 'RELEASED', 'EXPIRED', 'REJECTED', 'CANCELLED', 'REVERSED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_denomination_type_enum AS ENUM ('FIXED_AMOUNT', 'PERCENTAGE', 'FULL_WAIVER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_rule_evaluation_strategy_enum AS ENUM ('ALL_RULES_MUST_PASS', 'ANY_RULE_MAY_PASS', 'FIRST_MATCH', 'PRIORITY_ORDERED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_rule_group_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_rule_operator_enum AS ENUM ('EQUALS', 'NOT_EQUALS', 'IN', 'NOT_IN', 'GREATER_THAN', 'GREATER_THAN_OR_EQUAL', 'LESS_THAN', 'LESS_THAN_OR_EQUAL', 'BETWEEN', 'EXISTS', 'NOT_EXISTS');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_rule_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_rule_type_enum AS ENUM ('SITE_GROUP_SCOPE', 'SITE_SCOPE', 'MERCHANT_SCOPE', 'VALIDITY_WINDOW', 'MINIMUM_GROSS_AMOUNT', 'MAXIMUM_DISCOUNT_AMOUNT', 'STACKING_POLICY', 'FULL_WAIVER_ALLOWED', 'WALLET_SUFFICIENCY', 'BASELINE_HOURS_ONLY', 'PAYMENT_RAIL_SCOPE', 'CUSTOM_CONTROLLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_stacking_policy_enum AS ENUM ('NO_STACKING', 'STACK_WITH_STATUTORY_DISCOUNT', 'STACK_WITH_COUPON', 'STACK_WITH_BOTH', 'HIGHEST_BENEFIT_ONLY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE coupons.coupon_type_enum AS ENUM ('STANDARD', 'MERCHANT_SUBSIDY', 'VALIDATION', 'FULL_WAIVER', 'SERVICE_RECOVERY', 'PROMOTIONAL');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.discount_evidence_type_enum AS ENUM ('SENIOR_CITIZEN_ID', 'PWD_ID', 'AUTHORIZATION_LETTER', 'SUPPORTING_DOCUMENT', 'VALIDATION_SCREENSHOT', 'HASH_ONLY_REFERENCE', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.discount_policy_level_enum AS ENUM ('NATIONAL_LAW', 'LOCAL_ORDINANCE', 'SITE_POLICY', 'OPERATIONAL_POLICY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.discount_policy_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.discount_policy_type_enum AS ENUM ('LEGAL_REFERENCE', 'LOCAL_ORDINANCE', 'SITE_POLICY', 'OPERATIONAL_POLICY', 'IMPLEMENTATION_POLICY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.evidence_access_classification_enum AS ENUM ('INTERNAL', 'RESTRICTED', 'HIGHLY_RESTRICTED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.evidence_capture_status_enum AS ENUM ('CAPTURED', 'REFERENCED', 'REDACTED', 'PURGED', 'HASH_ONLY', 'REJECTED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.evidence_redaction_status_enum AS ENUM ('NOT_REDACTED', 'PARTIALLY_REDACTED', 'FULLY_REDACTED', 'HASH_ONLY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.evidence_storage_type_enum AS ENUM ('OBJECT_STORAGE', 'EVIDENCE_VAULT', 'HASH_ONLY', 'EXTERNAL_REFERENCE', 'REDACTED_REFERENCE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.policy_resolution_basis_enum AS ENUM ('LOCAL_ORDINANCE_APPLIED', 'NATIONAL_LAW_FALLBACK', 'SITE_POLICY_OPERATIONAL_ONLY', 'MANUAL_POLICY_SELECTION', 'SYSTEM_DEFAULT');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.statutory_discount_validations_channel_enum AS ENUM ('WEB_PAY', 'OPERATOR_ASSISTED', 'SYSTEM_VALIDATED', 'SUPPORT_REVIEW', 'RECONCILIATION_REVIEW');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.statutory_discount_validations_status_enum AS ENUM ('REQUESTED', 'PENDING_OPERATOR_REVIEW', 'APPROVED', 'REJECTED', 'FAILED', 'EXPIRED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE discounts.statutory_entitlement_type_enum AS ENUM ('SENIOR_CITIZEN', 'PWD', 'OTHER_STATUTORY');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.consumer_checkpoint_status_enum AS ENUM ('ACTIVE', 'LOCKED', 'FAILED', 'PAUSED', 'REPLAYING', 'RESET', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.dead_letter_status_enum AS ENUM ('OPEN', 'UNDER_REVIEW', 'REPLAY_REQUESTED', 'REPLAYED', 'RESOLVED', 'REJECTED', 'CLOSED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.dead_letter_type_enum AS ENUM ('PUBLICATION_FAILURE', 'BROKER_REJECTION', 'PAYLOAD_VALIDATION_FAILURE', 'ROUTING_FAILURE', 'CONSUMER_FAILURE', 'CONSUMER_REJECTION', 'RETRY_EXHAUSTED', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.domain_event_status_enum AS ENUM ('RECORDED', 'SUPERSEDED', 'CANCELLED', 'IGNORED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.event_broker_type_enum AS ENUM ('RABBITMQ', 'KAFKA', 'AZURE_SERVICE_BUS', 'AWS_SNS_SQS', 'WEBHOOK', 'IN_PROCESS', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.event_publication_status_enum AS ENUM ('STARTED', 'PUBLISHED', 'FAILED', 'TIMEOUT', 'REJECTED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE events.outbox_publication_status_enum AS ENUM ('PENDING', 'LOCKED', 'PUBLISHED', 'FAILED', 'RETRY_PENDING', 'DEAD_LETTERED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_authorization_consumption_status_enum AS ENUM ('REQUESTED', 'VALIDATED', 'CONSUMED', 'DENIED', 'EXPIRED', 'INVALID', 'REPLAYED', 'MISMATCHED', 'FAILED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_command_result_status_enum AS ENUM ('NOT_REQUESTED', 'REQUESTED', 'ACKNOWLEDGED', 'OPENED', 'FAILED', 'TIMEOUT', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_device_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'OFFLINE', 'SUSPENDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_device_type_enum AS ENUM ('BARRIER_CONTROLLER', 'LANE_CONTROLLER', 'EXIT_TERMINAL', 'LPR_DEVICE', 'GATEWAY', 'INTEGRATION_ENDPOINT', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_event_status_enum AS ENUM ('RECORDED', 'SUCCESS', 'FAILED', 'ERROR', 'ABNORMAL', 'IGNORED', 'DUPLICATE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_event_type_enum AS ENUM ('AUTHORIZATION_PRESENTED', 'AUTHORIZATION_VALIDATED', 'AUTHORIZATION_DENIED', 'AUTHORIZATION_CONSUMED', 'GATE_OPEN_COMMAND_REQUESTED', 'GATE_OPEN_ACKNOWLEDGED', 'GATE_OPEN_FAILED', 'BARRIER_RAISED', 'BARRIER_LOWERED', 'VEHICLE_DETECTED', 'VEHICLE_EXITED', 'DEVICE_ONLINE', 'DEVICE_OFFLINE', 'DEVICE_ERROR', 'MANUAL_INTERVENTION', 'TAMPER_ALERT', 'ABNORMAL_EVENT');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE gates.gate_heartbeat_status_enum AS ENUM ('ONLINE', 'DEGRADED', 'OFFLINE', 'ERROR', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.permission_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'DEPRECATED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.role_permission_binding_status_enum AS ENUM ('ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.role_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.role_type_enum AS ENUM ('SYSTEM', 'OPERATIONS', 'MERCHANT', 'FINANCE', 'COMPLIANCE', 'SUPPORT', 'SECURITY', 'SERVICE', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.service_credential_type_enum AS ENUM ('CLIENT_SECRET_REFERENCE', 'CERTIFICATE_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'API_KEY_REFERENCE', 'JWT_SIGNING_KEY_REFERENCE', 'KEY_VAULT_REFERENCE', 'NONE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.service_identity_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.service_identity_type_enum AS ENUM ('INTERNAL_SERVICE', 'EXTERNAL_CLIENT', 'ADAPTER', 'BACKGROUND_WORKER', 'SCHEDULED_JOB', 'WEBHOOK_RECEIVER', 'DEVICE', 'GATEWAY', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.user_role_assignment_status_enum AS ENUM ('ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.user_status_enum AS ENUM ('INVITED', 'ACTIVE', 'LOCKED', 'SUSPENDED', 'INACTIVE', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE identity.user_type_enum AS ENUM ('INTERNAL_ADMIN', 'OPERATIONS_USER', 'SITE_OPERATOR', 'SUPPORT_USER', 'FINANCE_USER', 'COMPLIANCE_USER', 'MERCHANT_USER', 'SECURITY_USER', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.adapter_mapping_confidence_enum AS ENUM ('MANUAL_APPROVED', 'IMPORTED_APPROVED', 'SYSTEM_DISCOVERED', 'LOW_CONFIDENCE', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.adapter_mapping_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.adapter_mapping_type_enum AS ENUM ('SITE_GROUP', 'SITE', 'LANE', 'GATE_DEVICE', 'PAYMENT_RAIL', 'TARIFF_GROUP', 'VENDOR_LOCATION', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.http_method_enum AS ENUM ('GET', 'POST', 'PUT', 'PATCH', 'DELETE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.integration_credential_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'ROTATION_DUE', 'EXPIRED', 'REVOKED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.integration_credential_type_enum AS ENUM ('API_KEY_REFERENCE', 'CLIENT_SECRET_REFERENCE', 'OAUTH_CLIENT_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'SIGNING_KEY_REFERENCE', 'WEBHOOK_SECRET_REFERENCE', 'BASIC_AUTH_REFERENCE', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.integration_health_check_type_enum AS ENUM ('SCHEDULED_HEALTH_CHECK', 'ON_DEMAND_CHECK', 'REQUEST_FAILURE', 'CALLBACK_FAILURE', 'LATENCY_OBSERVATION', 'RECOVERY_OBSERVATION', 'MANUAL_OBSERVATION');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.integration_health_status_enum AS ENUM ('AVAILABLE', 'DEGRADED', 'UNAVAILABLE', 'ERROR', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.secret_store_type_enum AS ENUM ('KEY_VAULT', 'SECRETS_MANAGER', 'CERTIFICATE_STORE', 'HSM', 'ENVIRONMENT_REFERENCE', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.vendor_endpoint_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.vendor_endpoint_type_enum AS ENUM ('SESSION_LOOKUP', 'TARIFF_QUERY', 'PAYMENT_CREATE', 'PAYMENT_STATUS', 'WEBHOOK_RECEIVE', 'GATE_COMMAND', 'HEALTH_CHECK', 'TOKEN_REQUEST', 'EVIDENCE_UPLOAD', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.vendor_system_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE integration.vendor_system_type_enum AS ENUM ('VENDOR_PMS', 'PAYMENT_PROVIDER', 'GATE_CONTROLLER', 'LPR_PROVIDER', 'MOPS_PROVIDER', 'EVIDENCE_STORAGE', 'NOTIFICATION_PROVIDER', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_scope_type_enum AS ENUM ('SITE_GROUP', 'SITE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_site_scope_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_type_enum AS ENUM ('TENANT', 'ANCHOR_TENANT', 'PROPERTY_OPERATOR', 'INSTITUTION', 'SERVICE_PROVIDER', 'PROMOTIONAL_PARTNER', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_user_status_enum AS ENUM ('INVITED', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_user_type_enum AS ENUM ('MERCHANT_ADMIN', 'MERCHANT_MANAGER', 'MERCHANT_STAFF', 'REPORT_VIEWER', 'COUPON_OPERATOR', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_wallet_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'FROZEN', 'CLOSED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE merchants.merchant_wallet_type_enum AS ENUM ('PRE_FUNDED', 'POSTPAID_SPONSORSHIP', 'CREDIT_LIMIT', 'EXTERNAL_LEDGER', 'PROMOTIONAL_BUDGET', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.incident_severity_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.incident_status_enum AS ENUM ('OPEN', 'ACKNOWLEDGED', 'INVESTIGATING', 'MITIGATED', 'RESOLVED', 'CLOSED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.manual_gate_action_status_enum AS ENUM ('RECORDED', 'COMPLETED', 'FAILED', 'CANCELLED', 'UNDER_REVIEW', 'RECONCILED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.manual_gate_action_type_enum AS ENUM ('MANUAL_OPEN', 'MANUAL_RELEASE', 'EMERGENCY_OPEN', 'MOPS_RELEASE', 'SUPERVISOR_RELEASE', 'DEVICE_FAILURE_RELEASE', 'INCIDENT_RELEASE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.operator_action_status_enum AS ENUM ('RECORDED', 'SUCCESS', 'FAILED', 'DENIED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.operator_action_type_enum AS ENUM ('SENSITIVE_EVIDENCE_VIEW', 'INCIDENT_ASSIGN', 'INCIDENT_UPDATE', 'RECONCILIATION_REVIEW', 'CONTROLLED_RECHECK', 'PROVIDER_STATUS_QUERY_TRIGGERED', 'SUPPORT_NOTE_ADDED', 'REPORT_EXPORTED', 'CONFIGURATION_VIEW', 'SECURITY_REVIEW');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.override_approval_decision_enum AS ENUM ('APPROVED', 'REJECTED', 'ESCALATED', 'CANCELLED', 'EXPIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.override_request_status_enum AS ENUM ('REQUESTED', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'EXECUTED', 'CLOSED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE operations.override_type_enum AS ENUM ('MANUAL_GATE_OPEN', 'EXIT_AUTHORIZATION_REISSUE', 'COUPON_EXCEPTION', 'STATUTORY_DISCOUNT_REVIEW_EXCEPTION', 'INCIDENT_RELEASE', 'CONTINUITY_ACTION', 'RECONCILIATION_CORRECTION', 'SUPPORT_ACTION');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.central_pms_report_status_enum AS ENUM ('NOT_REPORTED', 'REPORTED', 'ACCEPTED', 'REJECTED', 'FAILED', 'RETRY_PENDING');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.payment_rail_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'MAINTENANCE', 'DEPRECATED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.payment_rail_type_enum AS ENUM ('QRPH', 'CARD', 'EWALLET', 'HOSTED_CHECKOUT', 'BANK_TRANSFER', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.provider_callback_processing_status_enum AS ENUM ('RECEIVED', 'PROCESSING', 'PROCESSED', 'DUPLICATE', 'REJECTED', 'FAILED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.provider_callback_verification_status_enum AS ENUM ('UNVERIFIED', 'VERIFIED', 'FAILED_SIGNATURE', 'FAILED_TIMESTAMP', 'FAILED_SOURCE', 'FAILED_REPLAY', 'FAILED_SCHEMA', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.provider_outcome_status_enum AS ENUM ('CONFIRMED', 'FAILED', 'EXPIRED', 'CANCELLED', 'REJECTED', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.provider_session_status_enum AS ENUM ('CREATED', 'ACTIVE', 'PENDING', 'PAID', 'FAILED', 'EXPIRED', 'CANCELLED', 'UNKNOWN');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE payments.provider_status_query_status_enum AS ENUM ('REQUESTED', 'COMPLETED', 'FAILED', 'TIMEOUT', 'INCONCLUSIVE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.mops_transaction_record_status_enum AS ENUM ('RECORDED', 'IMPORTED', 'PENDING_RECONCILIATION', 'RECONCILED', 'DISPUTED', 'REJECTED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_comparison_basis_enum AS ENUM ('MOPS_TO_CORE', 'MOPS_TO_SETTLEMENT', 'PROVIDER_TO_CORE', 'MANUAL_GATE_TO_CORE', 'COUPON_WALLET_TO_APPLICATION', 'SETTLEMENT_TO_CONFIRMATION', 'INCIDENT_SCOPE_REVIEW');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_exception_severity_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_exception_status_enum AS ENUM ('OPEN', 'ASSIGNED', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED', 'ESCALATED', 'CLOSED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_exception_type_enum AS ENUM ('AMOUNT_MISMATCH', 'MISSING_PAYMENT_CONFIRMATION', 'MISSING_PROVIDER_OUTCOME', 'MISSING_MOPS_RECORD', 'DUPLICATE_RECORD', 'MANUAL_GATE_WITHOUT_PAYMENT', 'SETTLEMENT_MISMATCH', 'COUPON_WALLET_MISMATCH', 'UNRESOLVED_CONTINUITY_RECORD', 'POLICY_EXCEPTION', 'UNKNOWN_EXCEPTION');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_item_status_enum AS ENUM ('PENDING', 'MATCHED', 'MISMATCHED', 'EXCEPTION', 'DISPUTED', 'REJECTED', 'RESOLVED', 'CLOSED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_match_status_enum AS ENUM ('NOT_EVALUATED', 'MATCH', 'AMOUNT_MISMATCH', 'MISSING_SOURCE', 'MISSING_TARGET', 'DUPLICATE', 'INCONCLUSIVE', 'REJECTED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_run_status_enum AS ENUM ('STARTED', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED', 'REPROCESSING');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_run_type_enum AS ENUM ('MOPS_RECONCILIATION', 'PROVIDER_SETTLEMENT', 'MANUAL_GATE_REVIEW', 'INCIDENT_RECONCILIATION', 'COUPON_WALLET_RECONCILIATION', 'PAYMENT_PROVIDER_RECONCILIATION', 'VENDOR_PMS_RECONCILIATION');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.reconciliation_scope_type_enum AS ENUM ('TIME_WINDOW', 'SITE', 'SITE_GROUP', 'INCIDENT', 'SOURCE_BATCH', 'PAYMENT_RAIL', 'VENDOR_SYSTEM', 'MIXED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.settlement_comparison_result_enum AS ENUM ('MATCHED', 'MISMATCHED', 'SHORT_SETTLED', 'OVER_SETTLED', 'MISSING_SETTLEMENT', 'DUPLICATE_SETTLEMENT', 'UNRESOLVED', 'REJECTED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE reconciliation.settlement_comparison_source_type_enum AS ENUM ('PROVIDER_SETTLEMENT_REPORT', 'BANK_STATEMENT', 'PAYMENT_RAIL_REPORT', 'MERCHANT_WALLET_LEDGER', 'MOPS_EXPORT', 'MANUAL_COLLECTION_REPORT', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sessions.session_identifier_status_enum AS ENUM ('ACTIVE', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sessions.session_lookup_cache_status_enum AS ENUM ('ACTIVE', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sessions.session_lookup_type_enum AS ENUM ('PLATE_NUMBER', 'TICKET_NUMBER', 'VENDOR_SESSION_REF', 'QR_REFERENCE', 'COMBINED_PLATE_TICKET');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sessions.session_resolution_channel_enum AS ENUM ('WEB_PAY', 'OPERATOR_ASSISTED', 'INTERNAL_SERVICE', 'RECONCILIATION_RECHECK', 'SUPPORT_RECHECK');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sessions.session_resolution_request_status_enum AS ENUM ('REQUESTED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sessions.session_resolution_result_status_enum AS ENUM ('RESOLVED_SINGLE', 'NOT_FOUND', 'AMBIGUOUS', 'FAILED', 'EXPIRED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.device_assignment_status_enum AS ENUM ('ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'EXPIRED', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.device_assignment_type_enum AS ENUM ('GATE_DEVICE', 'LPR_DEVICE', 'LANE_CONTROLLER', 'PAYMENT_DEVICE', 'SERVICE_PRINCIPAL', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.lane_direction_enum AS ENUM ('INBOUND', 'OUTBOUND', 'BIDIRECTIONAL', 'NOT_APPLICABLE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.lane_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.lane_type_enum AS ENUM ('ENTRY', 'EXIT', 'MIXED', 'VALIDATION', 'SERVICE', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.site_group_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.site_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE sites.site_type_enum AS ENUM ('OPEN_LOT', 'STRUCTURED_PARKING', 'MALL_PARKING', 'MIXED_USE_PROPERTY', 'TERMINAL', 'CAMPUS', 'OTHER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ============================================================
+-- TABLES
 -- ============================================================
 
--- Generated enum definitions will be appended here.
-
--- ============================================================
--- 03. Table Definitions
--- ============================================================
-
--- Generated table definitions will be appended here.
-
--- ============================================================
--- 04. Foreign Key Constraints
--- ============================================================
-
--- Generated foreign key definitions will be appended here.
-
--- ============================================================
--- 05. Indexes
--- ============================================================
-
--- Generated index definitions will be appended here.
-
--- ============================================================
--- 06. Views
--- ============================================================
-
--- Generated view definitions will be appended here.
-
--- ============================================================
--- 07. Functions and Triggers
--- ============================================================
-
--- Generated function and trigger definitions will be appended here.-- ============================================================
--- 02. Enum / Type Definitions
--- Generated from ExitPass v1.2 DDL
--- ============================================================
-CREATE TYPE audit.audit_change_type_enum AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'ACTIVATE', 'SUSPEND', 'REVOKE', 'RETIRE', 'APPROVE', 'REJECT', 'CONFIGURE', 'ROTATE_CREDENTIAL_REFERENCE', 'CORRECT', 'MIGRATE');
-
-CREATE TYPE audit.audit_event_category_enum AS ENUM ('DOMAIN_STATE_CHANGE', 'ACCESS', 'CONFIGURATION_CHANGE', 'POLICY_CHANGE', 'SECURITY_RELEVANT', 'INTEGRATION', 'RECONCILIATION', 'MANUAL_OPERATION', 'EVIDENCE_ACCESS', 'EVENTING', 'SYSTEM');
-
-CREATE TYPE audit.audit_event_result_enum AS ENUM ('SUCCESS', 'FAILED', 'DENIED', 'REJECTED', 'EXPIRED', 'CANCELLED', 'DUPLICATE', 'NO_OP', 'UNKNOWN');
-
-CREATE TYPE audit.evidence_access_classification_enum AS ENUM ('INTERNAL', 'RESTRICTED', 'HIGHLY_RESTRICTED');
-
-CREATE TYPE audit.evidence_link_status_enum AS ENUM ('ACTIVE', 'REDACTED', 'PURGED', 'HASH_ONLY', 'REVOKED');
-
-CREATE TYPE audit.evidence_redaction_status_enum AS ENUM ('NOT_REDACTED', 'PARTIALLY_REDACTED', 'FULLY_REDACTED', 'HASH_ONLY');
-
-CREATE TYPE audit.evidence_storage_type_enum AS ENUM ('OBJECT_STORAGE', 'EVIDENCE_VAULT', 'HASH_ONLY', 'EXTERNAL_REFERENCE', 'REDACTED_REFERENCE');
-
-CREATE TYPE audit.evidence_type_enum AS ENUM ('PROVIDER_PAYLOAD', 'PROVIDER_RESPONSE', 'STATUTORY_DISCOUNT_EVIDENCE', 'MANUAL_GATE_EVIDENCE', 'INCIDENT_EVIDENCE', 'RECONCILIATION_EVIDENCE', 'SETTLEMENT_EVIDENCE', 'CONFIGURATION_CHANGE_EVIDENCE', 'SECURITY_EVIDENCE', 'SCREENSHOT', 'DOCUMENT', 'HASH_ONLY_REFERENCE', 'OTHER');
-
-CREATE TYPE audit.security_event_category_enum AS ENUM ('AUTHENTICATION', 'AUTHORIZATION', 'REPLAY', 'RATE_LIMIT', 'WEBHOOK_TRUST', 'TOKEN_VALIDATION', 'EVIDENCE_ACCESS', 'PRIVILEGED_ACCESS', 'CREDENTIAL_REFERENCE', 'SERVICE_IDENTITY', 'SUSPICIOUS_ACTIVITY', 'DATA_ACCESS', 'CONFIGURATION_SECURITY');
-
-CREATE TYPE audit.security_event_result_enum AS ENUM ('ALLOWED', 'DENIED', 'FAILED', 'BLOCKED', 'REJECTED', 'DETECTED', 'ESCALATED', 'UNKNOWN');
-
-CREATE TYPE audit.security_event_status_enum AS ENUM ('OPEN', 'ACKNOWLEDGED', 'UNDER_REVIEW', 'RESOLVED', 'FALSE_POSITIVE', 'ESCALATED', 'CLOSED');
-
-CREATE TYPE audit.security_severity_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-
-CREATE TYPE config.controlled_code_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');
-
-CREATE TYPE config.feature_flag_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE config.rate_limit_enforcement_mode_enum AS ENUM ('MONITOR_ONLY', 'ENFORCE', 'BLOCK', 'CHALLENGE', 'DISABLED');
-
-CREATE TYPE config.rate_limit_policy_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
-
-CREATE TYPE config.rate_limit_scope_type_enum AS ENUM ('PUBLIC_LOOKUP', 'PAYMENT_CREATE', 'PROVIDER_CALLBACK', 'GATE_CONSUME', 'ADMIN_API', 'SUPPORT_TOOL', 'EVIDENCE_ACCESS', 'SERVICE_TO_SERVICE', 'MERCHANT_USER', 'DEVICE', 'CUSTOM');
-
-CREATE TYPE config.system_parameter_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');
-
-CREATE TYPE config.system_parameter_type_enum AS ENUM ('TEXT', 'NUMERIC', 'BOOLEAN', 'JSON_REFERENCE');
-
-CREATE TYPE config.ttl_expiry_action_enum AS ENUM ('EXPIRE_RECORD', 'INVALIDATE_RECORD', 'RELEASE_RESERVATION', 'REQUIRE_RECHECK', 'BLOCK_USE', 'PURGE_OR_ARCHIVE', 'NOTIFY_ONLY', 'CUSTOM_WORKFLOW');
-
-CREATE TYPE config.ttl_policy_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
-
-CREATE TYPE config.ttl_scope_type_enum AS ENUM ('TARIFF_SNAPSHOT', 'PAYMENT_ATTEMPT', 'PROVIDER_SESSION', 'COUPON_RESERVATION', 'STATUTORY_DISCOUNT_VALIDATION', 'SESSION_LOOKUP_CACHE', 'EXIT_AUTHORIZATION', 'PROVIDER_CALLBACK_REPLAY_WINDOW', 'EVIDENCE_RETENTION', 'OUTBOX_RETRY', 'CUSTOM');
-
-CREATE TYPE core.exit_authorization_status_enum AS ENUM ('ISSUED', 'EXPIRED', 'INVALIDATED');
-
-CREATE TYPE core.parking_session_status_enum AS ENUM ('ACTIVE', 'CLOSED', 'EXPIRED', 'INVALIDATED');
-
-CREATE TYPE core.payment_attempt_status_enum AS ENUM ('REQUESTED', 'PENDING_PROVIDER', 'PENDING_FINALIZATION', 'CONFIRMED', 'FAILED', 'EXPIRED', 'CANCELLED');
-
-CREATE TYPE core.payment_confirmation_status_enum AS ENUM ('RECORDED', 'VOIDED');
-
-CREATE TYPE core.tariff_snapshot_status_enum AS ENUM ('ACTIVE', 'CONSUMED', 'EXPIRED', 'SUPERSEDED', 'INVALIDATED');
-
-CREATE TYPE coupons.coupon_application_status_enum AS ENUM ('REQUESTED', 'RESERVED', 'APPLIED', 'COMMITTED', 'RELEASED', 'EXPIRED', 'REJECTED', 'CANCELLED', 'REVERSED');
-
-CREATE TYPE coupons.coupon_denomination_type_enum AS ENUM ('FIXED_AMOUNT', 'PERCENTAGE', 'FULL_WAIVER');
-
-CREATE TYPE coupons.coupon_rule_evaluation_strategy_enum AS ENUM ('ALL_RULES_MUST_PASS', 'ANY_RULE_MAY_PASS', 'FIRST_MATCH', 'PRIORITY_ORDERED');
-
-CREATE TYPE coupons.coupon_rule_group_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
-
-CREATE TYPE coupons.coupon_rule_operator_enum AS ENUM ('EQUALS', 'NOT_EQUALS', 'IN', 'NOT_IN', 'GREATER_THAN', 'GREATER_THAN_OR_EQUAL', 'LESS_THAN', 'LESS_THAN_OR_EQUAL', 'BETWEEN', 'EXISTS', 'NOT_EXISTS');
-
-CREATE TYPE coupons.coupon_rule_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
-
-CREATE TYPE coupons.coupon_rule_type_enum AS ENUM ('SITE_GROUP_SCOPE', 'SITE_SCOPE', 'MERCHANT_SCOPE', 'VALIDITY_WINDOW', 'MINIMUM_GROSS_AMOUNT', 'MAXIMUM_DISCOUNT_AMOUNT', 'STACKING_POLICY', 'FULL_WAIVER_ALLOWED', 'WALLET_SUFFICIENCY', 'BASELINE_HOURS_ONLY', 'PAYMENT_RAIL_SCOPE', 'CUSTOM_CONTROLLED');
-
-CREATE TYPE coupons.coupon_stacking_policy_enum AS ENUM ('NO_STACKING', 'STACK_WITH_STATUTORY_DISCOUNT', 'STACK_WITH_COUPON', 'STACK_WITH_BOTH', 'HIGHEST_BENEFIT_ONLY');
-
-CREATE TYPE coupons.coupon_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE coupons.coupon_type_enum AS ENUM ('STANDARD', 'MERCHANT_SUBSIDY', 'VALIDATION', 'FULL_WAIVER', 'SERVICE_RECOVERY', 'PROMOTIONAL');
-
-CREATE TYPE discounts.discount_evidence_type_enum AS ENUM ('SENIOR_CITIZEN_ID', 'PWD_ID', 'AUTHORIZATION_LETTER', 'SUPPORTING_DOCUMENT', 'VALIDATION_SCREENSHOT', 'HASH_ONLY_REFERENCE', 'OTHER');
-
-CREATE TYPE discounts.discount_policy_level_enum AS ENUM ('NATIONAL_LAW', 'LOCAL_ORDINANCE', 'SITE_POLICY', 'OPERATIONAL_POLICY');
-
-CREATE TYPE discounts.discount_policy_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');
-
-CREATE TYPE discounts.discount_policy_type_enum AS ENUM ('LEGAL_REFERENCE', 'LOCAL_ORDINANCE', 'SITE_POLICY', 'OPERATIONAL_POLICY', 'IMPLEMENTATION_POLICY');
-
-CREATE TYPE discounts.evidence_access_classification_enum AS ENUM ('INTERNAL', 'RESTRICTED', 'HIGHLY_RESTRICTED');
-
-CREATE TYPE discounts.evidence_capture_status_enum AS ENUM ('CAPTURED', 'REFERENCED', 'REDACTED', 'PURGED', 'HASH_ONLY', 'REJECTED');
-
-CREATE TYPE discounts.evidence_redaction_status_enum AS ENUM ('NOT_REDACTED', 'PARTIALLY_REDACTED', 'FULLY_REDACTED', 'HASH_ONLY');
-
-CREATE TYPE discounts.evidence_storage_type_enum AS ENUM ('OBJECT_STORAGE', 'EVIDENCE_VAULT', 'HASH_ONLY', 'EXTERNAL_REFERENCE', 'REDACTED_REFERENCE');
-
-CREATE TYPE discounts.policy_resolution_basis_enum AS ENUM ('LOCAL_ORDINANCE_APPLIED', 'NATIONAL_LAW_FALLBACK', 'SITE_POLICY_OPERATIONAL_ONLY', 'MANUAL_POLICY_SELECTION', 'SYSTEM_DEFAULT');
-
-CREATE TYPE discounts.statutory_discount_validations_channel_enum AS ENUM ('WEB_PAY', 'OPERATOR_ASSISTED', 'SYSTEM_VALIDATED', 'SUPPORT_REVIEW', 'RECONCILIATION_REVIEW');
-
-CREATE TYPE discounts.statutory_discount_validations_status_enum AS ENUM ('REQUESTED', 'PENDING_OPERATOR_REVIEW', 'APPROVED', 'REJECTED', 'FAILED', 'EXPIRED', 'CANCELLED');
-
-CREATE TYPE discounts.statutory_entitlement_type_enum AS ENUM ('SENIOR_CITIZEN', 'PWD', 'OTHER_STATUTORY');
-
-CREATE TYPE events.consumer_checkpoint_status_enum AS ENUM ('ACTIVE', 'LOCKED', 'FAILED', 'PAUSED', 'REPLAYING', 'RESET', 'RETIRED');
-
-CREATE TYPE events.dead_letter_status_enum AS ENUM ('OPEN', 'UNDER_REVIEW', 'REPLAY_REQUESTED', 'REPLAYED', 'RESOLVED', 'REJECTED', 'CLOSED', 'CANCELLED');
-
-CREATE TYPE events.dead_letter_type_enum AS ENUM ('PUBLICATION_FAILURE', 'BROKER_REJECTION', 'PAYLOAD_VALIDATION_FAILURE', 'ROUTING_FAILURE', 'CONSUMER_FAILURE', 'CONSUMER_REJECTION', 'RETRY_EXHAUSTED', 'UNKNOWN');
-
-CREATE TYPE events.domain_event_status_enum AS ENUM ('RECORDED', 'SUPERSEDED', 'CANCELLED', 'IGNORED');
-
-CREATE TYPE events.event_broker_type_enum AS ENUM ('RABBITMQ', 'KAFKA', 'AZURE_SERVICE_BUS', 'AWS_SNS_SQS', 'WEBHOOK', 'IN_PROCESS', 'OTHER');
-
-CREATE TYPE events.event_publication_status_enum AS ENUM ('STARTED', 'PUBLISHED', 'FAILED', 'TIMEOUT', 'REJECTED', 'CANCELLED');
-
-CREATE TYPE events.outbox_publication_status_enum AS ENUM ('PENDING', 'LOCKED', 'PUBLISHED', 'FAILED', 'RETRY_PENDING', 'DEAD_LETTERED', 'CANCELLED');
-
-CREATE TYPE gates.gate_authorization_consumption_status_enum AS ENUM ('REQUESTED', 'VALIDATED', 'CONSUMED', 'DENIED', 'EXPIRED', 'INVALID', 'REPLAYED', 'MISMATCHED', 'FAILED');
-
-CREATE TYPE gates.gate_command_result_status_enum AS ENUM ('NOT_REQUESTED', 'REQUESTED', 'ACKNOWLEDGED', 'OPENED', 'FAILED', 'TIMEOUT', 'UNKNOWN');
-
-CREATE TYPE gates.gate_device_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'OFFLINE', 'SUSPENDED', 'RETIRED');
-
-CREATE TYPE gates.gate_device_type_enum AS ENUM ('BARRIER_CONTROLLER', 'LANE_CONTROLLER', 'EXIT_TERMINAL', 'LPR_DEVICE', 'GATEWAY', 'INTEGRATION_ENDPOINT', 'OTHER');
-
-CREATE TYPE gates.gate_event_status_enum AS ENUM ('RECORDED', 'SUCCESS', 'FAILED', 'ERROR', 'ABNORMAL', 'IGNORED', 'DUPLICATE');
-
-CREATE TYPE gates.gate_event_type_enum AS ENUM ('AUTHORIZATION_PRESENTED', 'AUTHORIZATION_VALIDATED', 'AUTHORIZATION_DENIED', 'AUTHORIZATION_CONSUMED', 'GATE_OPEN_COMMAND_REQUESTED', 'GATE_OPEN_ACKNOWLEDGED', 'GATE_OPEN_FAILED', 'BARRIER_RAISED', 'BARRIER_LOWERED', 'VEHICLE_DETECTED', 'VEHICLE_EXITED', 'DEVICE_ONLINE', 'DEVICE_OFFLINE', 'DEVICE_ERROR', 'MANUAL_INTERVENTION', 'TAMPER_ALERT', 'ABNORMAL_EVENT');
-
-CREATE TYPE gates.gate_heartbeat_status_enum AS ENUM ('ONLINE', 'DEGRADED', 'OFFLINE', 'ERROR', 'UNKNOWN');
-
-CREATE TYPE identity.permission_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'DEPRECATED', 'RETIRED');
-
-CREATE TYPE identity.role_permission_binding_status_enum AS ENUM ('ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE identity.role_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'RETIRED');
-
-CREATE TYPE identity.role_type_enum AS ENUM ('SYSTEM', 'OPERATIONS', 'MERCHANT', 'FINANCE', 'COMPLIANCE', 'SUPPORT', 'SECURITY', 'SERVICE', 'OTHER');
-
-CREATE TYPE identity.service_credential_type_enum AS ENUM ('CLIENT_SECRET_REFERENCE', 'CERTIFICATE_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'API_KEY_REFERENCE', 'JWT_SIGNING_KEY_REFERENCE', 'KEY_VAULT_REFERENCE', 'NONE');
-
-CREATE TYPE identity.service_identity_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE identity.service_identity_type_enum AS ENUM ('INTERNAL_SERVICE', 'EXTERNAL_CLIENT', 'ADAPTER', 'BACKGROUND_WORKER', 'SCHEDULED_JOB', 'WEBHOOK_RECEIVER', 'DEVICE', 'GATEWAY', 'OTHER');
-
-CREATE TYPE identity.user_role_assignment_status_enum AS ENUM ('ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE identity.user_status_enum AS ENUM ('INVITED', 'ACTIVE', 'LOCKED', 'SUSPENDED', 'INACTIVE', 'RETIRED');
-
-CREATE TYPE identity.user_type_enum AS ENUM ('INTERNAL_ADMIN', 'OPERATIONS_USER', 'SITE_OPERATOR', 'SUPPORT_USER', 'FINANCE_USER', 'COMPLIANCE_USER', 'MERCHANT_USER', 'SECURITY_USER', 'OTHER');
-
-CREATE TYPE integration.adapter_mapping_confidence_enum AS ENUM ('MANUAL_APPROVED', 'IMPORTED_APPROVED', 'SYSTEM_DISCOVERED', 'LOW_CONFIDENCE', 'UNKNOWN');
-
-CREATE TYPE integration.adapter_mapping_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');
-
-CREATE TYPE integration.adapter_mapping_type_enum AS ENUM ('SITE_GROUP', 'SITE', 'LANE', 'GATE_DEVICE', 'PAYMENT_RAIL', 'TARIFF_GROUP', 'VENDOR_LOCATION', 'OTHER');
-
-CREATE TYPE integration.http_method_enum AS ENUM ('GET', 'POST', 'PUT', 'PATCH', 'DELETE');
-
-CREATE TYPE integration.integration_credential_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'ROTATION_DUE', 'EXPIRED', 'REVOKED', 'RETIRED');
-
-CREATE TYPE integration.integration_credential_type_enum AS ENUM ('API_KEY_REFERENCE', 'CLIENT_SECRET_REFERENCE', 'OAUTH_CLIENT_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'SIGNING_KEY_REFERENCE', 'WEBHOOK_SECRET_REFERENCE', 'BASIC_AUTH_REFERENCE', 'OTHER');
-
-CREATE TYPE integration.integration_health_check_type_enum AS ENUM ('SCHEDULED_HEALTH_CHECK', 'ON_DEMAND_CHECK', 'REQUEST_FAILURE', 'CALLBACK_FAILURE', 'LATENCY_OBSERVATION', 'RECOVERY_OBSERVATION', 'MANUAL_OBSERVATION');
-
-CREATE TYPE integration.integration_health_status_enum AS ENUM ('AVAILABLE', 'DEGRADED', 'UNAVAILABLE', 'ERROR', 'UNKNOWN');
-
-CREATE TYPE integration.secret_store_type_enum AS ENUM ('KEY_VAULT', 'SECRETS_MANAGER', 'CERTIFICATE_STORE', 'HSM', 'ENVIRONMENT_REFERENCE', 'OTHER');
-
-CREATE TYPE integration.vendor_endpoint_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');
-
-CREATE TYPE integration.vendor_endpoint_type_enum AS ENUM ('SESSION_LOOKUP', 'TARIFF_QUERY', 'PAYMENT_CREATE', 'PAYMENT_STATUS', 'WEBHOOK_RECEIVE', 'GATE_COMMAND', 'HEALTH_CHECK', 'TOKEN_REQUEST', 'EVIDENCE_UPLOAD', 'OTHER');
-
-CREATE TYPE integration.vendor_system_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');
-
-CREATE TYPE integration.vendor_system_type_enum AS ENUM ('VENDOR_PMS', 'PAYMENT_PROVIDER', 'GATE_CONTROLLER', 'LPR_PROVIDER', 'MOPS_PROVIDER', 'EVIDENCE_STORAGE', 'NOTIFICATION_PROVIDER', 'OTHER');
-
-CREATE TYPE merchants.merchant_scope_type_enum AS ENUM ('SITE_GROUP', 'SITE');
-
-CREATE TYPE merchants.merchant_site_scope_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED', 'RETIRED');
-
-CREATE TYPE merchants.merchant_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
-
-CREATE TYPE merchants.merchant_type_enum AS ENUM ('TENANT', 'ANCHOR_TENANT', 'PROPERTY_OPERATOR', 'INSTITUTION', 'SERVICE_PROVIDER', 'PROMOTIONAL_PARTNER', 'OTHER');
-
-CREATE TYPE merchants.merchant_user_status_enum AS ENUM ('INVITED', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE merchants.merchant_user_type_enum AS ENUM ('MERCHANT_ADMIN', 'MERCHANT_MANAGER', 'MERCHANT_STAFF', 'REPORT_VIEWER', 'COUPON_OPERATOR', 'OTHER');
-
-CREATE TYPE merchants.merchant_wallet_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'FROZEN', 'CLOSED', 'RETIRED');
-
-CREATE TYPE merchants.merchant_wallet_type_enum AS ENUM ('PRE_FUNDED', 'POSTPAID_SPONSORSHIP', 'CREDIT_LIMIT', 'EXTERNAL_LEDGER', 'PROMOTIONAL_BUDGET', 'OTHER');
-
-CREATE TYPE operations.incident_severity_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-
-CREATE TYPE operations.incident_status_enum AS ENUM ('OPEN', 'ACKNOWLEDGED', 'INVESTIGATING', 'MITIGATED', 'RESOLVED', 'CLOSED', 'CANCELLED');
-
-CREATE TYPE operations.manual_gate_action_status_enum AS ENUM ('RECORDED', 'COMPLETED', 'FAILED', 'CANCELLED', 'UNDER_REVIEW', 'RECONCILED');
-
-CREATE TYPE operations.manual_gate_action_type_enum AS ENUM ('MANUAL_OPEN', 'MANUAL_RELEASE', 'EMERGENCY_OPEN', 'MOPS_RELEASE', 'SUPERVISOR_RELEASE', 'DEVICE_FAILURE_RELEASE', 'INCIDENT_RELEASE');
-
-CREATE TYPE operations.operator_action_status_enum AS ENUM ('RECORDED', 'SUCCESS', 'FAILED', 'DENIED', 'CANCELLED');
-
-CREATE TYPE operations.operator_action_type_enum AS ENUM ('SENSITIVE_EVIDENCE_VIEW', 'INCIDENT_ASSIGN', 'INCIDENT_UPDATE', 'RECONCILIATION_REVIEW', 'CONTROLLED_RECHECK', 'PROVIDER_STATUS_QUERY_TRIGGERED', 'SUPPORT_NOTE_ADDED', 'REPORT_EXPORTED', 'CONFIGURATION_VIEW', 'SECURITY_REVIEW');
-
-CREATE TYPE operations.override_approval_decision_enum AS ENUM ('APPROVED', 'REJECTED', 'ESCALATED', 'CANCELLED', 'EXPIRED');
-
-CREATE TYPE operations.override_request_status_enum AS ENUM ('REQUESTED', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'EXECUTED', 'CLOSED');
-
-CREATE TYPE operations.override_type_enum AS ENUM ('MANUAL_GATE_OPEN', 'EXIT_AUTHORIZATION_REISSUE', 'COUPON_EXCEPTION', 'STATUTORY_DISCOUNT_REVIEW_EXCEPTION', 'INCIDENT_RELEASE', 'CONTINUITY_ACTION', 'RECONCILIATION_CORRECTION', 'SUPPORT_ACTION');
-
-CREATE TYPE payments.central_pms_report_status_enum AS ENUM ('NOT_REPORTED', 'REPORTED', 'ACCEPTED', 'REJECTED', 'FAILED', 'RETRY_PENDING');
-
-CREATE TYPE payments.payment_rail_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'MAINTENANCE', 'DEPRECATED', 'RETIRED');
-
-CREATE TYPE payments.payment_rail_type_enum AS ENUM ('QRPH', 'CARD', 'EWALLET', 'HOSTED_CHECKOUT', 'BANK_TRANSFER', 'OTHER');
-
-CREATE TYPE payments.provider_callback_processing_status_enum AS ENUM ('RECEIVED', 'PROCESSING', 'PROCESSED', 'DUPLICATE', 'REJECTED', 'FAILED');
-
-CREATE TYPE payments.provider_callback_verification_status_enum AS ENUM ('UNVERIFIED', 'VERIFIED', 'FAILED_SIGNATURE', 'FAILED_TIMESTAMP', 'FAILED_SOURCE', 'FAILED_REPLAY', 'FAILED_SCHEMA', 'UNKNOWN');
-
-CREATE TYPE payments.provider_outcome_status_enum AS ENUM ('CONFIRMED', 'FAILED', 'EXPIRED', 'CANCELLED', 'REJECTED', 'UNKNOWN');
-
-CREATE TYPE payments.provider_session_status_enum AS ENUM ('CREATED', 'ACTIVE', 'PENDING', 'PAID', 'FAILED', 'EXPIRED', 'CANCELLED', 'UNKNOWN');
-
-CREATE TYPE payments.provider_status_query_status_enum AS ENUM ('REQUESTED', 'COMPLETED', 'FAILED', 'TIMEOUT', 'INCONCLUSIVE');
-
-CREATE TYPE reconciliation.mops_transaction_record_status_enum AS ENUM ('RECORDED', 'IMPORTED', 'PENDING_RECONCILIATION', 'RECONCILED', 'DISPUTED', 'REJECTED', 'CANCELLED');
-
-CREATE TYPE reconciliation.reconciliation_comparison_basis_enum AS ENUM ('MOPS_TO_CORE', 'MOPS_TO_SETTLEMENT', 'PROVIDER_TO_CORE', 'MANUAL_GATE_TO_CORE', 'COUPON_WALLET_TO_APPLICATION', 'SETTLEMENT_TO_CONFIRMATION', 'INCIDENT_SCOPE_REVIEW');
-
-CREATE TYPE reconciliation.reconciliation_exception_severity_enum AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-
-CREATE TYPE reconciliation.reconciliation_exception_status_enum AS ENUM ('OPEN', 'ASSIGNED', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED', 'ESCALATED', 'CLOSED', 'CANCELLED');
-
-CREATE TYPE reconciliation.reconciliation_exception_type_enum AS ENUM ('AMOUNT_MISMATCH', 'MISSING_PAYMENT_CONFIRMATION', 'MISSING_PROVIDER_OUTCOME', 'MISSING_MOPS_RECORD', 'DUPLICATE_RECORD', 'MANUAL_GATE_WITHOUT_PAYMENT', 'SETTLEMENT_MISMATCH', 'COUPON_WALLET_MISMATCH', 'UNRESOLVED_CONTINUITY_RECORD', 'POLICY_EXCEPTION', 'UNKNOWN_EXCEPTION');
-
-CREATE TYPE reconciliation.reconciliation_item_status_enum AS ENUM ('PENDING', 'MATCHED', 'MISMATCHED', 'EXCEPTION', 'DISPUTED', 'REJECTED', 'RESOLVED', 'CLOSED');
-
-CREATE TYPE reconciliation.reconciliation_match_status_enum AS ENUM ('NOT_EVALUATED', 'MATCH', 'AMOUNT_MISMATCH', 'MISSING_SOURCE', 'MISSING_TARGET', 'DUPLICATE', 'INCONCLUSIVE', 'REJECTED');
-
-CREATE TYPE reconciliation.reconciliation_run_status_enum AS ENUM ('STARTED', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED', 'REPROCESSING');
-
-CREATE TYPE reconciliation.reconciliation_run_type_enum AS ENUM ('MOPS_RECONCILIATION', 'PROVIDER_SETTLEMENT', 'MANUAL_GATE_REVIEW', 'INCIDENT_RECONCILIATION', 'COUPON_WALLET_RECONCILIATION', 'PAYMENT_PROVIDER_RECONCILIATION', 'VENDOR_PMS_RECONCILIATION');
-
-CREATE TYPE reconciliation.reconciliation_scope_type_enum AS ENUM ('TIME_WINDOW', 'SITE', 'SITE_GROUP', 'INCIDENT', 'SOURCE_BATCH', 'PAYMENT_RAIL', 'VENDOR_SYSTEM', 'MIXED');
-
-CREATE TYPE reconciliation.settlement_comparison_result_enum AS ENUM ('MATCHED', 'MISMATCHED', 'SHORT_SETTLED', 'OVER_SETTLED', 'MISSING_SETTLEMENT', 'DUPLICATE_SETTLEMENT', 'UNRESOLVED', 'REJECTED');
-
-CREATE TYPE reconciliation.settlement_comparison_source_type_enum AS ENUM ('PROVIDER_SETTLEMENT_REPORT', 'BANK_STATEMENT', 'PAYMENT_RAIL_REPORT', 'MERCHANT_WALLET_LEDGER', 'MOPS_EXPORT', 'MANUAL_COLLECTION_REPORT', 'OTHER');
-
-CREATE TYPE sessions.session_identifier_status_enum AS ENUM ('ACTIVE', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED');
-
-CREATE TYPE sessions.session_lookup_cache_status_enum AS ENUM ('ACTIVE', 'EXPIRED', 'INVALIDATED', 'SUPERSEDED');
-
-CREATE TYPE sessions.session_lookup_type_enum AS ENUM ('PLATE_NUMBER', 'TICKET_NUMBER', 'VENDOR_SESSION_REF', 'QR_REFERENCE', 'COMBINED_PLATE_TICKET');
-
-CREATE TYPE sessions.session_resolution_channel_enum AS ENUM ('WEB_PAY', 'OPERATOR_ASSISTED', 'INTERNAL_SERVICE', 'RECONCILIATION_RECHECK', 'SUPPORT_RECHECK');
-
-CREATE TYPE sessions.session_resolution_request_status_enum AS ENUM ('REQUESTED', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED');
-
-CREATE TYPE sessions.session_resolution_result_status_enum AS ENUM ('RESOLVED_SINGLE', 'NOT_FOUND', 'AMBIGUOUS', 'FAILED', 'EXPIRED', 'CANCELLED');
-
-CREATE TYPE sites.device_assignment_status_enum AS ENUM ('ACTIVE', 'SUSPENDED', 'SUPERSEDED', 'EXPIRED', 'RETIRED');
-
-CREATE TYPE sites.device_assignment_type_enum AS ENUM ('GATE_DEVICE', 'LPR_DEVICE', 'LANE_CONTROLLER', 'PAYMENT_DEVICE', 'SERVICE_PRINCIPAL', 'OTHER');
-
-CREATE TYPE sites.lane_direction_enum AS ENUM ('INBOUND', 'OUTBOUND', 'BIDIRECTIONAL', 'NOT_APPLICABLE');
-
-CREATE TYPE sites.lane_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
-
-CREATE TYPE sites.lane_type_enum AS ENUM ('ENTRY', 'EXIT', 'MIXED', 'VALIDATION', 'SERVICE', 'OTHER');
-
-CREATE TYPE sites.site_group_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
-
-CREATE TYPE sites.site_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'SUSPENDED', 'INACTIVE', 'RETIRED');
-
-CREATE TYPE sites.site_type_enum AS ENUM ('OPEN_LOT', 'STRUCTURED_PARKING', 'MALL_PARKING', 'MIXED_USE_PROPERTY', 'TERMINAL', 'CAMPUS', 'OTHER');
-
--- ============================================================
--- 03. Table Definitions
--- Generated from ExitPass v1.2 DDL
--- Excludes foreign keys, indexes, triggers, functions, and seed data.
--- ============================================================
 -- ------------------------------------------------------------
 -- core.parking_sessions
 -- ------------------------------------------------------------
@@ -3941,11 +4036,608 @@ COMMENT ON COLUMN events.consumer_checkpoints.correlation_id IS 'Cross-service c
 COMMENT ON COLUMN events.consumer_checkpoints.row_version IS 'Optimistic concurrency version for checkpoint safety.';
 
 -- ============================================================
+-- FOREIGN KEYS
+-- ============================================================
+ALTER TABLE core.parking_sessions ADD CONSTRAINT fk_parking_sessions__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.parking_sessions ADD CONSTRAINT fk_parking_sessions__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.parking_sessions ADD CONSTRAINT fk_parking_sessions__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.parking_sessions ADD CONSTRAINT fk_parking_sessions__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.parking_sessions ADD CONSTRAINT fk_parking_sessions__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__superseded_by_tariff_snapshot_id FOREIGN KEY (superseded_by_tariff_snapshot_id) REFERENCES core.tariff_snapshots(tariff_snapshot_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__statutory_discount_validation_id FOREIGN KEY (statutory_discount_validation_id) REFERENCES discounts.statutory_discount_validations(statutory_discount_validation_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__coupon_application_id FOREIGN KEY (coupon_application_id) REFERENCES coupons.coupon_applications(coupon_application_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT fk_tariff_snapshots__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_attempts ADD CONSTRAINT fk_payment_attempts__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_attempts ADD CONSTRAINT fk_payment_attempts__tariff_snapshot_id FOREIGN KEY (tariff_snapshot_id) REFERENCES core.tariff_snapshots(tariff_snapshot_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_attempts ADD CONSTRAINT fk_payment_attempts__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_attempts ADD CONSTRAINT fk_payment_attempts__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_attempts ADD CONSTRAINT fk_payment_attempts__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_confirmations ADD CONSTRAINT fk_payment_confirmations__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_confirmations ADD CONSTRAINT fk_payment_confirmations__provider_outcome_id FOREIGN KEY (provider_outcome_id) REFERENCES payments.provider_outcomes(provider_outcome_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_confirmations ADD CONSTRAINT fk_payment_confirmations__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.payment_confirmations ADD CONSTRAINT fk_payment_confirmations__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__payment_confirmation_id FOREIGN KEY (payment_confirmation_id) REFERENCES core.payment_confirmations(payment_confirmation_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.payment_rails ADD CONSTRAINT fk_payment_rails__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.payment_rails ADD CONSTRAINT fk_payment_rails__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.payment_rails ADD CONSTRAINT fk_payment_rails__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.payment_rails ADD CONSTRAINT fk_payment_rails__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT fk_provider_sessions__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT fk_provider_sessions__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT fk_provider_sessions__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT fk_provider_sessions__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_callbacks ADD CONSTRAINT fk_provider_callbacks__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_callbacks ADD CONSTRAINT fk_provider_callbacks__provider_session_id FOREIGN KEY (provider_session_id) REFERENCES payments.provider_sessions(provider_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_callbacks ADD CONSTRAINT fk_provider_callbacks__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_callbacks ADD CONSTRAINT fk_provider_callbacks__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_status_queries ADD CONSTRAINT fk_provider_status_queries__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_status_queries ADD CONSTRAINT fk_provider_status_queries__provider_session_id FOREIGN KEY (provider_session_id) REFERENCES payments.provider_sessions(provider_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_status_queries ADD CONSTRAINT fk_provider_status_queries__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_status_queries ADD CONSTRAINT fk_provider_status_queries__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__provider_session_id FOREIGN KEY (provider_session_id) REFERENCES payments.provider_sessions(provider_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__provider_callback_id FOREIGN KEY (provider_callback_id) REFERENCES payments.provider_callbacks(provider_callback_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__provider_status_query_id FOREIGN KEY (provider_status_query_id) REFERENCES payments.provider_status_queries(provider_status_query_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT fk_provider_outcomes__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_requests ADD CONSTRAINT fk_session_resolution_requests__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_requests ADD CONSTRAINT fk_session_resolution_requests__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_requests ADD CONSTRAINT fk_session_resolution_requests__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_requests ADD CONSTRAINT fk_session_resolution_requests__created_by_service_identity_ FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT fk_session_resolution_results__session_resolution_request_id FOREIGN KEY (session_resolution_request_id) REFERENCES sessions.session_resolution_requests(session_resolution_request_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT fk_session_resolution_results__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT fk_session_resolution_results__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT fk_session_resolution_results__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT fk_session_resolution_results__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT fk_session_resolution_results__created_by_service_identity_i FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_lookup_cache ADD CONSTRAINT fk_session_lookup_cache__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_lookup_cache ADD CONSTRAINT fk_session_lookup_cache__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_lookup_cache ADD CONSTRAINT fk_session_lookup_cache__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_lookup_cache ADD CONSTRAINT fk_session_lookup_cache__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_lookup_cache ADD CONSTRAINT fk_session_lookup_cache__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT fk_session_identifier_indexes__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT fk_session_identifier_indexes__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT fk_session_identifier_indexes__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT fk_session_identifier_indexes__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT fk_session_identifier_indexes__created_by_service_identity_i FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT fk_session_identifier_indexes__updated_by_service_identity_i FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupons ADD CONSTRAINT fk_coupons__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupons ADD CONSTRAINT fk_coupons__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupons ADD CONSTRAINT fk_coupons__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupons ADD CONSTRAINT fk_coupons__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupons ADD CONSTRAINT fk_coupons__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT fk_coupon_rule_groups__coupon_id FOREIGN KEY (coupon_id) REFERENCES coupons.coupons(coupon_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT fk_coupon_rule_groups__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT fk_coupon_rule_groups__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT fk_coupon_rule_groups__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT fk_coupon_rule_groups__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__coupon_rule_group_id FOREIGN KEY (coupon_rule_group_id) REFERENCES coupons.coupon_rule_groups(coupon_rule_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT fk_coupon_rules__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__coupon_id FOREIGN KEY (coupon_id) REFERENCES coupons.coupons(coupon_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__merchant_wallet_id FOREIGN KEY (merchant_wallet_id) REFERENCES merchants.merchant_wallets(merchant_wallet_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__tariff_snapshot_id FOREIGN KEY (tariff_snapshot_id) REFERENCES core.tariff_snapshots(tariff_snapshot_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__requested_by_user_id FOREIGN KEY (requested_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__requested_by_service_identity_id FOREIGN KEY (requested_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__approved_by_user_id FOREIGN KEY (approved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT fk_coupon_applications__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__parent_policy_reference_id FOREIGN KEY (parent_policy_reference_id) REFERENCES discounts.discount_policy_references(discount_policy_reference_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__fallback_policy_reference_id FOREIGN KEY (fallback_policy_reference_id) REFERENCES discounts.discount_policy_references(discount_policy_reference_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__created_by_service_identity_i FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__updated_by_service_identity_i FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__tariff_snapshot_id FOREIGN KEY (tariff_snapshot_id) REFERENCES core.tariff_snapshots(tariff_snapshot_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__evaluated_policy_referenc FOREIGN KEY (evaluated_policy_reference_id) REFERENCES discounts.discount_policy_references(discount_policy_reference_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__applied_policy_reference_ FOREIGN KEY (applied_policy_reference_id) REFERENCES discounts.discount_policy_references(discount_policy_reference_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__fallback_policy_reference FOREIGN KEY (fallback_policy_reference_id) REFERENCES discounts.discount_policy_references(discount_policy_reference_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__validated_by_user_id FOREIGN KEY (validated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__validated_by_service_iden FOREIGN KEY (validated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__requested_by_user_id FOREIGN KEY (requested_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__requested_by_service_iden FOREIGN KEY (requested_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__created_by_service_identi FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__updated_by_service_identi FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__statutory_discount_validati FOREIGN KEY (statutory_discount_validation_id) REFERENCES discounts.statutory_discount_validations(statutory_discount_validation_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__captured_by_user_id FOREIGN KEY (captured_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__captured_by_service_identit FOREIGN KEY (captured_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__purged_by_user_id FOREIGN KEY (purged_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__purged_by_service_identity_ FOREIGN KEY (purged_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__created_by_service_identity FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT fk_discount_evidence_references__updated_by_service_identity FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__service_identity_id FOREIGN KEY (service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_devices ADD CONSTRAINT fk_gate_devices__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT fk_gate_authorization_consumptions__exit_authorization_id FOREIGN KEY (exit_authorization_id) REFERENCES core.exit_authorizations(exit_authorization_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT fk_gate_authorization_consumptions__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT fk_gate_authorization_consumptions__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT fk_gate_authorization_consumptions__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT fk_gate_authorization_consumptions__created_by_service_ident FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT fk_gate_authorization_consumptions__updated_by_service_ident FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_events ADD CONSTRAINT fk_gate_events__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_events ADD CONSTRAINT fk_gate_events__gate_authorization_consumption_id FOREIGN KEY (gate_authorization_consumption_id) REFERENCES gates.gate_authorization_consumptions(gate_authorization_consumption_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_events ADD CONSTRAINT fk_gate_events__exit_authorization_id FOREIGN KEY (exit_authorization_id) REFERENCES core.exit_authorizations(exit_authorization_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_events ADD CONSTRAINT fk_gate_events__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_events ADD CONSTRAINT fk_gate_events__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_events ADD CONSTRAINT fk_gate_events__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_heartbeats ADD CONSTRAINT fk_gate_heartbeats__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_heartbeats ADD CONSTRAINT fk_gate_heartbeats__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_heartbeats ADD CONSTRAINT fk_gate_heartbeats__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE gates.gate_heartbeats ADD CONSTRAINT fk_gate_heartbeats__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__exit_authorization_id FOREIGN KEY (exit_authorization_id) REFERENCES core.exit_authorizations(exit_authorization_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__gate_authorization_consumption_id FOREIGN KEY (gate_authorization_consumption_id) REFERENCES gates.gate_authorization_consumptions(gate_authorization_consumption_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__override_approval_id FOREIGN KEY (override_approval_id) REFERENCES operations.override_approvals(override_approval_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__reconciliation_item_id FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__performed_by_user_id FOREIGN KEY (performed_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__recorded_by_user_id FOREIGN KEY (recorded_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__recorded_by_service_identity_id FOREIGN KEY (recorded_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT fk_manual_gate_logs__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__requested_by_user_id FOREIGN KEY (requested_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_requests ADD CONSTRAINT fk_override_requests__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_approvals ADD CONSTRAINT fk_override_approvals__override_request_id FOREIGN KEY (override_request_id) REFERENCES operations.override_requests(override_request_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_approvals ADD CONSTRAINT fk_override_approvals__decided_by_user_id FOREIGN KEY (decided_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_approvals ADD CONSTRAINT fk_override_approvals__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.override_approvals ADD CONSTRAINT fk_override_approvals__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__owner_user_id FOREIGN KEY (owner_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__owner_service_identity_id FOREIGN KEY (owner_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.incident_records ADD CONSTRAINT fk_incident_records__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.operator_action_logs ADD CONSTRAINT fk_operator_action_logs__operator_user_id FOREIGN KEY (operator_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.operator_action_logs ADD CONSTRAINT fk_operator_action_logs__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.operator_action_logs ADD CONSTRAINT fk_operator_action_logs__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.operator_action_logs ADD CONSTRAINT fk_operator_action_logs__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE operations.operator_action_logs ADD CONSTRAINT fk_operator_action_logs__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__manual_gate_log_id FOREIGN KEY (manual_gate_log_id) REFERENCES operations.manual_gate_logs(manual_gate_log_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__captured_by_user_id FOREIGN KEY (captured_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__captured_by_service_identity_id FOREIGN KEY (captured_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__imported_by_service_identity_id FOREIGN KEY (imported_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT fk_mops_transaction_records__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__initiated_by_user_id FOREIGN KEY (initiated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__initiated_by_service_identity_id FOREIGN KEY (initiated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT fk_reconciliation_runs__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__reconciliation_run_id FOREIGN KEY (reconciliation_run_id) REFERENCES reconciliation.reconciliation_runs(reconciliation_run_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__mops_transaction_record_id FOREIGN KEY (mops_transaction_record_id) REFERENCES reconciliation.mops_transaction_records(mops_transaction_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__manual_gate_log_id FOREIGN KEY (manual_gate_log_id) REFERENCES operations.manual_gate_logs(manual_gate_log_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__payment_confirmation_id FOREIGN KEY (payment_confirmation_id) REFERENCES core.payment_confirmations(payment_confirmation_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__provider_outcome_id FOREIGN KEY (provider_outcome_id) REFERENCES payments.provider_outcomes(provider_outcome_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__resolved_by_user_id FOREIGN KEY (resolved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__resolved_by_service_identity_id FOREIGN KEY (resolved_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT fk_reconciliation_items__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__reconciliation_run_id FOREIGN KEY (reconciliation_run_id) REFERENCES reconciliation.reconciliation_runs(reconciliation_run_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__reconciliation_item_id FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__assigned_to_user_id FOREIGN KEY (assigned_to_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__assigned_to_service_identity_i FOREIGN KEY (assigned_to_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__resolved_by_user_id FOREIGN KEY (resolved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__resolved_by_service_identity_i FOREIGN KEY (resolved_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__closed_by_user_id FOREIGN KEY (closed_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__closed_by_service_identity_id FOREIGN KEY (closed_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT fk_reconciliation_exceptions__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__reconciliation_item_id FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__mops_transaction_record_id FOREIGN KEY (mops_transaction_record_id) REFERENCES reconciliation.mops_transaction_records(mops_transaction_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__reconciliation_exception_i FOREIGN KEY (reconciliation_exception_id) REFERENCES reconciliation.reconciliation_exceptions(reconciliation_exception_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__payment_confirmation_id FOREIGN KEY (payment_confirmation_id) REFERENCES core.payment_confirmations(payment_confirmation_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__provider_outcome_id FOREIGN KEY (provider_outcome_id) REFERENCES payments.provider_outcomes(provider_outcome_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__compared_by_user_id FOREIGN KEY (compared_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__compared_by_service_identi FOREIGN KEY (compared_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT fk_settlement_comparison_records__created_by_service_identit FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.site_groups ADD CONSTRAINT fk_site_groups__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.site_groups ADD CONSTRAINT fk_site_groups__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.site_groups ADD CONSTRAINT fk_site_groups__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.site_groups ADD CONSTRAINT fk_site_groups__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.sites ADD CONSTRAINT fk_sites__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.sites ADD CONSTRAINT fk_sites__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.sites ADD CONSTRAINT fk_sites__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.sites ADD CONSTRAINT fk_sites__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.sites ADD CONSTRAINT fk_sites__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.lanes ADD CONSTRAINT fk_lanes__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.lanes ADD CONSTRAINT fk_lanes__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.lanes ADD CONSTRAINT fk_lanes__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.lanes ADD CONSTRAINT fk_lanes__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.lanes ADD CONSTRAINT fk_lanes__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__service_identity_id FOREIGN KEY (service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__assigned_by_user_id FOREIGN KEY (assigned_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__assigned_by_service_identity_id FOREIGN KEY (assigned_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__unassigned_by_user_id FOREIGN KEY (unassigned_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__unassigned_by_service_identity_id FOREIGN KEY (unassigned_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE sites.device_assignments ADD CONSTRAINT fk_device_assignments__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchants ADD CONSTRAINT fk_merchants__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchants ADD CONSTRAINT fk_merchants__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchants ADD CONSTRAINT fk_merchants__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchants ADD CONSTRAINT fk_merchants__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__approved_by_user_id FOREIGN KEY (approved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT fk_merchant_site_scopes__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT fk_merchant_wallets__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT fk_merchant_wallets__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT fk_merchant_wallets__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT fk_merchant_wallets__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT fk_merchant_wallets__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__user_id FOREIGN KEY (user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__revoked_by_user_id FOREIGN KEY (revoked_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT fk_merchant_users__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.users ADD CONSTRAINT fk_users__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.users ADD CONSTRAINT fk_users__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.users ADD CONSTRAINT fk_users__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.users ADD CONSTRAINT fk_users__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.roles ADD CONSTRAINT fk_roles__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.roles ADD CONSTRAINT fk_roles__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.roles ADD CONSTRAINT fk_roles__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.roles ADD CONSTRAINT fk_roles__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.permissions ADD CONSTRAINT fk_permissions__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.permissions ADD CONSTRAINT fk_permissions__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.permissions ADD CONSTRAINT fk_permissions__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.permissions ADD CONSTRAINT fk_permissions__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__user_id FOREIGN KEY (user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__role_id FOREIGN KEY (role_id) REFERENCES identity.roles(role_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__assigned_by_user_id FOREIGN KEY (assigned_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__assigned_by_service_identity_id FOREIGN KEY (assigned_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__revoked_by_user_id FOREIGN KEY (revoked_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__revoked_by_service_identity_id FOREIGN KEY (revoked_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__last_reviewed_by_user_id FOREIGN KEY (last_reviewed_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.user_roles ADD CONSTRAINT fk_user_roles__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__role_id FOREIGN KEY (role_id) REFERENCES identity.roles(role_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__permission_id FOREIGN KEY (permission_id) REFERENCES identity.permissions(permission_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__assigned_by_user_id FOREIGN KEY (assigned_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__assigned_by_service_identity_id FOREIGN KEY (assigned_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__revoked_by_user_id FOREIGN KEY (revoked_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__revoked_by_service_identity_id FOREIGN KEY (revoked_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.role_permissions ADD CONSTRAINT fk_role_permissions__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.service_identities ADD CONSTRAINT fk_service_identities__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.service_identities ADD CONSTRAINT fk_service_identities__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.service_identities ADD CONSTRAINT fk_service_identities__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE identity.service_identities ADD CONSTRAINT fk_service_identities__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_events ADD CONSTRAINT fk_audit_events__actor_user_id FOREIGN KEY (actor_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_events ADD CONSTRAINT fk_audit_events__actor_service_identity_id FOREIGN KEY (actor_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_events ADD CONSTRAINT fk_audit_events__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_trail_entries ADD CONSTRAINT fk_audit_trail_entries__audit_event_id FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_trail_entries ADD CONSTRAINT fk_audit_trail_entries__changed_by_user_id FOREIGN KEY (changed_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_trail_entries ADD CONSTRAINT fk_audit_trail_entries__changed_by_service_identity_id FOREIGN KEY (changed_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.audit_trail_entries ADD CONSTRAINT fk_audit_trail_entries__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.security_events ADD CONSTRAINT fk_security_events__audit_event_id FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.security_events ADD CONSTRAINT fk_security_events__actor_user_id FOREIGN KEY (actor_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.security_events ADD CONSTRAINT fk_security_events__actor_service_identity_id FOREIGN KEY (actor_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.security_events ADD CONSTRAINT fk_security_events__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.security_events ADD CONSTRAINT fk_security_events__resolved_by_user_id FOREIGN KEY (resolved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.security_events ADD CONSTRAINT fk_security_events__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__audit_event_id FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__security_event_id FOREIGN KEY (security_event_id) REFERENCES audit.security_events(security_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__linked_by_user_id FOREIGN KEY (linked_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__linked_by_service_identity_id FOREIGN KEY (linked_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__purged_by_user_id FOREIGN KEY (purged_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__purged_by_service_identity_id FOREIGN KEY (purged_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE audit.evidence_links ADD CONSTRAINT fk_evidence_links__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT fk_vendor_systems__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT fk_vendor_systems__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT fk_vendor_systems__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT fk_vendor_systems__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT fk_vendor_endpoints__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT fk_vendor_endpoints__credential_reference_id FOREIGN KEY (credential_reference_id) REFERENCES integration.integration_credential_references(integration_credential_reference_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT fk_vendor_endpoints__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT fk_vendor_endpoints__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT fk_vendor_endpoints__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT fk_vendor_endpoints__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__lane_id FOREIGN KEY (lane_id) REFERENCES sites.lanes(lane_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__gate_device_id FOREIGN KEY (gate_device_id) REFERENCES gates.gate_devices(gate_device_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT fk_adapter_mappings__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT fk_integration_credential_references__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT fk_integration_credential_references__service_identity_id FOREIGN KEY (service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT fk_integration_credential_references__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT fk_integration_credential_references__created_by_service_ide FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT fk_integration_credential_references__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT fk_integration_credential_references__updated_by_service_ide FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT fk_integration_health_records__vendor_system_id FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT fk_integration_health_records__vendor_endpoint_id FOREIGN KEY (vendor_endpoint_id) REFERENCES integration.vendor_endpoints(vendor_endpoint_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT fk_integration_health_records__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT fk_integration_health_records__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT fk_integration_health_records__incident_record_id FOREIGN KEY (incident_record_id) REFERENCES operations.incident_records(incident_record_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT fk_integration_health_records__observed_by_service_identity_ FOREIGN KEY (observed_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.system_parameters ADD CONSTRAINT fk_system_parameters__approved_by_user_id FOREIGN KEY (approved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.system_parameters ADD CONSTRAINT fk_system_parameters__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.system_parameters ADD CONSTRAINT fk_system_parameters__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.system_parameters ADD CONSTRAINT fk_system_parameters__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.system_parameters ADD CONSTRAINT fk_system_parameters__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__merchant_id FOREIGN KEY (merchant_id) REFERENCES merchants.merchants(merchant_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__payment_rail_id FOREIGN KEY (payment_rail_id) REFERENCES payments.payment_rails(payment_rail_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__service_identity_id FOREIGN KEY (service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__approved_by_user_id FOREIGN KEY (approved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.feature_flags ADD CONSTRAINT fk_feature_flags__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT fk_rate_limit_policies__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT fk_rate_limit_policies__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT fk_rate_limit_policies__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT fk_rate_limit_policies__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.ttl_policies ADD CONSTRAINT fk_ttl_policies__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.ttl_policies ADD CONSTRAINT fk_ttl_policies__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.ttl_policies ADD CONSTRAINT fk_ttl_policies__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.ttl_policies ADD CONSTRAINT fk_ttl_policies__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT fk_controlled_code_sets__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT fk_controlled_code_sets__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT fk_controlled_code_sets__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT fk_controlled_code_sets__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.domain_events ADD CONSTRAINT fk_domain_events__actor_user_id FOREIGN KEY (actor_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.domain_events ADD CONSTRAINT fk_domain_events__actor_service_identity_id FOREIGN KEY (actor_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.domain_events ADD CONSTRAINT fk_domain_events__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.outbox_events ADD CONSTRAINT fk_outbox_events__domain_event_id FOREIGN KEY (domain_event_id) REFERENCES events.domain_events(domain_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.outbox_events ADD CONSTRAINT fk_outbox_events__locked_by_service_identity_id FOREIGN KEY (locked_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.outbox_events ADD CONSTRAINT fk_outbox_events__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.outbox_events ADD CONSTRAINT fk_outbox_events__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.event_publications ADD CONSTRAINT fk_event_publications__outbox_event_id FOREIGN KEY (outbox_event_id) REFERENCES events.outbox_events(outbox_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.event_publications ADD CONSTRAINT fk_event_publications__publisher_service_identity_id FOREIGN KEY (publisher_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__outbox_event_id FOREIGN KEY (outbox_event_id) REFERENCES events.outbox_events(outbox_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__event_publication_id FOREIGN KEY (event_publication_id) REFERENCES events.event_publications(event_publication_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__resolved_by_user_id FOREIGN KEY (resolved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__resolved_by_service_identity_id FOREIGN KEY (resolved_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__replay_requested_by_user_id FOREIGN KEY (replay_requested_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__replay_requested_by_service_identity FOREIGN KEY (replay_requested_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT fk_dead_letter_records__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT fk_consumer_checkpoints__last_outbox_event_id FOREIGN KEY (last_outbox_event_id) REFERENCES events.outbox_events(outbox_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT fk_consumer_checkpoints__last_domain_event_id FOREIGN KEY (last_domain_event_id) REFERENCES events.domain_events(domain_event_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT fk_consumer_checkpoints__locked_by_service_identity_id FOREIGN KEY (locked_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT fk_consumer_checkpoints__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
 
 -- ============================================================
--- 05. Indexes
--- Generated from ExitPass v1.2 DDL
+-- CHECK CONSTRAINTS
 -- ============================================================
+ALTER TABLE core.parking_sessions ADD CONSTRAINT ck_parking_sessions__row_version_positive CHECK (row_version > 0);
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT ck_tariff_snapshots__row_version_positive CHECK (row_version > 0);
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT ck_tariff_snapshots__gross_amount_non_negative CHECK (gross_amount IS NULL OR gross_amount >= 0);
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT ck_tariff_snapshots__statutory_discount_amount_non_negative CHECK (statutory_discount_amount IS NULL OR statutory_discount_amount >= 0);
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT ck_tariff_snapshots__coupon_discount_amount_non_negative CHECK (coupon_discount_amount IS NULL OR coupon_discount_amount >= 0);
+ALTER TABLE core.tariff_snapshots ADD CONSTRAINT ck_tariff_snapshots__net_amount_non_negative CHECK (net_amount IS NULL OR net_amount >= 0);
+ALTER TABLE core.payment_attempts ADD CONSTRAINT ck_payment_attempts__row_version_positive CHECK (row_version > 0);
+ALTER TABLE core.payment_attempts ADD CONSTRAINT ck_payment_attempts__amount_non_negative CHECK (amount IS NULL OR amount >= 0);
+ALTER TABLE core.payment_confirmations ADD CONSTRAINT ck_payment_confirmations__confirmed_amount_non_negative CHECK (confirmed_amount IS NULL OR confirmed_amount >= 0);
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT ck_exit_authorizations__row_version_positive CHECK (row_version > 0);
+ALTER TABLE payments.payment_rails ADD CONSTRAINT ck_payment_rails__row_version_positive CHECK (row_version > 0);
+ALTER TABLE payments.payment_rails ADD CONSTRAINT ck_payment_rails__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT ck_provider_sessions__row_version_positive CHECK (row_version > 0);
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT ck_provider_sessions__amount_non_negative CHECK (amount IS NULL OR amount >= 0);
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT ck_provider_outcomes__row_version_positive CHECK (row_version > 0);
+ALTER TABLE payments.provider_outcomes ADD CONSTRAINT ck_provider_outcomes__amount_non_negative CHECK (amount IS NULL OR amount >= 0);
+ALTER TABLE sessions.session_resolution_requests ADD CONSTRAINT ck_session_resolution_requests__row_version_positive CHECK (row_version > 0);
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT ck_session_resolution_results__match_count_non_negative CHECK (match_count IS NULL OR match_count >= 0);
+ALTER TABLE sessions.session_lookup_cache ADD CONSTRAINT ck_session_lookup_cache__row_version_positive CHECK (row_version > 0);
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT ck_session_identifier_indexes__row_version_positive CHECK (row_version > 0);
+ALTER TABLE sessions.session_identifier_indexes ADD CONSTRAINT ck_session_identifier_indexes__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE coupons.coupons ADD CONSTRAINT ck_coupons__row_version_positive CHECK (row_version > 0);
+ALTER TABLE coupons.coupons ADD CONSTRAINT ck_coupons__denomination_value_non_negative CHECK (denomination_value IS NULL OR denomination_value >= 0);
+ALTER TABLE coupons.coupons ADD CONSTRAINT ck_coupons__maximum_discount_amount_non_negative CHECK (maximum_discount_amount IS NULL OR maximum_discount_amount >= 0);
+ALTER TABLE coupons.coupons ADD CONSTRAINT ck_coupons__minimum_gross_amount_non_negative CHECK (minimum_gross_amount IS NULL OR minimum_gross_amount >= 0);
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT ck_coupon_rule_groups__row_version_positive CHECK (row_version > 0);
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT ck_coupon_rule_groups__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT ck_coupon_rule_groups__evaluation_priority_non_negative CHECK (evaluation_priority IS NULL OR evaluation_priority >= 0);
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT ck_coupon_rules__row_version_positive CHECK (row_version > 0);
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT ck_coupon_rules__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT ck_coupon_applications__row_version_positive CHECK (row_version > 0);
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT ck_coupon_applications__gross_amount_at_application_non_nega CHECK (gross_amount_at_application IS NULL OR gross_amount_at_application >= 0);
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT ck_coupon_applications__coupon_discount_amount_non_negative CHECK (coupon_discount_amount IS NULL OR coupon_discount_amount >= 0);
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT ck_coupon_applications__net_amount_after_coupon_non_negative CHECK (net_amount_after_coupon IS NULL OR net_amount_after_coupon >= 0);
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT ck_discount_policy_references__row_version_positive CHECK (row_version > 0);
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT ck_discount_policy_references__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT ck_discount_policy_references__precedence_rank_non_negative CHECK (precedence_rank IS NULL OR precedence_rank >= 0);
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT ck_statutory_discount_validations__row_version_positive CHECK (row_version > 0);
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT ck_statutory_discount_validations__gross_amount_at_validatio CHECK (gross_amount_at_validation IS NULL OR gross_amount_at_validation >= 0);
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT ck_statutory_discount_validations__statutory_discount_amount CHECK (statutory_discount_amount IS NULL OR statutory_discount_amount >= 0);
+ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT ck_statutory_discount_validations__net_amount_after_discount CHECK (net_amount_after_discount IS NULL OR net_amount_after_discount >= 0);
+ALTER TABLE discounts.discount_evidence_references ADD CONSTRAINT ck_discount_evidence_references__row_version_positive CHECK (row_version > 0);
+ALTER TABLE gates.gate_devices ADD CONSTRAINT ck_gate_devices__row_version_positive CHECK (row_version > 0);
+ALTER TABLE gates.gate_authorization_consumptions ADD CONSTRAINT ck_gate_authorization_consumptions__row_version_positive CHECK (row_version > 0);
+ALTER TABLE gates.gate_heartbeats ADD CONSTRAINT ck_gate_heartbeats__latency_ms_non_negative CHECK (latency_ms IS NULL OR latency_ms >= 0);
+ALTER TABLE operations.manual_gate_logs ADD CONSTRAINT ck_manual_gate_logs__row_version_positive CHECK (row_version > 0);
+ALTER TABLE operations.override_requests ADD CONSTRAINT ck_override_requests__row_version_positive CHECK (row_version > 0);
+ALTER TABLE operations.incident_records ADD CONSTRAINT ck_incident_records__row_version_positive CHECK (row_version > 0);
+ALTER TABLE operations.incident_records ADD CONSTRAINT ck_incident_records__resolved_after_detected CHECK (resolved_at IS NULL OR resolved_at >= detected_at);
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT ck_mops_transaction_records__row_version_positive CHECK (row_version > 0);
+ALTER TABLE reconciliation.mops_transaction_records ADD CONSTRAINT ck_mops_transaction_records__amount_non_negative CHECK (amount IS NULL OR amount >= 0);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__row_version_positive CHECK (row_version > 0);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__completed_after_started CHECK (completed_at IS NULL OR completed_at >= started_at);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__item_count_non_negative CHECK (item_count IS NULL OR item_count >= 0);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__matched_count_non_negative CHECK (matched_count IS NULL OR matched_count >= 0);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__exception_count_non_negative CHECK (exception_count IS NULL OR exception_count >= 0);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__rejected_count_non_negative CHECK (rejected_count IS NULL OR rejected_count >= 0);
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT ck_reconciliation_runs__disputed_count_non_negative CHECK (disputed_count IS NULL OR disputed_count >= 0);
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT ck_reconciliation_items__row_version_positive CHECK (row_version > 0);
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT ck_reconciliation_items__expected_amount_non_negative CHECK (expected_amount IS NULL OR expected_amount >= 0);
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT ck_reconciliation_items__actual_amount_non_negative CHECK (actual_amount IS NULL OR actual_amount >= 0);
+ALTER TABLE reconciliation.reconciliation_items ADD CONSTRAINT ck_reconciliation_items__variance_amount_non_negative CHECK (variance_amount IS NULL OR variance_amount >= 0);
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT ck_reconciliation_exceptions__row_version_positive CHECK (row_version > 0);
+ALTER TABLE reconciliation.reconciliation_exceptions ADD CONSTRAINT ck_reconciliation_exceptions__resolved_after_detected CHECK (resolved_at IS NULL OR resolved_at >= detected_at);
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT ck_settlement_comparison_records__expected_amount_non_negati CHECK (expected_amount IS NULL OR expected_amount >= 0);
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT ck_settlement_comparison_records__actual_amount_non_negative CHECK (actual_amount IS NULL OR actual_amount >= 0);
+ALTER TABLE reconciliation.settlement_comparison_records ADD CONSTRAINT ck_settlement_comparison_records__variance_amount_non_negati CHECK (variance_amount IS NULL OR variance_amount >= 0);
+ALTER TABLE sites.site_groups ADD CONSTRAINT ck_site_groups__row_version_positive CHECK (row_version > 0);
+ALTER TABLE sites.site_groups ADD CONSTRAINT ck_site_groups__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE sites.sites ADD CONSTRAINT ck_sites__row_version_positive CHECK (row_version > 0);
+ALTER TABLE sites.sites ADD CONSTRAINT ck_sites__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE sites.lanes ADD CONSTRAINT ck_lanes__row_version_positive CHECK (row_version > 0);
+ALTER TABLE sites.lanes ADD CONSTRAINT ck_lanes__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE sites.lanes ADD CONSTRAINT ck_lanes__display_order_non_negative CHECK (display_order IS NULL OR display_order >= 0);
+ALTER TABLE sites.device_assignments ADD CONSTRAINT ck_device_assignments__row_version_positive CHECK (row_version > 0);
+ALTER TABLE merchants.merchants ADD CONSTRAINT ck_merchants__row_version_positive CHECK (row_version > 0);
+ALTER TABLE merchants.merchants ADD CONSTRAINT ck_merchants__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT ck_merchant_site_scopes__row_version_positive CHECK (row_version > 0);
+ALTER TABLE merchants.merchant_site_scopes ADD CONSTRAINT ck_merchant_site_scopes__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT ck_merchant_wallets__row_version_positive CHECK (row_version > 0);
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT ck_merchant_wallets__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT ck_merchant_wallets__available_balance_non_negative CHECK (available_balance IS NULL OR available_balance >= 0);
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT ck_merchant_wallets__reserved_balance_non_negative CHECK (reserved_balance IS NULL OR reserved_balance >= 0);
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT ck_merchant_wallets__committed_balance_non_negative CHECK (committed_balance IS NULL OR committed_balance >= 0);
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT ck_merchant_users__row_version_positive CHECK (row_version > 0);
+ALTER TABLE merchants.merchant_users ADD CONSTRAINT ck_merchant_users__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE identity.users ADD CONSTRAINT ck_users__row_version_positive CHECK (row_version > 0);
+ALTER TABLE identity.users ADD CONSTRAINT ck_users__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE identity.roles ADD CONSTRAINT ck_roles__row_version_positive CHECK (row_version > 0);
+ALTER TABLE identity.roles ADD CONSTRAINT ck_roles__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE identity.permissions ADD CONSTRAINT ck_permissions__row_version_positive CHECK (row_version > 0);
+ALTER TABLE identity.user_roles ADD CONSTRAINT ck_user_roles__row_version_positive CHECK (row_version > 0);
+ALTER TABLE identity.user_roles ADD CONSTRAINT ck_user_roles__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE identity.role_permissions ADD CONSTRAINT ck_role_permissions__row_version_positive CHECK (row_version > 0);
+ALTER TABLE identity.role_permissions ADD CONSTRAINT ck_role_permissions__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE identity.service_identities ADD CONSTRAINT ck_service_identities__row_version_positive CHECK (row_version > 0);
+ALTER TABLE identity.service_identities ADD CONSTRAINT ck_service_identities__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE audit.security_events ADD CONSTRAINT ck_security_events__row_version_positive CHECK (row_version > 0);
+ALTER TABLE audit.security_events ADD CONSTRAINT ck_security_events__resolved_after_detected CHECK (resolved_at IS NULL OR resolved_at >= detected_at);
+ALTER TABLE audit.evidence_links ADD CONSTRAINT ck_evidence_links__row_version_positive CHECK (row_version > 0);
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT ck_vendor_systems__row_version_positive CHECK (row_version > 0);
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT ck_vendor_systems__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT ck_vendor_endpoints__row_version_positive CHECK (row_version > 0);
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT ck_vendor_endpoints__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT ck_adapter_mappings__row_version_positive CHECK (row_version > 0);
+ALTER TABLE integration.adapter_mappings ADD CONSTRAINT ck_adapter_mappings__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT ck_integration_credential_references__row_version_positive CHECK (row_version > 0);
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT ck_integration_credential_references__expires_after_rotation CHECK (expires_at IS NULL OR last_rotated_at IS NULL OR expires_at > last_rotated_at);
+ALTER TABLE integration.integration_health_records ADD CONSTRAINT ck_integration_health_records__latency_ms_non_negative CHECK (latency_ms IS NULL OR latency_ms >= 0);
+ALTER TABLE config.system_parameters ADD CONSTRAINT ck_system_parameters__row_version_positive CHECK (row_version > 0);
+ALTER TABLE config.system_parameters ADD CONSTRAINT ck_system_parameters__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE config.feature_flags ADD CONSTRAINT ck_feature_flags__row_version_positive CHECK (row_version > 0);
+ALTER TABLE config.feature_flags ADD CONSTRAINT ck_feature_flags__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__row_version_positive CHECK (row_version > 0);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__window_seconds_non_negative CHECK (window_seconds IS NULL OR window_seconds >= 0);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__window_seconds_positive CHECK (window_seconds > 0);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__max_requests_positive CHECK (max_requests > 0);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__burst_limit_non_negative CHECK (burst_limit IS NULL OR burst_limit >= 0);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT ck_rate_limit_policies__penalty_seconds_non_negative CHECK (penalty_seconds IS NULL OR penalty_seconds >= 0);
+ALTER TABLE config.ttl_policies ADD CONSTRAINT ck_ttl_policies__row_version_positive CHECK (row_version > 0);
+ALTER TABLE config.ttl_policies ADD CONSTRAINT ck_ttl_policies__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE config.ttl_policies ADD CONSTRAINT ck_ttl_policies__ttl_seconds_non_negative CHECK (ttl_seconds IS NULL OR ttl_seconds >= 0);
+ALTER TABLE config.ttl_policies ADD CONSTRAINT ck_ttl_policies__ttl_seconds_positive CHECK (ttl_seconds > 0);
+ALTER TABLE config.ttl_policies ADD CONSTRAINT ck_ttl_policies__grace_period_seconds_non_negative CHECK (grace_period_seconds IS NULL OR grace_period_seconds >= 0);
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT ck_controlled_code_sets__row_version_positive CHECK (row_version > 0);
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT ck_controlled_code_sets__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from);
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT ck_controlled_code_sets__sort_order_non_negative CHECK (sort_order IS NULL OR sort_order >= 0);
+ALTER TABLE events.domain_events ADD CONSTRAINT ck_domain_events__event_version_positive CHECK (event_version > 0);
+ALTER TABLE events.outbox_events ADD CONSTRAINT ck_outbox_events__row_version_positive CHECK (row_version > 0);
+ALTER TABLE events.outbox_events ADD CONSTRAINT ck_outbox_events__event_version_positive CHECK (event_version > 0);
+ALTER TABLE events.outbox_events ADD CONSTRAINT ck_outbox_events__retry_count_non_negative CHECK (retry_count IS NULL OR retry_count >= 0);
+ALTER TABLE events.outbox_events ADD CONSTRAINT ck_outbox_events__max_retry_count_non_negative CHECK (max_retry_count IS NULL OR max_retry_count >= 0);
+ALTER TABLE events.event_publications ADD CONSTRAINT ck_event_publications__completed_after_started CHECK (completed_at IS NULL OR completed_at >= started_at);
+ALTER TABLE events.event_publications ADD CONSTRAINT ck_event_publications__duration_ms_non_negative CHECK (duration_ms IS NULL OR duration_ms >= 0);
+ALTER TABLE events.dead_letter_records ADD CONSTRAINT ck_dead_letter_records__row_version_positive CHECK (row_version > 0);
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT ck_consumer_checkpoints__row_version_positive CHECK (row_version > 0);
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT ck_consumer_checkpoints__processed_count_non_negative CHECK (processed_count IS NULL OR processed_count >= 0);
+ALTER TABLE events.consumer_checkpoints ADD CONSTRAINT ck_consumer_checkpoints__failure_count_non_negative CHECK (failure_count IS NULL OR failure_count >= 0);
+
+-- ============================================================
+-- UNIQUE CONSTRAINTS AND PARTIAL UNIQUE INDEXES
+-- ============================================================
+-- v1.2 constraint cleanup:
+-- 1. Keep semantic uniqueness that enforces canonical control, idempotency, replay protection, and reference identity.
+-- 2. Remove generated uniqueness on reason-code, status, currency-only, and append-oriented evidence fields.
+-- 3. Use partial unique indexes where lifecycle state, NULL handling, or active-record semantics matter.
+
+-- core.tariff_snapshots
 CREATE UNIQUE INDEX IF NOT EXISTS ux_tariff_snapshots__active_by_session
 ON core.tariff_snapshots (parking_session_id)
 WHERE snapshot_status = 'ACTIVE';
@@ -3954,9 +4646,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_tariff_snapshots__superseded_by
 ON core.tariff_snapshots (superseded_by_tariff_snapshot_id)
 WHERE superseded_by_tariff_snapshot_id IS NOT NULL;
 
+-- core.payment_attempts
+ALTER TABLE core.payment_attempts ADD CONSTRAINT uq_payment_attempts__idempotency_key UNIQUE (idempotency_key);
+ALTER TABLE core.payment_attempts ADD CONSTRAINT uq_payment_attempts__tariff_snapshot UNIQUE (tariff_snapshot_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payment_attempts__active_by_session
 ON core.payment_attempts (parking_session_id)
 WHERE attempt_status IN ('REQUESTED', 'PENDING_PROVIDER', 'PENDING_FINALIZATION');
+
+-- core.payment_confirmations
+ALTER TABLE core.payment_confirmations ADD CONSTRAINT uq_payment_confirmations__payment_attempt UNIQUE (payment_attempt_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payment_confirmations__provider_transaction_ref
 ON core.payment_confirmations (payment_rail_id, provider_transaction_ref)
@@ -3966,9 +4665,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_payment_confirmations__provider_outcome
 ON core.payment_confirmations (provider_outcome_id)
 WHERE provider_outcome_id IS NOT NULL;
 
+-- core.exit_authorizations
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT uq_exit_authorizations__payment_attempt UNIQUE (payment_attempt_id);
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT uq_exit_authorizations__payment_confirmation UNIQUE (payment_confirmation_id);
+ALTER TABLE core.exit_authorizations ADD CONSTRAINT uq_exit_authorizations__token_hash UNIQUE (authorization_token_hash);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_exit_authorizations__active_by_session
 ON core.exit_authorizations (parking_session_id)
 WHERE authorization_status = 'ISSUED';
+
+-- payments.payment_rails
+ALTER TABLE payments.payment_rails ADD CONSTRAINT uq_payment_rails__rail_code UNIQUE (rail_code);
+
+-- payments.provider_sessions
+ALTER TABLE payments.provider_sessions ADD CONSTRAINT uq_provider_sessions__idempotency_key UNIQUE (idempotency_key);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_provider_sessions__provider_ref
 ON payments.provider_sessions (payment_rail_id, provider_session_ref)
@@ -3978,10 +4688,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_provider_sessions__active_by_attempt_rail
 ON payments.provider_sessions (payment_attempt_id, payment_rail_id)
 WHERE session_status IN ('CREATED', 'ACTIVE', 'PENDING');
 
+-- payments.provider_callbacks
 CREATE UNIQUE INDEX IF NOT EXISTS ux_provider_callbacks__provider_event
 ON payments.provider_callbacks (payment_rail_id, provider_event_ref)
 WHERE provider_event_ref IS NOT NULL;
 
+ALTER TABLE payments.provider_callbacks ADD CONSTRAINT uq_provider_callbacks__payload_hash UNIQUE (payment_rail_id, payload_hash);
+
+-- payments.provider_status_queries
+-- No hard uniqueness. Provider status queries may legitimately repeat under controlled retry policy.
+
+-- payments.provider_outcomes
 CREATE UNIQUE INDEX IF NOT EXISTS ux_provider_outcomes__provider_transaction_ref
 ON payments.provider_outcomes (payment_rail_id, provider_transaction_ref)
 WHERE provider_transaction_ref IS NOT NULL;
@@ -3994,10 +4711,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_provider_outcomes__provider_status_query
 ON payments.provider_outcomes (provider_status_query_id)
 WHERE provider_status_query_id IS NOT NULL;
 
+-- sessions.session_resolution_requests
 CREATE UNIQUE INDEX IF NOT EXISTS ux_session_resolution_requests__idempotency_key
 ON sessions.session_resolution_requests (idempotency_key)
 WHERE idempotency_key IS NOT NULL;
 
+-- sessions.session_resolution_results
+ALTER TABLE sessions.session_resolution_results ADD CONSTRAINT uq_session_resolution_results__request UNIQUE (session_resolution_request_id);
+
+-- sessions.session_lookup_cache
 CREATE UNIQUE INDEX IF NOT EXISTS ux_session_lookup_cache__active_scope_without_site
 ON sessions.session_lookup_cache (site_group_id, lookup_type, lookup_identifier_hash)
 WHERE cache_status = 'ACTIVE' AND site_id IS NULL;
@@ -4006,6 +4728,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_session_lookup_cache__active_scope_with_sit
 ON sessions.session_lookup_cache (site_group_id, site_id, lookup_type, lookup_identifier_hash)
 WHERE cache_status = 'ACTIVE' AND site_id IS NOT NULL;
 
+-- sessions.session_identifier_indexes
 CREATE UNIQUE INDEX IF NOT EXISTS ux_session_identifier_indexes__active_scope_without_site
 ON sessions.session_identifier_indexes (site_group_id, identifier_type, identifier_hash)
 WHERE identifier_status = 'ACTIVE' AND site_id IS NULL;
@@ -4014,6 +4737,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_session_identifier_indexes__active_scope_wi
 ON sessions.session_identifier_indexes (site_group_id, site_id, identifier_type, identifier_hash)
 WHERE identifier_status = 'ACTIVE' AND site_id IS NOT NULL;
 
+-- coupons.coupons, coupon_rule_groups, coupon_rules, coupon_applications
+ALTER TABLE coupons.coupons ADD CONSTRAINT uq_coupons__merchant_coupon_code UNIQUE (merchant_id, coupon_code);
+ALTER TABLE coupons.coupon_rule_groups ADD CONSTRAINT uq_coupon_rule_groups__coupon_rule_group_code UNIQUE (coupon_id, rule_group_code);
+ALTER TABLE coupons.coupon_rules ADD CONSTRAINT uq_coupon_rules__group_rule_code UNIQUE (coupon_rule_group_id, rule_code);
+ALTER TABLE coupons.coupon_applications ADD CONSTRAINT uq_coupon_applications__idempotency_key UNIQUE (idempotency_key);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_coupon_applications__active_merchant_session
 ON coupons.coupon_applications (merchant_id, parking_session_id)
 WHERE application_status IN ('REQUESTED', 'RESERVED', 'APPLIED');
@@ -4021,6 +4750,9 @@ WHERE application_status IN ('REQUESTED', 'RESERVED', 'APPLIED');
 CREATE UNIQUE INDEX IF NOT EXISTS ux_coupon_applications__reservation_ref
 ON coupons.coupon_applications (reservation_ref)
 WHERE reservation_ref IS NOT NULL;
+
+-- discounts.discount_policy_references, statutory_discount_validations, discount_evidence_references
+ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT uq_discount_policy_references__policy_code_version UNIQUE (policy_code, policy_version);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_discount_policy_references__active_local_policy
 ON discounts.discount_policy_references (entitlement_type, lgu_code, site_group_id, site_id, policy_level, policy_version)
@@ -4033,6 +4765,9 @@ WHERE validation_status IN ('REQUESTED', 'PENDING_OPERATOR_REVIEW', 'APPROVED');
 CREATE UNIQUE INDEX IF NOT EXISTS ux_discount_evidence_references__evidence_hash
 ON discounts.discount_evidence_references (evidence_hash)
 WHERE evidence_hash IS NOT NULL;
+
+-- gates.gate_devices, gate_authorization_consumptions, gate_events, gate_heartbeats
+ALTER TABLE gates.gate_devices ADD CONSTRAINT uq_gate_devices__site_device_code UNIQUE (site_id, device_code);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_gate_devices__service_identity
 ON gates.gate_devices (service_identity_id)
@@ -4050,6 +4785,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_gate_auth_consumptions__successful_exit_aut
 ON gates.gate_authorization_consumptions (exit_authorization_id)
 WHERE consume_status = 'CONSUMED';
 
+-- Gate events and heartbeats are append-oriented evidence. No broad hard uniqueness is applied.
+
+-- operations.manual_gate_logs, override_requests, override_approvals, incident_records, operator_action_logs
+ALTER TABLE operations.incident_records ADD CONSTRAINT uq_incident_records__site_group_incident_code UNIQUE (site_group_id, incident_code);
+ALTER TABLE operations.override_approvals ADD CONSTRAINT uq_override_approvals__request_sequence UNIQUE (override_request_id, approval_sequence);
+
+-- Manual gate logs and operator action logs are append-oriented operational evidence. No broad hard uniqueness is applied.
+
+-- reconciliation.mops_transaction_records, reconciliation_runs, reconciliation_items, reconciliation_exceptions, settlement_comparison_records
 CREATE UNIQUE INDEX IF NOT EXISTS ux_mops_transaction_records__source_transaction_ref
 ON reconciliation.mops_transaction_records (source_system_code, source_transaction_ref)
 WHERE source_transaction_ref IS NOT NULL;
@@ -4057,6 +4801,15 @@ WHERE source_transaction_ref IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_mops_transaction_records__source_batch_collection
 ON reconciliation.mops_transaction_records (source_system_code, source_batch_ref, collection_reference)
 WHERE source_batch_ref IS NOT NULL AND collection_reference IS NOT NULL;
+
+ALTER TABLE reconciliation.reconciliation_runs ADD CONSTRAINT uq_reconciliation_runs__run_code UNIQUE (run_code);
+
+-- Reconciliation items, exceptions, and settlement comparison records are review/evidence records. No broad reason-code uniqueness is applied.
+
+-- sites.site_groups, sites, lanes, device_assignments
+ALTER TABLE sites.site_groups ADD CONSTRAINT uq_site_groups__site_group_code UNIQUE (site_group_code);
+ALTER TABLE sites.sites ADD CONSTRAINT uq_sites__site_group_site_code UNIQUE (site_group_id, site_code);
+ALTER TABLE sites.lanes ADD CONSTRAINT uq_lanes__site_lane_code UNIQUE (site_id, lane_code);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_device_assignments__active_gate_device
 ON sites.device_assignments (gate_device_id)
@@ -4070,6 +4823,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_device_assignments__active_lane_assignment_
 ON sites.device_assignments (site_id, lane_id, assignment_type)
 WHERE assignment_status = 'ACTIVE' AND lane_id IS NOT NULL;
 
+-- merchants.merchants, merchant_site_scopes, merchant_wallets, merchant_users
+ALTER TABLE merchants.merchants ADD CONSTRAINT uq_merchants__merchant_code UNIQUE (merchant_code);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_merchant_site_scopes__active_site_group_scope
 ON merchants.merchant_site_scopes (merchant_id, site_group_id, scope_type)
 WHERE scope_status = 'ACTIVE' AND site_group_id IS NOT NULL AND site_id IS NULL;
@@ -4077,6 +4833,8 @@ WHERE scope_status = 'ACTIVE' AND site_group_id IS NOT NULL AND site_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_merchant_site_scopes__active_site_scope
 ON merchants.merchant_site_scopes (merchant_id, site_id, scope_type)
 WHERE scope_status = 'ACTIVE' AND site_id IS NOT NULL;
+
+ALTER TABLE merchants.merchant_wallets ADD CONSTRAINT uq_merchant_wallets__merchant_wallet_code UNIQUE (merchant_id, wallet_code);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_merchant_wallets__active_currency_type
 ON merchants.merchant_wallets (merchant_id, currency_code, wallet_type)
@@ -4086,6 +4844,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_merchant_users__active_user_merchant
 ON merchants.merchant_users (merchant_id, user_id)
 WHERE merchant_user_status = 'ACTIVE';
 
+-- identity.users, roles, permissions, user_roles, role_permissions, service_identities
+ALTER TABLE identity.users ADD CONSTRAINT uq_users__username UNIQUE (username);
+ALTER TABLE identity.users ADD CONSTRAINT uq_users__email_normalized UNIQUE (email_normalized);
+ALTER TABLE identity.roles ADD CONSTRAINT uq_roles__role_code UNIQUE (role_code);
+ALTER TABLE identity.permissions ADD CONSTRAINT uq_permissions__permission_code UNIQUE (permission_code);
+ALTER TABLE identity.service_identities ADD CONSTRAINT uq_service_identities__service_identity_code UNIQUE (service_identity_code);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_user_roles__active_user_role
 ON identity.user_roles (user_id, role_id)
 WHERE assignment_status = 'ACTIVE';
@@ -4094,9 +4859,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_role_permissions__active_role_permission
 ON identity.role_permissions (role_id, permission_id)
 WHERE binding_status = 'ACTIVE';
 
+-- audit.audit_events, audit_trail_entries, security_events, evidence_links
+-- Audit and evidence tables are append-oriented proof records. No broad hard uniqueness is applied.
+
+-- integration.vendor_systems, vendor_endpoints, adapter_mappings, integration_credential_references, integration_health_records
+ALTER TABLE integration.vendor_systems ADD CONSTRAINT uq_vendor_systems__vendor_code_environment UNIQUE (vendor_code, environment_code);
+ALTER TABLE integration.vendor_endpoints ADD CONSTRAINT uq_vendor_endpoints__vendor_endpoint_code UNIQUE (vendor_system_id, endpoint_code);
+ALTER TABLE integration.integration_credential_references ADD CONSTRAINT uq_integration_credential_references__vendor_credential_code UNIQUE (vendor_system_id, credential_code);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_adapter_mappings__vendor_object_active
 ON integration.adapter_mappings (vendor_system_id, mapping_type, vendor_object_type, vendor_object_ref)
 WHERE mapping_status = 'ACTIVE';
+
+-- Integration health records are observational evidence. No broad hard uniqueness is applied.
+
+-- config.system_parameters, feature_flags, rate_limit_policies, ttl_policies, controlled_code_sets
+ALTER TABLE config.system_parameters ADD CONSTRAINT uq_system_parameters__parameter_code UNIQUE (parameter_code);
+ALTER TABLE config.rate_limit_policies ADD CONSTRAINT uq_rate_limit_policies__policy_code UNIQUE (policy_code);
+ALTER TABLE config.ttl_policies ADD CONSTRAINT uq_ttl_policies__policy_code UNIQUE (policy_code);
+ALTER TABLE config.controlled_code_sets ADD CONSTRAINT uq_controlled_code_sets__set_value_domain UNIQUE (code_set_name, code_value, code_domain);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_feature_flags__scoped_flag
 ON config.feature_flags (
@@ -4109,9 +4890,12 @@ ON config.feature_flags (
     COALESCE(service_identity_id, '00000000-0000-0000-0000-000000000000'::uuid)
 );
 
+-- events.domain_events, outbox_events, event_publications, dead_letter_records, consumer_checkpoints
 CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_events__domain_event
 ON events.outbox_events (domain_event_id)
 WHERE domain_event_id IS NOT NULL;
+
+ALTER TABLE events.event_publications ADD CONSTRAINT uq_event_publications__outbox_attempt_number UNIQUE (outbox_event_id, publication_attempt_number);
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_consumer_checkpoints__consumer_scope
 ON events.consumer_checkpoints (
@@ -4122,694 +4906,318 @@ ON events.consumer_checkpoints (
     COALESCE(aggregate_type, '')
 );
 
+-- Dead-letter records are exception evidence and may recur. No broad hard uniqueness is applied.
+
+-- INDEXES
+-- Rationalized in v1.2 draft 1.2.
+-- This section keeps purpose-driven non-unique indexes for high-value lookup, correlation tracing, status queues,
+-- time-range review, replay protection, reconciliation, audit reconstruction, and retention workflows.
+-- Broad maintenance-column indexes from draft 1.0 were removed pending observed query evidence.
+
 CREATE INDEX IF NOT EXISTS ix_parking_sessions__site_group_id ON core.parking_sessions (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_parking_sessions__site_id ON core.parking_sessions (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_parking_sessions__vendor_system_id ON core.parking_sessions (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_parking_sessions__vendor_session_status ON core.parking_sessions (vendor_session_status);
-
 CREATE INDEX IF NOT EXISTS ix_parking_sessions__correlation_id ON core.parking_sessions (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_tariff_snapshots__parking_session_id ON core.tariff_snapshots (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_tariff_snapshots__superseded_by_tariff_snapshot_id ON core.tariff_snapshots (superseded_by_tariff_snapshot_id);
-
 CREATE INDEX IF NOT EXISTS ix_tariff_snapshots__vendor_system_id ON core.tariff_snapshots (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_tariff_snapshots__statutory_discount_validation_id ON core.tariff_snapshots (statutory_discount_validation_id);
-
 CREATE INDEX IF NOT EXISTS ix_tariff_snapshots__correlation_id ON core.tariff_snapshots (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_payment_attempts__parking_session_id ON core.payment_attempts (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_payment_attempts__tariff_snapshot_id ON core.payment_attempts (tariff_snapshot_id);
-
 CREATE INDEX IF NOT EXISTS ix_payment_attempts__payment_rail_id ON core.payment_attempts (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_payment_attempts__attempt_status ON core.payment_attempts (attempt_status);
-
 CREATE INDEX IF NOT EXISTS ix_payment_attempts__correlation_id ON core.payment_attempts (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_payment_confirmations__payment_attempt_id ON core.payment_confirmations (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_payment_confirmations__provider_outcome_id ON core.payment_confirmations (provider_outcome_id);
-
 CREATE INDEX IF NOT EXISTS ix_payment_confirmations__payment_rail_id ON core.payment_confirmations (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_payment_confirmations__confirmation_status ON core.payment_confirmations (confirmation_status);
-
 CREATE INDEX IF NOT EXISTS ix_payment_confirmations__correlation_id ON core.payment_confirmations (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_exit_authorizations__parking_session_id ON core.exit_authorizations (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_exit_authorizations__payment_attempt_id ON core.exit_authorizations (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_exit_authorizations__payment_confirmation_id ON core.exit_authorizations (payment_confirmation_id);
-
 CREATE INDEX IF NOT EXISTS ix_exit_authorizations__authorization_status ON core.exit_authorizations (authorization_status);
-
 CREATE INDEX IF NOT EXISTS ix_exit_authorizations__correlation_id ON core.exit_authorizations (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_payment_rails__rail_status ON payments.payment_rails (rail_status);
-
 CREATE INDEX IF NOT EXISTS ix_provider_sessions__payment_attempt_id ON payments.provider_sessions (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_sessions__payment_rail_id ON payments.provider_sessions (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_sessions__session_status ON payments.provider_sessions (session_status);
-
 CREATE INDEX IF NOT EXISTS ix_provider_sessions__expires_at ON payments.provider_sessions (expires_at);
-
 CREATE INDEX IF NOT EXISTS ix_provider_sessions__correlation_id ON payments.provider_sessions (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__payment_rail_id ON payments.provider_callbacks (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__provider_session_id ON payments.provider_callbacks (provider_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__payment_attempt_id ON payments.provider_callbacks (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__verification_status ON payments.provider_callbacks (verification_status);
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__processing_status ON payments.provider_callbacks (processing_status);
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__received_at ON payments.provider_callbacks (received_at);
-
 CREATE INDEX IF NOT EXISTS ix_provider_callbacks__correlation_id ON payments.provider_callbacks (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_provider_status_queries__payment_attempt_id ON payments.provider_status_queries (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_status_queries__provider_session_id ON payments.provider_status_queries (provider_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_status_queries__payment_rail_id ON payments.provider_status_queries (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_status_queries__query_status ON payments.provider_status_queries (query_status);
-
 CREATE INDEX IF NOT EXISTS ix_provider_status_queries__correlation_id ON payments.provider_status_queries (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_provider_outcomes__payment_attempt_id ON payments.provider_outcomes (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_outcomes__provider_session_id ON payments.provider_outcomes (provider_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_outcomes__provider_callback_id ON payments.provider_outcomes (provider_callback_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_outcomes__payment_rail_id ON payments.provider_outcomes (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_provider_outcomes__correlation_id ON payments.provider_outcomes (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_requests__site_group_id ON sessions.session_resolution_requests (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_requests__site_id ON sessions.session_resolution_requests (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_requests__request_status ON sessions.session_resolution_requests (request_status);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_requests__requested_at ON sessions.session_resolution_requests (requested_at);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_requests__correlation_id ON sessions.session_resolution_requests (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_results__session_resolution_request_id ON sessions.session_resolution_results (session_resolution_request_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_results__parking_session_id ON sessions.session_resolution_results (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_results__site_group_id ON sessions.session_resolution_results (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_results__site_id ON sessions.session_resolution_results (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_resolution_results__correlation_id ON sessions.session_resolution_results (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_session_lookup_cache__site_group_id ON sessions.session_lookup_cache (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_lookup_cache__site_id ON sessions.session_lookup_cache (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_lookup_cache__parking_session_id ON sessions.session_lookup_cache (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_lookup_cache__vendor_system_id ON sessions.session_lookup_cache (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_lookup_cache__correlation_id ON sessions.session_lookup_cache (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_session_identifier_indexes__parking_session_id ON sessions.session_identifier_indexes (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_identifier_indexes__site_group_id ON sessions.session_identifier_indexes (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_identifier_indexes__site_id ON sessions.session_identifier_indexes (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_identifier_indexes__vendor_system_id ON sessions.session_identifier_indexes (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_session_identifier_indexes__correlation_id ON sessions.session_identifier_indexes (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_coupons__merchant_id ON coupons.coupons (merchant_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupons__coupon_status ON coupons.coupons (coupon_status);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_rule_groups__coupon_id ON coupons.coupon_rule_groups (coupon_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_rule_groups__rule_group_status ON coupons.coupon_rule_groups (rule_group_status);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_rules__coupon_rule_group_id ON coupons.coupon_rules (coupon_rule_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_rules__site_group_id ON coupons.coupon_rules (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_rules__site_id ON coupons.coupon_rules (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_applications__coupon_id ON coupons.coupon_applications (coupon_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_applications__merchant_id ON coupons.coupon_applications (merchant_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_applications__merchant_wallet_id ON coupons.coupon_applications (merchant_wallet_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_applications__parking_session_id ON coupons.coupon_applications (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_coupon_applications__correlation_id ON coupons.coupon_applications (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_discount_policy_references__site_group_id ON discounts.discount_policy_references (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_discount_policy_references__site_id ON discounts.discount_policy_references (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_discount_policy_references__parent_policy_reference_id ON discounts.discount_policy_references (parent_policy_reference_id);
-
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__parking_session_id ON discounts.statutory_discount_validations (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__tariff_snapshot_id ON discounts.statutory_discount_validations (tariff_snapshot_id);
-
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__applied_policy_reference_ ON discounts.statutory_discount_validations (applied_policy_reference_id);
-
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__fallback_policy_reference ON discounts.statutory_discount_validations (fallback_policy_reference_id);
-
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__correlation_id ON discounts.statutory_discount_validations (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_discount_evidence_references__statutory_discount_validati ON discounts.discount_evidence_references (statutory_discount_validation_id);
-
 CREATE INDEX IF NOT EXISTS ix_discount_evidence_references__evidence_capture_status ON discounts.discount_evidence_references (evidence_capture_status);
-
 CREATE INDEX IF NOT EXISTS ix_discount_evidence_references__redaction_status ON discounts.discount_evidence_references (redaction_status);
-
 CREATE INDEX IF NOT EXISTS ix_discount_evidence_references__retention_expires_at ON discounts.discount_evidence_references (retention_expires_at);
-
 CREATE INDEX IF NOT EXISTS ix_discount_evidence_references__correlation_id ON discounts.discount_evidence_references (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_gate_devices__site_id ON gates.gate_devices (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_devices__lane_id ON gates.gate_devices (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_devices__service_identity_id ON gates.gate_devices (service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__exit_authorization_id ON gates.gate_authorization_consumptions (exit_authorization_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__gate_device_id ON gates.gate_authorization_consumptions (gate_device_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__site_id ON gates.gate_authorization_consumptions (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__lane_id ON gates.gate_authorization_consumptions (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__consume_status ON gates.gate_authorization_consumptions (consume_status);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__command_result_status ON gates.gate_authorization_consumptions (command_result_status);
-
 CREATE INDEX IF NOT EXISTS ix_gate_authorization_consumptions__correlation_id ON gates.gate_authorization_consumptions (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__gate_device_id ON gates.gate_events (gate_device_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__exit_authorization_id ON gates.gate_events (exit_authorization_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__site_id ON gates.gate_events (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__lane_id ON gates.gate_events (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__event_status ON gates.gate_events (event_status);
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__occurred_at ON gates.gate_events (occurred_at);
-
 CREATE INDEX IF NOT EXISTS ix_gate_events__correlation_id ON gates.gate_events (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__gate_device_id ON gates.gate_heartbeats (gate_device_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__site_id ON gates.gate_heartbeats (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__lane_id ON gates.gate_heartbeats (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__heartbeat_status ON gates.gate_heartbeats (heartbeat_status);
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__device_reported_status ON gates.gate_heartbeats (device_reported_status);
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__observed_at ON gates.gate_heartbeats (observed_at);
-
 CREATE INDEX IF NOT EXISTS ix_gate_heartbeats__correlation_id ON gates.gate_heartbeats (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__parking_session_id ON operations.manual_gate_logs (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__exit_authorization_id ON operations.manual_gate_logs (exit_authorization_id);
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__incident_record_id ON operations.manual_gate_logs (incident_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__override_approval_id ON operations.manual_gate_logs (override_approval_id);
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__site_id ON operations.manual_gate_logs (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__lane_id ON operations.manual_gate_logs (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_manual_gate_logs__correlation_id ON operations.manual_gate_logs (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_override_requests__incident_record_id ON operations.override_requests (incident_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_override_requests__site_id ON operations.override_requests (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_override_requests__lane_id ON operations.override_requests (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_override_requests__requested_by_user_id ON operations.override_requests (requested_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_override_requests__correlation_id ON operations.override_requests (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_override_approvals__override_request_id ON operations.override_approvals (override_request_id);
-
 CREATE INDEX IF NOT EXISTS ix_override_approvals__decided_by_user_id ON operations.override_approvals (decided_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_override_approvals__correlation_id ON operations.override_approvals (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_incident_records__site_group_id ON operations.incident_records (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_incident_records__site_id ON operations.incident_records (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_incident_records__lane_id ON operations.incident_records (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_incident_records__gate_device_id ON operations.incident_records (gate_device_id);
-
 CREATE INDEX IF NOT EXISTS ix_incident_records__correlation_id ON operations.incident_records (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_operator_action_logs__operator_user_id ON operations.operator_action_logs (operator_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_operator_action_logs__site_id ON operations.operator_action_logs (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_operator_action_logs__correlation_id ON operations.operator_action_logs (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__parking_session_id ON reconciliation.mops_transaction_records (parking_session_id);
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__manual_gate_log_id ON reconciliation.mops_transaction_records (manual_gate_log_id);
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__incident_record_id ON reconciliation.mops_transaction_records (incident_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__site_id ON reconciliation.mops_transaction_records (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__lane_id ON reconciliation.mops_transaction_records (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__imported_by_service_identity_id ON reconciliation.mops_transaction_records (imported_by_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_mops_transaction_records__correlation_id ON reconciliation.mops_transaction_records (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_runs__site_group_id ON reconciliation.reconciliation_runs (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_runs__site_id ON reconciliation.reconciliation_runs (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_runs__incident_record_id ON reconciliation.reconciliation_runs (incident_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_runs__payment_rail_id ON reconciliation.reconciliation_runs (payment_rail_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_runs__correlation_id ON reconciliation.reconciliation_runs (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__reconciliation_run_id ON reconciliation.reconciliation_items (reconciliation_run_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__mops_transaction_record_id ON reconciliation.reconciliation_items (mops_transaction_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__manual_gate_log_id ON reconciliation.reconciliation_items (manual_gate_log_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__payment_attempt_id ON reconciliation.reconciliation_items (payment_attempt_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__payment_confirmation_id ON reconciliation.reconciliation_items (payment_confirmation_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__provider_outcome_id ON reconciliation.reconciliation_items (provider_outcome_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_items__correlation_id ON reconciliation.reconciliation_items (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_exceptions__reconciliation_run_id ON reconciliation.reconciliation_exceptions (reconciliation_run_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_exceptions__reconciliation_item_id ON reconciliation.reconciliation_exceptions (reconciliation_item_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_exceptions__incident_record_id ON reconciliation.reconciliation_exceptions (incident_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_exceptions__assigned_to_user_id ON reconciliation.reconciliation_exceptions (assigned_to_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_reconciliation_exceptions__correlation_id ON reconciliation.reconciliation_exceptions (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_settlement_comparison_records__reconciliation_item_id ON reconciliation.settlement_comparison_records (reconciliation_item_id);
-
 CREATE INDEX IF NOT EXISTS ix_settlement_comparison_records__mops_transaction_record_id ON reconciliation.settlement_comparison_records (mops_transaction_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_settlement_comparison_records__reconciliation_exception_i ON reconciliation.settlement_comparison_records (reconciliation_exception_id);
-
 CREATE INDEX IF NOT EXISTS ix_settlement_comparison_records__payment_confirmation_id ON reconciliation.settlement_comparison_records (payment_confirmation_id);
-
 CREATE INDEX IF NOT EXISTS ix_settlement_comparison_records__correlation_id ON reconciliation.settlement_comparison_records (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_site_groups__site_group_status ON sites.site_groups (site_group_status);
-
 CREATE INDEX IF NOT EXISTS ix_sites__site_group_id ON sites.sites (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_sites__site_status ON sites.sites (site_status);
-
 CREATE INDEX IF NOT EXISTS ix_lanes__site_id ON sites.lanes (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_lanes__lane_status ON sites.lanes (lane_status);
-
 CREATE INDEX IF NOT EXISTS ix_device_assignments__site_id ON sites.device_assignments (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_device_assignments__lane_id ON sites.device_assignments (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_device_assignments__gate_device_id ON sites.device_assignments (gate_device_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchants__merchant_status ON merchants.merchants (merchant_status);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_site_scopes__merchant_id ON merchants.merchant_site_scopes (merchant_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_site_scopes__site_group_id ON merchants.merchant_site_scopes (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_site_scopes__site_id ON merchants.merchant_site_scopes (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_wallets__merchant_id ON merchants.merchant_wallets (merchant_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_wallets__wallet_status ON merchants.merchant_wallets (wallet_status);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_users__merchant_id ON merchants.merchant_users (merchant_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_users__user_id ON merchants.merchant_users (user_id);
-
 CREATE INDEX IF NOT EXISTS ix_merchant_users__merchant_user_status ON merchants.merchant_users (merchant_user_status);
-
 CREATE INDEX IF NOT EXISTS ix_users__user_status ON identity.users (user_status);
-
 CREATE INDEX IF NOT EXISTS ix_users__last_login_at ON identity.users (last_login_at);
-
 CREATE INDEX IF NOT EXISTS ix_users__locked_at ON identity.users (locked_at);
-
 CREATE INDEX IF NOT EXISTS ix_roles__role_status ON identity.roles (role_status);
-
 CREATE INDEX IF NOT EXISTS ix_permissions__permission_status ON identity.permissions (permission_status);
-
 CREATE INDEX IF NOT EXISTS ix_user_roles__user_id ON identity.user_roles (user_id);
-
 CREATE INDEX IF NOT EXISTS ix_user_roles__role_id ON identity.user_roles (role_id);
-
 CREATE INDEX IF NOT EXISTS ix_user_roles__assigned_by_user_id ON identity.user_roles (assigned_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_role_permissions__role_id ON identity.role_permissions (role_id);
-
 CREATE INDEX IF NOT EXISTS ix_role_permissions__permission_id ON identity.role_permissions (permission_id);
-
 CREATE INDEX IF NOT EXISTS ix_role_permissions__assigned_by_user_id ON identity.role_permissions (assigned_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_service_identities__identity_status ON identity.service_identities (identity_status);
-
 CREATE INDEX IF NOT EXISTS ix_service_identities__credential_expires_at ON identity.service_identities (credential_expires_at);
-
 CREATE INDEX IF NOT EXISTS ix_service_identities__last_rotated_at ON identity.service_identities (last_rotated_at);
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__actor_user_id ON audit.audit_events (actor_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__actor_service_identity_id ON audit.audit_events (actor_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__created_by_service_identity_id ON audit.audit_events (created_by_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__occurred_at ON audit.audit_events (occurred_at);
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__recorded_at ON audit.audit_events (recorded_at);
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__correlation_id ON audit.audit_events (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_audit_events__causation_id ON audit.audit_events (causation_id) WHERE causation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_audit_trail_entries__audit_event_id ON audit.audit_trail_entries (audit_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_trail_entries__changed_by_user_id ON audit.audit_trail_entries (changed_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_trail_entries__changed_by_service_identity_id ON audit.audit_trail_entries (changed_by_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_trail_entries__created_by_service_identity_id ON audit.audit_trail_entries (created_by_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_audit_trail_entries__changed_at ON audit.audit_trail_entries (changed_at);
-
 CREATE INDEX IF NOT EXISTS ix_audit_trail_entries__correlation_id ON audit.audit_trail_entries (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_security_events__audit_event_id ON audit.security_events (audit_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_security_events__actor_user_id ON audit.security_events (actor_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_security_events__actor_service_identity_id ON audit.security_events (actor_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_security_events__incident_record_id ON audit.security_events (incident_record_id);
-
 CREATE INDEX IF NOT EXISTS ix_security_events__resolved_by_user_id ON audit.security_events (resolved_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_security_events__created_by_service_identity_id ON audit.security_events (created_by_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_security_events__correlation_id ON audit.security_events (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__audit_event_id ON audit.evidence_links (audit_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__security_event_id ON audit.evidence_links (security_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__linked_by_user_id ON audit.evidence_links (linked_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__linked_by_service_identity_id ON audit.evidence_links (linked_by_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__purged_by_user_id ON audit.evidence_links (purged_by_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__retention_expires_at ON audit.evidence_links (retention_expires_at);
-
 CREATE INDEX IF NOT EXISTS ix_evidence_links__correlation_id ON audit.evidence_links (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_vendor_systems__vendor_system_status ON integration.vendor_systems (vendor_system_status);
-
 CREATE INDEX IF NOT EXISTS ix_vendor_endpoints__vendor_system_id ON integration.vendor_endpoints (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_vendor_endpoints__credential_reference_id ON integration.vendor_endpoints (credential_reference_id);
-
 CREATE INDEX IF NOT EXISTS ix_vendor_endpoints__endpoint_status ON integration.vendor_endpoints (endpoint_status);
-
 CREATE INDEX IF NOT EXISTS ix_adapter_mappings__vendor_system_id ON integration.adapter_mappings (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_adapter_mappings__site_group_id ON integration.adapter_mappings (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_adapter_mappings__site_id ON integration.adapter_mappings (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_adapter_mappings__lane_id ON integration.adapter_mappings (lane_id);
-
 CREATE INDEX IF NOT EXISTS ix_adapter_mappings__gate_device_id ON integration.adapter_mappings (gate_device_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_credential_references__vendor_system_id ON integration.integration_credential_references (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_credential_references__service_identity_id ON integration.integration_credential_references (service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_credential_references__credential_status ON integration.integration_credential_references (credential_status);
-
 CREATE INDEX IF NOT EXISTS ix_integration_credential_references__last_rotated_at ON integration.integration_credential_references (last_rotated_at);
-
 CREATE INDEX IF NOT EXISTS ix_integration_credential_references__next_rotation_due_at ON integration.integration_credential_references (next_rotation_due_at);
-
 CREATE INDEX IF NOT EXISTS ix_integration_health_records__vendor_system_id ON integration.integration_health_records (vendor_system_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_health_records__vendor_endpoint_id ON integration.integration_health_records (vendor_endpoint_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_health_records__site_group_id ON integration.integration_health_records (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_health_records__site_id ON integration.integration_health_records (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_integration_health_records__correlation_id ON integration.integration_health_records (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_system_parameters__parameter_status ON config.system_parameters (parameter_status);
-
 CREATE INDEX IF NOT EXISTS ix_system_parameters__approved_at ON config.system_parameters (approved_at);
-
 CREATE INDEX IF NOT EXISTS ix_feature_flags__site_group_id ON config.feature_flags (site_group_id);
-
 CREATE INDEX IF NOT EXISTS ix_feature_flags__site_id ON config.feature_flags (site_id);
-
 CREATE INDEX IF NOT EXISTS ix_feature_flags__merchant_id ON config.feature_flags (merchant_id);
-
 CREATE INDEX IF NOT EXISTS ix_rate_limit_policies__policy_status ON config.rate_limit_policies (policy_status);
-
 CREATE INDEX IF NOT EXISTS ix_ttl_policies__policy_status ON config.ttl_policies (policy_status);
-
 CREATE INDEX IF NOT EXISTS ix_controlled_code_sets__code_status ON config.controlled_code_sets (code_status);
-
 CREATE INDEX IF NOT EXISTS ix_domain_events__actor_user_id ON events.domain_events (actor_user_id);
-
 CREATE INDEX IF NOT EXISTS ix_domain_events__actor_service_identity_id ON events.domain_events (actor_service_identity_id);
-
 CREATE INDEX IF NOT EXISTS ix_domain_events__event_status ON events.domain_events (event_status);
-
 CREATE INDEX IF NOT EXISTS ix_domain_events__correlation_id ON events.domain_events (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_domain_events__causation_id ON events.domain_events (causation_id) WHERE causation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__domain_event_id ON events.outbox_events (domain_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__publication_status ON events.outbox_events (publication_status);
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__available_at ON events.outbox_events (available_at);
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__published_at ON events.outbox_events (published_at);
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__next_retry_at ON events.outbox_events (next_retry_at);
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__correlation_id ON events.outbox_events (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_outbox_events__causation_id ON events.outbox_events (causation_id) WHERE causation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_event_publications__outbox_event_id ON events.event_publications (outbox_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_event_publications__publication_status ON events.event_publications (publication_status);
-
 CREATE INDEX IF NOT EXISTS ix_event_publications__started_at ON events.event_publications (started_at);
-
 CREATE INDEX IF NOT EXISTS ix_event_publications__completed_at ON events.event_publications (completed_at);
-
 CREATE INDEX IF NOT EXISTS ix_event_publications__correlation_id ON events.event_publications (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__outbox_event_id ON events.dead_letter_records (outbox_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__event_publication_id ON events.dead_letter_records (event_publication_id);
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__dead_letter_status ON events.dead_letter_records (dead_letter_status);
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__dead_lettered_at ON events.dead_letter_records (dead_lettered_at);
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__resolved_at ON events.dead_letter_records (resolved_at);
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__replay_requested_at ON events.dead_letter_records (replay_requested_at);
-
 CREATE INDEX IF NOT EXISTS ix_dead_letter_records__correlation_id ON events.dead_letter_records (correlation_id) WHERE correlation_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS ix_consumer_checkpoints__last_outbox_event_id ON events.consumer_checkpoints (last_outbox_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_consumer_checkpoints__last_domain_event_id ON events.consumer_checkpoints (last_domain_event_id);
-
 CREATE INDEX IF NOT EXISTS ix_consumer_checkpoints__checkpoint_status ON events.consumer_checkpoints (checkpoint_status);
-
 CREATE INDEX IF NOT EXISTS ix_consumer_checkpoints__last_processed_at ON events.consumer_checkpoints (last_processed_at);
-
 CREATE INDEX IF NOT EXISTS ix_consumer_checkpoints__correlation_id ON events.consumer_checkpoints (correlation_id) WHERE correlation_id IS NOT NULL;
 
+-- CONTROLLED CODE SET SEED BASELINE
 -- ============================================================
--- 07A. Functions
--- Generated from ExitPass v1.2 DDL
+-- The full controlled-code catalog should be generated from governance-approved seed files.
+-- This draft includes only the table structure and a minimal placeholder comment to avoid inventing operational codes.
+
 -- ============================================================
+-- ROUTINE PLACEHOLDERS FOR INVARIANT-BEARING TRANSITIONS
+-- ============================================================
+-- Full routine bodies must be implemented and tested in the Engineering Pack / migration baseline.
 CREATE OR REPLACE FUNCTION core.create_or_reuse_payment_attempt() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'core.create_or_reuse_payment_attempt is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION core.record_payment_confirmation() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'core.record_payment_confirmation is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION core.issue_exit_authorization() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'core.issue_exit_authorization is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION gates.consume_exit_authorization() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'gates.consume_exit_authorization is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION coupons.reserve_coupon_application() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'coupons.reserve_coupon_application is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION coupons.commit_coupon_application() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'coupons.commit_coupon_application is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION coupons.release_coupon_application() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'coupons.release_coupon_application is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION discounts.record_statutory_discount_validation() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'discounts.record_statutory_discount_validation is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION operations.record_manual_gate_log() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'operations.record_manual_gate_log is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION reconciliation.import_mops_transaction_record() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'reconciliation.import_mops_transaction_record is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION reconciliation.resolve_reconciliation_item() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'reconciliation.resolve_reconciliation_item is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
-
 CREATE OR REPLACE FUNCTION events.enqueue_outbox_event() RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'events.enqueue_outbox_event is a v1.2 routine placeholder and must be implemented before production use'; END; $$;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_service_identities__service_identity_code') THEN
-        ALTER TABLE identity.service_identities
-        ADD CONSTRAINT uq_service_identities__service_identity_code UNIQUE (service_identity_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_roles__role_code') THEN
-        ALTER TABLE identity.roles
-        ADD CONSTRAINT uq_roles__role_code UNIQUE (role_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_permissions__permission_code') THEN
-        ALTER TABLE identity.permissions
-        ADD CONSTRAINT uq_permissions__permission_code UNIQUE (permission_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_controlled_code_sets__set_value_domain') THEN
-        ALTER TABLE config.controlled_code_sets
-        ADD CONSTRAINT uq_controlled_code_sets__set_value_domain UNIQUE (code_set_name, code_value, code_domain);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_ttl_policies__policy_code') THEN
-        ALTER TABLE config.ttl_policies
-        ADD CONSTRAINT uq_ttl_policies__policy_code UNIQUE (policy_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_rate_limit_policies__policy_code') THEN
-        ALTER TABLE config.rate_limit_policies
-        ADD CONSTRAINT uq_rate_limit_policies__policy_code UNIQUE (policy_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_vendor_systems__vendor_code_environment') THEN
-        ALTER TABLE integration.vendor_systems
-        ADD CONSTRAINT uq_vendor_systems__vendor_code_environment UNIQUE (vendor_code, environment_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_vendor_endpoints__vendor_endpoint_code') THEN
-        ALTER TABLE integration.vendor_endpoints
-        ADD CONSTRAINT uq_vendor_endpoints__vendor_endpoint_code UNIQUE (vendor_system_id, endpoint_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_payment_rails__rail_code') THEN
-        ALTER TABLE payments.payment_rails
-        ADD CONSTRAINT uq_payment_rails__rail_code UNIQUE (rail_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_site_groups__site_group_code') THEN
-        ALTER TABLE sites.site_groups
-        ADD CONSTRAINT uq_site_groups__site_group_code UNIQUE (site_group_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_sites__site_group_site_code') THEN
-        ALTER TABLE sites.sites
-        ADD CONSTRAINT uq_sites__site_group_site_code UNIQUE (site_group_id, site_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_lanes__site_lane_code') THEN
-        ALTER TABLE sites.lanes
-        ADD CONSTRAINT uq_lanes__site_lane_code UNIQUE (site_id, lane_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_gate_devices__site_device_code') THEN
-        ALTER TABLE gates.gate_devices
-        ADD CONSTRAINT uq_gate_devices__site_device_code UNIQUE (site_id, device_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_discount_policy_references__policy_code_version') THEN
-        ALTER TABLE discounts.discount_policy_references
-        ADD CONSTRAINT uq_discount_policy_references__policy_code_version UNIQUE (policy_code, policy_version);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_merchants__merchant_code') THEN
-        ALTER TABLE merchants.merchants
-        ADD CONSTRAINT uq_merchants__merchant_code UNIQUE (merchant_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_merchant_wallets__merchant_wallet_code') THEN
-        ALTER TABLE merchants.merchant_wallets
-        ADD CONSTRAINT uq_merchant_wallets__merchant_wallet_code UNIQUE (merchant_id, wallet_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_coupons__merchant_coupon_code') THEN
-        ALTER TABLE coupons.coupons
-        ADD CONSTRAINT uq_coupons__merchant_coupon_code UNIQUE (merchant_id, coupon_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_coupon_rule_groups__coupon_rule_group_code') THEN
-        ALTER TABLE coupons.coupon_rule_groups
-        ADD CONSTRAINT uq_coupon_rule_groups__coupon_rule_group_code UNIQUE (coupon_id, rule_group_code);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_coupon_rules__group_rule_code') THEN
-        ALTER TABLE coupons.coupon_rules
-        ADD CONSTRAINT uq_coupon_rules__group_rule_code UNIQUE (coupon_rule_group_id, rule_code);
-    END IF;
-END $$;
+COMMIT;
