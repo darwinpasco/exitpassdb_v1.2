@@ -1,0 +1,25 @@
+ schemaname  |         table_name         | estimated_rows 
+-------------+----------------------------+----------------
+ config      | controlled_code_sets       |             24
+ config      | rate_limit_policies        |              7
+ config      | ttl_policies               |             10
+ coupons     | coupon_rule_groups         |              2
+ coupons     | coupon_rules               |              4
+ coupons     | coupons                    |              2
+ discounts   | discount_policy_references |              4
+ gates       | gate_devices               |              2
+ identity    | permissions                |             17
+ identity    | role_permissions           |             56
+ identity    | roles                      |              9
+ identity    | service_identities         |             14
+ integration | vendor_endpoints           |             12
+ integration | vendor_systems             |              6
+ merchants   | merchant_site_scopes       |              2
+ merchants   | merchant_wallets           |              2
+ merchants   | merchants                  |              2
+ payments    | payment_rails              |              4
+ sites       | lanes                      |              5
+ sites       | site_groups                |              1
+ sites       | sites                      |              2
+(21 rows)
+
