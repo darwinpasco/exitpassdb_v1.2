@@ -9,3 +9,10 @@ env "local" {
     dir = "file://migrations"
   }
 }
+env "rebuild" {
+  url = "postgres://exitpass:change_me@127.0.0.1:5432/exitpass_atlas_rebuild?sslmode=disable"
+
+  migration {
+    dir = "file://migrations"
+  }
+}
