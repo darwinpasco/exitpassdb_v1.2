@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ExitPassV12SchemaOnlySync
+\restrict wwTwXGLfh12gNZWMUnZNf7zMJdahwaNX3e3ewwpGhnC6r3eFd8dpJZyh0qTx6eQ
 
 -- Dumped from database version 16.13
 -- Dumped by pg_dump version 16.13
@@ -1766,6 +1766,19 @@ CREATE TYPE reconciliation.reconciliation_comparison_basis_enum AS ENUM (
 
 
 --
+-- Name: reconciliation_exception_note_type_enum; Type: TYPE; Schema: reconciliation; Owner: -
+--
+
+CREATE TYPE reconciliation.reconciliation_exception_note_type_enum AS ENUM (
+    'REVIEW_NOTE',
+    'PROVIDER_CHECK_NOTE',
+    'INTERNAL_CHECK_NOTE',
+    'FINANCIAL_IMPACT_NOTE',
+    'SYSTEM_NOTE'
+);
+
+
+--
 -- Name: reconciliation_exception_severity_enum; Type: TYPE; Schema: reconciliation; Owner: -
 --
 
@@ -1813,6 +1826,18 @@ CREATE TYPE reconciliation.reconciliation_exception_type_enum AS ENUM (
 
 
 --
+-- Name: reconciliation_financial_impact_enum; Type: TYPE; Schema: reconciliation; Owner: -
+--
+
+CREATE TYPE reconciliation.reconciliation_financial_impact_enum AS ENUM (
+    'NONE',
+    'POSSIBLE',
+    'DEFINITE',
+    'CONTROL_ONLY'
+);
+
+
+--
 -- Name: reconciliation_item_status_enum; Type: TYPE; Schema: reconciliation; Owner: -
 --
 
@@ -1841,6 +1866,47 @@ CREATE TYPE reconciliation.reconciliation_match_status_enum AS ENUM (
     'DUPLICATE',
     'INCONCLUSIVE',
     'REJECTED'
+);
+
+
+--
+-- Name: reconciliation_resolution_action_enum; Type: TYPE; Schema: reconciliation; Owner: -
+--
+
+CREATE TYPE reconciliation.reconciliation_resolution_action_enum AS ENUM (
+    'RESOLVE_NO_ADJUSTMENT',
+    'RESOLVE_WITH_OPERATIONAL_NOTE',
+    'REQUEST_FINANCIAL_ADJUSTMENT',
+    'ACCEPT_PROVIDER_EVIDENCE',
+    'OVERRIDE_RECONCILIATION_STATUS',
+    'REOPEN_EXCEPTION',
+    'CLOSE_EXCEPTION',
+    'CANCEL_EXCEPTION'
+);
+
+
+--
+-- Name: reconciliation_resolution_approval_decision_enum; Type: TYPE; Schema: reconciliation; Owner: -
+--
+
+CREATE TYPE reconciliation.reconciliation_resolution_approval_decision_enum AS ENUM (
+    'APPROVED',
+    'REJECTED'
+);
+
+
+--
+-- Name: reconciliation_resolution_request_status_enum; Type: TYPE; Schema: reconciliation; Owner: -
+--
+
+CREATE TYPE reconciliation.reconciliation_resolution_request_status_enum AS ENUM (
+    'DRAFT',
+    'SUBMITTED',
+    'PENDING_APPROVAL',
+    'APPROVED',
+    'REJECTED',
+    'CANCELLED',
+    'SUPERSEDED'
 );
 
 
@@ -13974,6 +14040,155 @@ COMMENT ON COLUMN reconciliation.mops_transaction_records.row_version IS 'Optimi
 
 
 --
+-- Name: reconciliation_exception_notes; Type: TABLE; Schema: reconciliation; Owner: -
+--
+
+CREATE TABLE reconciliation.reconciliation_exception_notes (
+    reconciliation_exception_note_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    reconciliation_exception_id uuid NOT NULL,
+    reconciliation_run_id uuid NOT NULL,
+    reconciliation_item_id uuid,
+    note_type reconciliation.reconciliation_exception_note_type_enum NOT NULL,
+    note_summary character varying(256) NOT NULL,
+    note_detail text,
+    detail_ref character varying(256),
+    detail_hash character(64),
+    audit_event_id uuid,
+    audit_trail_entry_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_user_id uuid,
+    created_by_service_identity_id uuid,
+    correlation_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT ck_recon_exception_notes__detail_hash CHECK (((detail_hash IS NULL) OR (length(detail_hash) = 64))),
+    CONSTRAINT ck_recon_exception_notes__row_version CHECK ((row_version > 0))
+);
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals; Type: TABLE; Schema: reconciliation; Owner: -
+--
+
+CREATE TABLE reconciliation.reconciliation_exception_resolution_approvals (
+    reconciliation_exception_resolution_approval_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    reconciliation_exception_resolution_request_id uuid NOT NULL,
+    reconciliation_exception_id uuid NOT NULL,
+    reconciliation_run_id uuid NOT NULL,
+    reconciliation_item_id uuid,
+    approval_decision reconciliation.reconciliation_resolution_approval_decision_enum NOT NULL,
+    approval_reason_code character varying(128),
+    rejection_reason_code character varying(128),
+    approval_summary character varying(256) NOT NULL,
+    approval_detail text,
+    approved_at timestamp with time zone,
+    rejected_at timestamp with time zone,
+    checker_user_id uuid,
+    checker_service_identity_id uuid,
+    maker_user_id uuid,
+    maker_service_identity_id uuid,
+    audit_event_id uuid,
+    audit_trail_entry_id uuid,
+    correlation_id uuid,
+    causation_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_user_id uuid,
+    created_by_service_identity_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT ck_recon_ex_res_approvals__decision_time CHECK ((((approval_decision = 'APPROVED'::reconciliation.reconciliation_resolution_approval_decision_enum) AND (approved_at IS NOT NULL) AND (rejected_at IS NULL)) OR ((approval_decision = 'REJECTED'::reconciliation.reconciliation_resolution_approval_decision_enum) AND (rejected_at IS NOT NULL) AND (approved_at IS NULL)))),
+    CONSTRAINT ck_recon_ex_res_approvals__maker_checker_service CHECK (((maker_service_identity_id IS NULL) OR (checker_service_identity_id IS NULL) OR (maker_service_identity_id <> checker_service_identity_id))),
+    CONSTRAINT ck_recon_ex_res_approvals__maker_checker_user CHECK (((maker_user_id IS NULL) OR (checker_user_id IS NULL) OR (maker_user_id <> checker_user_id))),
+    CONSTRAINT ck_recon_ex_res_approvals__reject_reason CHECK (((approval_decision = 'APPROVED'::reconciliation.reconciliation_resolution_approval_decision_enum) OR (rejection_reason_code IS NOT NULL))),
+    CONSTRAINT ck_recon_ex_res_approvals__row_version CHECK ((row_version > 0))
+);
+
+
+--
+-- Name: reconciliation_exception_resolution_requests; Type: TABLE; Schema: reconciliation; Owner: -
+--
+
+CREATE TABLE reconciliation.reconciliation_exception_resolution_requests (
+    reconciliation_exception_resolution_request_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    reconciliation_exception_id uuid NOT NULL,
+    reconciliation_run_id uuid NOT NULL,
+    reconciliation_item_id uuid,
+    requested_action reconciliation.reconciliation_resolution_action_enum NOT NULL,
+    request_status reconciliation.reconciliation_resolution_request_status_enum NOT NULL,
+    previous_exception_status reconciliation.reconciliation_exception_status_enum NOT NULL,
+    proposed_exception_status reconciliation.reconciliation_exception_status_enum NOT NULL,
+    previous_item_status reconciliation.reconciliation_item_status_enum,
+    proposed_item_status reconciliation.reconciliation_item_status_enum,
+    previous_match_status reconciliation.reconciliation_match_status_enum,
+    proposed_match_status reconciliation.reconciliation_match_status_enum,
+    financial_impact reconciliation.reconciliation_financial_impact_enum NOT NULL,
+    financial_impact_flag boolean DEFAULT false NOT NULL,
+    adjustment_required_flag boolean DEFAULT false NOT NULL,
+    amount_delta numeric,
+    currency_code character(3),
+    resolution_reason_code character varying(128) NOT NULL,
+    rejection_reason_code character varying(128),
+    request_summary character varying(256) NOT NULL,
+    request_detail text,
+    evidence_ref character varying(256),
+    evidence_hash character(64),
+    submitted_at timestamp with time zone,
+    cancelled_at timestamp with time zone,
+    closed_at timestamp with time zone,
+    maker_user_id uuid,
+    maker_service_identity_id uuid,
+    audit_event_id uuid,
+    audit_trail_entry_id uuid,
+    correlation_id uuid,
+    causation_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_user_id uuid,
+    created_by_service_identity_id uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by_user_id uuid,
+    updated_by_service_identity_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT ck_recon_ex_res_requests__adjustment CHECK (((adjustment_required_flag = false) OR (financial_impact = ANY (ARRAY['POSSIBLE'::reconciliation.reconciliation_financial_impact_enum, 'DEFINITE'::reconciliation.reconciliation_financial_impact_enum])))),
+    CONSTRAINT ck_recon_ex_res_requests__amount_delta CHECK (((amount_delta IS NULL) OR (amount_delta >= (0)::numeric))),
+    CONSTRAINT ck_recon_ex_res_requests__evidence_hash CHECK (((evidence_hash IS NULL) OR (length(evidence_hash) = 64))),
+    CONSTRAINT ck_recon_ex_res_requests__financial_flags CHECK ((((financial_impact = ANY (ARRAY['POSSIBLE'::reconciliation.reconciliation_financial_impact_enum, 'DEFINITE'::reconciliation.reconciliation_financial_impact_enum])) AND (financial_impact_flag = true)) OR (financial_impact = ANY (ARRAY['NONE'::reconciliation.reconciliation_financial_impact_enum, 'CONTROL_ONLY'::reconciliation.reconciliation_financial_impact_enum])) OR (financial_impact_flag = true))),
+    CONSTRAINT ck_recon_ex_res_requests__row_version CHECK ((row_version > 0)),
+    CONSTRAINT ck_recon_ex_res_requests__submitted CHECK (((request_status = 'DRAFT'::reconciliation.reconciliation_resolution_request_status_enum) OR (submitted_at IS NOT NULL)))
+);
+
+
+--
+-- Name: reconciliation_exception_status_history; Type: TABLE; Schema: reconciliation; Owner: -
+--
+
+CREATE TABLE reconciliation.reconciliation_exception_status_history (
+    reconciliation_exception_status_history_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    reconciliation_exception_id uuid NOT NULL,
+    reconciliation_run_id uuid NOT NULL,
+    reconciliation_item_id uuid,
+    reconciliation_exception_resolution_request_id uuid,
+    reconciliation_exception_resolution_approval_id uuid,
+    previous_exception_status reconciliation.reconciliation_exception_status_enum,
+    new_exception_status reconciliation.reconciliation_exception_status_enum NOT NULL,
+    previous_item_status reconciliation.reconciliation_item_status_enum,
+    new_item_status reconciliation.reconciliation_item_status_enum,
+    reason_code character varying(128) NOT NULL,
+    transition_summary character varying(256) NOT NULL,
+    transition_detail text,
+    changed_at timestamp with time zone NOT NULL,
+    changed_by_user_id uuid,
+    changed_by_service_identity_id uuid,
+    audit_event_id uuid,
+    audit_trail_entry_id uuid,
+    correlation_id uuid,
+    causation_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_service_identity_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT ck_recon_exception_status_history__row_version CHECK ((row_version > 0)),
+    CONSTRAINT ck_recon_exception_status_history__status_changed CHECK (((previous_exception_status IS NULL) OR (previous_exception_status <> new_exception_status)))
+);
+
+
+--
 -- Name: reconciliation_exceptions; Type: TABLE; Schema: reconciliation; Owner: -
 --
 
@@ -17031,6 +17246,38 @@ ALTER TABLE ONLY reconciliation.mops_transaction_records
 
 
 --
+-- Name: reconciliation_exception_notes pk_recon_exception_notes; Type: CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT pk_recon_exception_notes PRIMARY KEY (reconciliation_exception_note_id);
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals pk_recon_exception_resolution_approvals; Type: CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT pk_recon_exception_resolution_approvals PRIMARY KEY (reconciliation_exception_resolution_approval_id);
+
+
+--
+-- Name: reconciliation_exception_resolution_requests pk_recon_exception_resolution_requests; Type: CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT pk_recon_exception_resolution_requests PRIMARY KEY (reconciliation_exception_resolution_request_id);
+
+
+--
+-- Name: reconciliation_exception_status_history pk_recon_exception_status_history; Type: CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT pk_recon_exception_status_history PRIMARY KEY (reconciliation_exception_status_history_id);
+
+
+--
 -- Name: reconciliation_exceptions pk_reconciliation_exceptions; Type: CONSTRAINT; Schema: reconciliation; Owner: -
 --
 
@@ -19029,6 +19276,125 @@ CREATE INDEX ix_mops_transaction_records__site_id ON reconciliation.mops_transac
 
 
 --
+-- Name: ix_reconciliation_exception_notes__correlation_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_notes__correlation_id ON reconciliation.reconciliation_exception_notes USING btree (correlation_id) WHERE (correlation_id IS NOT NULL);
+
+
+--
+-- Name: ix_reconciliation_exception_notes__created_at; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_notes__created_at ON reconciliation.reconciliation_exception_notes USING btree (created_at);
+
+
+--
+-- Name: ix_reconciliation_exception_notes__exception_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_notes__exception_id ON reconciliation.reconciliation_exception_notes USING btree (reconciliation_exception_id);
+
+
+--
+-- Name: ix_reconciliation_exception_notes__run_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_notes__run_id ON reconciliation.reconciliation_exception_notes USING btree (reconciliation_run_id);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_approvals__correlation_i; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_approvals__correlation_i ON reconciliation.reconciliation_exception_resolution_approvals USING btree (correlation_id) WHERE (correlation_id IS NOT NULL);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_approvals__decision; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_approvals__decision ON reconciliation.reconciliation_exception_resolution_approvals USING btree (approval_decision);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_approvals__exception_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_approvals__exception_id ON reconciliation.reconciliation_exception_resolution_approvals USING btree (reconciliation_exception_id);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_approvals__run_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_approvals__run_id ON reconciliation.reconciliation_exception_resolution_approvals USING btree (reconciliation_run_id);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_requests__correlation_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_requests__correlation_id ON reconciliation.reconciliation_exception_resolution_requests USING btree (correlation_id) WHERE (correlation_id IS NOT NULL);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_requests__exception_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_requests__exception_id ON reconciliation.reconciliation_exception_resolution_requests USING btree (reconciliation_exception_id);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_requests__request_status; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_requests__request_status ON reconciliation.reconciliation_exception_resolution_requests USING btree (request_status);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_requests__run_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_requests__run_id ON reconciliation.reconciliation_exception_resolution_requests USING btree (reconciliation_run_id);
+
+
+--
+-- Name: ix_reconciliation_exception_resolution_requests__submitted_at; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_resolution_requests__submitted_at ON reconciliation.reconciliation_exception_resolution_requests USING btree (submitted_at) WHERE (submitted_at IS NOT NULL);
+
+
+--
+-- Name: ix_reconciliation_exception_status_history__changed_at; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_status_history__changed_at ON reconciliation.reconciliation_exception_status_history USING btree (changed_at);
+
+
+--
+-- Name: ix_reconciliation_exception_status_history__correlation_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_status_history__correlation_id ON reconciliation.reconciliation_exception_status_history USING btree (correlation_id) WHERE (correlation_id IS NOT NULL);
+
+
+--
+-- Name: ix_reconciliation_exception_status_history__exception_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_status_history__exception_id ON reconciliation.reconciliation_exception_status_history USING btree (reconciliation_exception_id);
+
+
+--
+-- Name: ix_reconciliation_exception_status_history__run_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE INDEX ix_reconciliation_exception_status_history__run_id ON reconciliation.reconciliation_exception_status_history USING btree (reconciliation_run_id);
+
+
+--
 -- Name: ix_reconciliation_exceptions__assigned_to_user_id; Type: INDEX; Schema: reconciliation; Owner: -
 --
 
@@ -19194,6 +19560,20 @@ CREATE UNIQUE INDEX ux_mops_transaction_records__source_batch_collection ON reco
 --
 
 CREATE UNIQUE INDEX ux_mops_transaction_records__source_transaction_ref ON reconciliation.mops_transaction_records USING btree (source_system_code, source_transaction_ref) WHERE (source_transaction_ref IS NOT NULL);
+
+
+--
+-- Name: ux_reconciliation_exception_resolution_approvals__request_id; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE UNIQUE INDEX ux_reconciliation_exception_resolution_approvals__request_id ON reconciliation.reconciliation_exception_resolution_approvals USING btree (reconciliation_exception_resolution_request_id);
+
+
+--
+-- Name: ux_reconciliation_exception_resolution_requests__active_excepti; Type: INDEX; Schema: reconciliation; Owner: -
+--
+
+CREATE UNIQUE INDEX ux_reconciliation_exception_resolution_requests__active_excepti ON reconciliation.reconciliation_exception_resolution_requests USING btree (reconciliation_exception_id) WHERE (request_status = ANY (ARRAY['SUBMITTED'::reconciliation.reconciliation_resolution_request_status_enum, 'PENDING_APPROVAL'::reconciliation.reconciliation_resolution_request_status_enum]));
 
 
 --
@@ -22289,6 +22669,326 @@ ALTER TABLE ONLY reconciliation.mops_transaction_records
 
 
 --
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__audit_event; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__audit_event FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__audit_trail; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__audit_trail FOREIGN KEY (audit_trail_entry_id) REFERENCES audit.audit_trail_entries(audit_trail_entry_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__checker_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__checker_service FOREIGN KEY (checker_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__checker_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__checker_user FOREIGN KEY (checker_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__created_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__created_service FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__created_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__created_user FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__exception; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__exception FOREIGN KEY (reconciliation_exception_id) REFERENCES reconciliation.reconciliation_exceptions(reconciliation_exception_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__item; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__item FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__maker_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__maker_service FOREIGN KEY (maker_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__maker_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__maker_user FOREIGN KEY (maker_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__request; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__request FOREIGN KEY (reconciliation_exception_resolution_request_id) REFERENCES reconciliation.reconciliation_exception_resolution_requests(reconciliation_exception_resolution_request_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_approvals fk_recon_ex_res_approvals__run; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_approvals
+    ADD CONSTRAINT fk_recon_ex_res_approvals__run FOREIGN KEY (reconciliation_run_id) REFERENCES reconciliation.reconciliation_runs(reconciliation_run_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__audit_event; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__audit_event FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__audit_trail; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__audit_trail FOREIGN KEY (audit_trail_entry_id) REFERENCES audit.audit_trail_entries(audit_trail_entry_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__created_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__created_service FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__created_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__created_user FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__exception; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__exception FOREIGN KEY (reconciliation_exception_id) REFERENCES reconciliation.reconciliation_exceptions(reconciliation_exception_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__item; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__item FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__maker_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__maker_service FOREIGN KEY (maker_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__maker_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__maker_user FOREIGN KEY (maker_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__run; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__run FOREIGN KEY (reconciliation_run_id) REFERENCES reconciliation.reconciliation_runs(reconciliation_run_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__updated_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__updated_service FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_resolution_requests fk_recon_ex_res_requests__updated_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_resolution_requests
+    ADD CONSTRAINT fk_recon_ex_res_requests__updated_user FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__audit_event; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__audit_event FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__audit_trail; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__audit_trail FOREIGN KEY (audit_trail_entry_id) REFERENCES audit.audit_trail_entries(audit_trail_entry_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__created_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__created_service FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__created_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__created_user FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__exception; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__exception FOREIGN KEY (reconciliation_exception_id) REFERENCES reconciliation.reconciliation_exceptions(reconciliation_exception_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__item; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__item FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_notes fk_recon_exception_notes__run; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_notes
+    ADD CONSTRAINT fk_recon_exception_notes__run FOREIGN KEY (reconciliation_run_id) REFERENCES reconciliation.reconciliation_runs(reconciliation_run_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__approval; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__approval FOREIGN KEY (reconciliation_exception_resolution_approval_id) REFERENCES reconciliation.reconciliation_exception_resolution_approvals(reconciliation_exception_resolution_approval_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__audit_event; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__audit_event FOREIGN KEY (audit_event_id) REFERENCES audit.audit_events(audit_event_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__audit_trail; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__audit_trail FOREIGN KEY (audit_trail_entry_id) REFERENCES audit.audit_trail_entries(audit_trail_entry_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__changed_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__changed_service FOREIGN KEY (changed_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__changed_user; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__changed_user FOREIGN KEY (changed_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__created_service; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__created_service FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__exception; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__exception FOREIGN KEY (reconciliation_exception_id) REFERENCES reconciliation.reconciliation_exceptions(reconciliation_exception_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__item; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__item FOREIGN KEY (reconciliation_item_id) REFERENCES reconciliation.reconciliation_items(reconciliation_item_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__request; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__request FOREIGN KEY (reconciliation_exception_resolution_request_id) REFERENCES reconciliation.reconciliation_exception_resolution_requests(reconciliation_exception_resolution_request_id) DEFERRABLE;
+
+
+--
+-- Name: reconciliation_exception_status_history fk_recon_exception_status_history__run; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
+--
+
+ALTER TABLE ONLY reconciliation.reconciliation_exception_status_history
+    ADD CONSTRAINT fk_recon_exception_status_history__run FOREIGN KEY (reconciliation_run_id) REFERENCES reconciliation.reconciliation_runs(reconciliation_run_id) DEFERRABLE;
+
+
+--
 -- Name: reconciliation_exceptions fk_reconciliation_exceptions__assigned_to_service_identity_i; Type: FK CONSTRAINT; Schema: reconciliation; Owner: -
 --
 
@@ -23028,5 +23728,5 @@ ALTER TABLE ONLY sites.sites
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ExitPassV12SchemaOnlySync
+\unrestrict wwTwXGLfh12gNZWMUnZNf7zMJdahwaNX3e3ewwpGhnC6r3eFd8dpJZyh0qTx6eQ
 
