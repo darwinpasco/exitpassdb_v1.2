@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ogMCIaWfDAvL9FcIheBQKcLdoeHYicEOf5dGcyCwlc1Ep7TJ3ufYhlh9a6yo1KH
+\restrict ExitPassV12SchemaOnlySync
 
 -- Dumped from database version 16.13
 -- Dumped by pg_dump version 16.13
@@ -23028,5 +23028,5 @@ ALTER TABLE ONLY sites.sites
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ogMCIaWfDAvL9FcIheBQKcLdoeHYicEOf5dGcyCwlc1Ep7TJ3ufYhlh9a6yo1KH
+\unrestrict ExitPassV12SchemaOnlySync
 
