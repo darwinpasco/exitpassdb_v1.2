@@ -82,6 +82,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_discount_policy_references__active_local_po
 ON discounts.discount_policy_references (entitlement_type, lgu_code, site_group_id, site_id, policy_level, policy_version)
 WHERE policy_status = 'ACTIVE' AND lgu_code IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sd_policy_registry__active_national_fallback
+ON discounts.statutory_discount_policy_registry (entitlement_type)
+WHERE policy_status = 'ACTIVE'
+  AND verification_status = 'ACTIVE_APPROVED'
+  AND policy_resolution_basis = 'NATIONAL_LAW_FALLBACK';
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_statutory_discount_validations__active_session_entitlement
 ON discounts.statutory_discount_validations (parking_session_id, entitlement_type)
 WHERE validation_status IN ('REQUESTED', 'PENDING_OPERATOR_REVIEW', 'APPROVED');
@@ -343,6 +349,46 @@ CREATE INDEX IF NOT EXISTS ix_discount_policy_references__site_group_id ON disco
 CREATE INDEX IF NOT EXISTS ix_discount_policy_references__site_id ON discounts.discount_policy_references (site_id);
 
 CREATE INDEX IF NOT EXISTS ix_discount_policy_references__parent_policy_reference_id ON discounts.discount_policy_references (parent_policy_reference_id);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__entitlement_type ON discounts.statutory_discount_policy_registry (entitlement_type);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__policy_status ON discounts.statutory_discount_policy_registry (policy_status);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__verification_status ON discounts.statutory_discount_policy_registry (verification_status);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__policy_level ON discounts.statutory_discount_policy_registry (policy_level);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__policy_type ON discounts.statutory_discount_policy_registry (policy_type);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__resolution_basis ON discounts.statutory_discount_policy_registry (policy_resolution_basis);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__jurisdiction_id ON discounts.statutory_discount_policy_registry (jurisdiction_id) WHERE jurisdiction_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__jurisdiction_code ON discounts.statutory_discount_policy_registry (jurisdiction_code) WHERE jurisdiction_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__site_group_id ON discounts.statutory_discount_policy_registry (site_group_id);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__site_id ON discounts.statutory_discount_policy_registry (site_id);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__effective_window ON discounts.statutory_discount_policy_registry (effective_from, effective_to);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__active_lookup ON discounts.statutory_discount_policy_registry (
+    entitlement_type,
+    policy_status,
+    verification_status,
+    policy_resolution_basis,
+    jurisdiction_code,
+    site_group_id,
+    site_id,
+    effective_from,
+    effective_to
+);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__supersedes_policy_id ON discounts.statutory_discount_policy_registry (supersedes_policy_id) WHERE supersedes_policy_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__superseded_by_policy_id ON discounts.statutory_discount_policy_registry (superseded_by_policy_id) WHERE superseded_by_policy_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__correlation_id ON discounts.statutory_discount_policy_registry (correlation_id) WHERE correlation_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__parking_session_id ON discounts.statutory_discount_validations (parking_session_id);
 

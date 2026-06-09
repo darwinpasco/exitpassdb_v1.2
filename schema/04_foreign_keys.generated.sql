@@ -220,6 +220,26 @@ ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_poli
 
 ALTER TABLE discounts.discount_policy_references ADD CONSTRAINT fk_discount_policy_references__updated_by_service_identity_i FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
 
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__site_group_id FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__site_id FOREIGN KEY (site_id) REFERENCES sites.sites(site_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__reviewed_by_user_id FOREIGN KEY (reviewed_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__approved_by_user_id FOREIGN KEY (approved_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__supersedes_policy_id FOREIGN KEY (supersedes_policy_id) REFERENCES discounts.statutory_discount_policy_registry(statutory_discount_policy_registry_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__superseded_by_policy_id FOREIGN KEY (superseded_by_policy_id) REFERENCES discounts.statutory_discount_policy_registry(statutory_discount_policy_registry_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__created_by_user_id FOREIGN KEY (created_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__updated_by_user_id FOREIGN KEY (updated_by_user_id) REFERENCES identity.users(user_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE discounts.statutory_discount_policy_registry ADD CONSTRAINT fk_sd_policy_registry__updated_by_service_identity_id FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
+
 ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE discounts.statutory_discount_validations ADD CONSTRAINT fk_statutory_discount_validations__tariff_snapshot_id FOREIGN KEY (tariff_snapshot_id) REFERENCES core.tariff_snapshots(tariff_snapshot_id) DEFERRABLE INITIALLY IMMEDIATE;
