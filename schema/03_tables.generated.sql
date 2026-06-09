@@ -951,6 +951,156 @@ COMMENT ON COLUMN discounts.discount_policy_references.updated_by_service_identi
 COMMENT ON COLUMN discounts.discount_policy_references.row_version IS 'Optimistic concurrency version.';
 
 -- ------------------------------------------------------------
+-- discounts.statutory_discount_policy_registry
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS discounts.statutory_discount_policy_registry (
+
+    statutory_discount_policy_registry_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    policy_code varchar(128) NOT NULL,
+    policy_name varchar(256) NOT NULL,
+    policy_description text,
+    entitlement_type discounts.statutory_entitlement_type_enum NOT NULL,
+    policy_status discounts.discount_policy_status_enum NOT NULL,
+    verification_status discounts.policy_verification_status_enum NOT NULL,
+    policy_level discounts.discount_policy_level_enum NOT NULL,
+    policy_type discounts.discount_policy_type_enum NOT NULL,
+    policy_resolution_basis discounts.policy_resolution_basis_enum NOT NULL,
+    benefit_type discounts.parking_benefit_type_enum NOT NULL,
+    discount_base_scope discounts.discount_base_scope_enum NOT NULL,
+    jurisdiction_id uuid,
+    jurisdiction_code varchar(64),
+    jurisdiction_name varchar(160),
+    site_group_id uuid,
+    site_id uuid,
+    beneficiary_residency_scope discounts.beneficiary_residency_scope_enum NOT NULL,
+    facility_scope text,
+    free_duration_minutes integer,
+    initial_rate_exempt boolean DEFAULT false NOT NULL,
+    full_fee_exempt boolean DEFAULT false NOT NULL,
+    overnight_excluded boolean DEFAULT false NOT NULL,
+    valet_excluded boolean DEFAULT false NOT NULL,
+    standalone_parking_excluded boolean DEFAULT false NOT NULL,
+    driver_or_passenger_required boolean DEFAULT false NOT NULL,
+    requires_evidence boolean DEFAULT true NOT NULL,
+    required_evidence_type discounts.discount_evidence_type_enum,
+    requires_operator_validation boolean DEFAULT true NOT NULL,
+    legal_basis_reference varchar(256),
+    ordinance_reference varchar(256),
+    national_law_reference varchar(128),
+    source_reference text NOT NULL,
+    source_document_hash varchar(128),
+    reviewed_by_user_id uuid,
+    reviewed_by varchar(128),
+    reviewed_at timestamptz,
+    approved_by_user_id uuid,
+    approved_by varchar(128),
+    approved_at timestamptz,
+    effective_from timestamptz NOT NULL,
+    effective_to timestamptz,
+    supersedes_policy_id uuid,
+    superseded_by_policy_id uuid,
+    notes text,
+    correlation_id uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    created_by_user_id uuid,
+    created_by_service_identity_id uuid,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    updated_by_user_id uuid,
+    updated_by_service_identity_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT pk_statutory_discount_policy_registry PRIMARY KEY (statutory_discount_policy_registry_id),
+    CONSTRAINT ck_sd_policy_registry__policy_code_format CHECK (policy_code = upper(policy_code) AND policy_code ~ '^[A-Z0-9][A-Z0-9_]{2,127}$'),
+    CONSTRAINT ck_sd_policy_registry__effective_window CHECK (effective_to IS NULL OR effective_to > effective_from),
+    CONSTRAINT ck_sd_policy_registry__source_reference_required CHECK (btrim(source_reference) <> ''),
+    CONSTRAINT ck_sd_policy_registry__row_version_positive CHECK (row_version > 0),
+    CONSTRAINT ck_sd_policy_registry__free_duration_non_negative CHECK (free_duration_minutes IS NULL OR free_duration_minutes >= 0),
+    CONSTRAINT ck_sd_policy_registry__evidence_type_required CHECK (requires_evidence = false OR required_evidence_type IS NOT NULL),
+    CONSTRAINT ck_sd_policy_registry__reviewed_metadata CHECK (
+        verification_status NOT IN ('VERIFIED_SECONDARY', 'VERIFIED_OFFICIAL', 'APPROVED_FOR_PILOT', 'ACTIVE_APPROVED')
+        OR ((reviewed_by_user_id IS NOT NULL OR btrim(COALESCE(reviewed_by, '')) <> '') AND reviewed_at IS NOT NULL)
+    ),
+    CONSTRAINT ck_sd_policy_registry__approved_metadata CHECK (
+        verification_status NOT IN ('APPROVED_FOR_PILOT', 'ACTIVE_APPROVED')
+        OR ((approved_by_user_id IS NOT NULL OR btrim(COALESCE(approved_by, '')) <> '') AND approved_at IS NOT NULL)
+    ),
+    CONSTRAINT ck_sd_policy_registry__active_approved_status CHECK (
+        verification_status <> 'ACTIVE_APPROVED'
+        OR policy_status = 'ACTIVE'
+    ),
+    CONSTRAINT ck_sd_policy_registry__proposed_not_active CHECK (
+        verification_status <> 'PROPOSED_ONLY'
+        OR policy_status <> 'ACTIVE'
+    ),
+    CONSTRAINT ck_sd_policy_registry__active_legal_reference CHECK (
+        verification_status <> 'ACTIVE_APPROVED'
+        OR COALESCE(btrim(legal_basis_reference), btrim(ordinance_reference), btrim(national_law_reference)) IS NOT NULL
+    ),
+    CONSTRAINT ck_sd_policy_registry__local_scope_reference CHECK (
+        (policy_level <> 'LOCAL_ORDINANCE' AND policy_resolution_basis <> 'LOCAL_ORDINANCE_APPLIED')
+        OR (
+            btrim(COALESCE(ordinance_reference, '')) <> ''
+            AND (
+                jurisdiction_id IS NOT NULL
+                OR btrim(COALESCE(jurisdiction_code, '')) <> ''
+                OR site_group_id IS NOT NULL
+                OR site_id IS NOT NULL
+            )
+        )
+    ),
+    CONSTRAINT ck_sd_policy_registry__national_reference CHECK (
+        (policy_level <> 'NATIONAL_LAW' AND policy_resolution_basis <> 'NATIONAL_LAW_FALLBACK')
+        OR btrim(COALESCE(national_law_reference, '')) <> ''
+    ),
+    CONSTRAINT ck_sd_policy_registry__senior_national_law CHECK (
+        policy_resolution_basis <> 'NATIONAL_LAW_FALLBACK'
+        OR entitlement_type <> 'SENIOR_CITIZEN'
+        OR national_law_reference = 'RA 9994'
+    ),
+    CONSTRAINT ck_sd_policy_registry__pwd_national_law CHECK (
+        policy_resolution_basis <> 'NATIONAL_LAW_FALLBACK'
+        OR entitlement_type <> 'PWD'
+        OR national_law_reference = 'RA 10754'
+    ),
+    CONSTRAINT ck_sd_policy_registry__senior_evidence CHECK (
+        requires_evidence = false
+        OR entitlement_type <> 'SENIOR_CITIZEN'
+        OR required_evidence_type = 'SENIOR_CITIZEN_ID'
+    ),
+    CONSTRAINT ck_sd_policy_registry__pwd_evidence CHECK (
+        requires_evidence = false
+        OR entitlement_type <> 'PWD'
+        OR required_evidence_type = 'PWD_ID'
+    ),
+    CONSTRAINT ck_sd_policy_registry__no_prod_test_markers CHECK (
+        verification_status <> 'ACTIVE_APPROVED'
+        OR (
+            upper(policy_code) NOT LIKE '%SANDBOX%'
+            AND upper(policy_code) NOT LIKE '%TEST%'
+            AND upper(policy_code) NOT LIKE '%DEV%'
+            AND upper(policy_code) NOT LIKE '%E2E%'
+            AND upper(policy_code) NOT LIKE 'EXAMPLE%'
+            AND upper(policy_name) NOT LIKE '%SANDBOX%'
+            AND upper(policy_name) NOT LIKE '%TEST%'
+            AND upper(policy_name) NOT LIKE '%DEV%'
+            AND upper(policy_name) NOT LIKE '%E2E%'
+            AND upper(policy_name) NOT LIKE 'EXAMPLE%'
+        )
+    )
+);
+COMMENT ON TABLE discounts.statutory_discount_policy_registry IS 'Governed statutory discount policy registry for Operator Console production readiness and hybrid transition from discount_policy_references.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.statutory_discount_policy_registry_id IS 'Canonical identifier of the statutory discount policy registry row.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.policy_code IS 'Stable controlled policy code.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.verification_status IS 'Governed source review and approval status.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.benefit_type IS 'Structured statutory discount benefit behavior.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.discount_base_scope IS 'Basis used for discount computation.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.jurisdiction_id IS 'Reserved future jurisdiction identifier; no FK is present until sites.jurisdictions exists in baseline.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.jurisdiction_code IS 'LGU, PSGC, or approved jurisdiction bridge code.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.source_reference IS 'Reviewed source or controlled internal reference supporting the policy row.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.source_document_hash IS 'Optional hash of reviewed source document content.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.supersedes_policy_id IS 'Prior registry row superseded by this row.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_registry.superseded_by_policy_id IS 'Later registry row that supersedes this row.';
+
+-- ------------------------------------------------------------
 -- discounts.statutory_discount_validations
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS discounts.statutory_discount_validations (

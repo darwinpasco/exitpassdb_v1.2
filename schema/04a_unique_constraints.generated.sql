@@ -70,6 +70,11 @@ BEGIN
         ADD CONSTRAINT uq_discount_policy_references__policy_code_version UNIQUE (policy_code, policy_version);
     END IF;
 
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_sd_policy_registry__policy_code') THEN
+        ALTER TABLE discounts.statutory_discount_policy_registry
+        ADD CONSTRAINT uq_sd_policy_registry__policy_code UNIQUE (policy_code);
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_merchants__merchant_code') THEN
         ALTER TABLE merchants.merchants
         ADD CONSTRAINT uq_merchants__merchant_code UNIQUE (merchant_code);
