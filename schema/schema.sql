@@ -1596,6 +1596,16 @@ CREATE TYPE "discounts"."parking_benefit_type_enum" AS ENUM ('STATUTORY_DISCOUNT
 CREATE TYPE "discounts"."discount_base_scope_enum" AS ENUM ('VAT_EXCLUSIVE', 'GROSS', 'NET', 'NOT_APPLICABLE');
 -- Create enum type "beneficiary_residency_scope_enum"
 CREATE TYPE "discounts"."beneficiary_residency_scope_enum" AS ENUM ('RESIDENT_ONLY', 'NON_RESIDENT_ALLOWED', 'MIXED_OR_CONFLICTING', 'UNVERIFIED', 'NOT_APPLICABLE');
+-- Create enum type "policy_import_review_status_enum"
+CREATE TYPE "discounts"."policy_import_review_status_enum" AS ENUM ('DRAFT_DRY_RUN', 'SUBMITTED_FOR_REVIEW', 'LEGAL_REVIEW_PENDING', 'OPS_REVIEW_PENDING', 'QA_REVIEW_PENDING', 'DB_REVIEW_PENDING', 'APPROVED_FOR_DB_REPO_ALIGNMENT', 'REJECTED', 'CANCELLED', 'SUPERSEDED');
+-- Create enum type "policy_import_review_role_enum"
+CREATE TYPE "discounts"."policy_import_review_role_enum" AS ENUM ('LEGAL', 'OPS', 'QA', 'DB', 'PRODUCT', 'SITE_CLIENT');
+-- Create enum type "policy_import_review_action_enum"
+CREATE TYPE "discounts"."policy_import_review_action_enum" AS ENUM ('SUBMIT_FOR_REVIEW', 'REQUEST_CHANGES', 'APPROVE_LEGAL', 'APPROVE_OPS', 'APPROVE_QA', 'APPROVE_DB', 'REJECT', 'CANCEL', 'MARK_SUPERSEDED');
+-- Create enum type "policy_import_review_finding_severity_enum"
+CREATE TYPE "discounts"."policy_import_review_finding_severity_enum" AS ENUM ('PASS', 'WARN', 'FAIL');
+-- Create enum type "policy_import_review_row_decision_enum"
+CREATE TYPE "discounts"."policy_import_review_row_decision_enum" AS ENUM ('IMPORTABLE_AFTER_APPROVAL', 'MANUAL_REVIEW_REQUIRED', 'NOT_IMPORTABLE', 'DRY_RUN_ONLY', 'DUPLICATE_IN_FILE');
 -- Create enum type "evidence_access_classification_enum"
 CREATE TYPE "discounts"."evidence_access_classification_enum" AS ENUM ('INTERNAL', 'RESTRICTED', 'HIGHLY_RESTRICTED');
 -- Create enum type "evidence_capture_status_enum"
@@ -1932,6 +1942,148 @@ COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."verification
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."jurisdiction_id" IS 'Reserved future jurisdiction identifier; no FK is present until sites.jurisdictions exists in baseline.';
 -- Set comment to column: "source_reference" on table: "statutory_discount_policy_registry"
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."source_reference" IS 'Reviewed source or controlled internal reference supporting the policy row.';
+-- Create "statutory_discount_policy_import_review_submissions" table
+CREATE TABLE "discounts"."statutory_discount_policy_import_review_submissions" (
+  "review_submission_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "submission_code" character varying(96) NOT NULL,
+  "correlation_id" uuid NULL,
+  "source_file_name" character varying(256) NULL,
+  "source_file_sha256" character varying(64) NULL,
+  "submitted_by_operator_user_id" uuid NULL,
+  "submitted_by_display_name" character varying(128) NULL,
+  "dry_run_summary_json" jsonb NOT NULL,
+  "sanitized_row_results_json" jsonb NOT NULL,
+  "total_rows" integer NOT NULL DEFAULT 0,
+  "pass_count" integer NOT NULL DEFAULT 0,
+  "warn_count" integer NOT NULL DEFAULT 0,
+  "fail_count" integer NOT NULL DEFAULT 0,
+  "importable_count" integer NOT NULL DEFAULT 0,
+  "manual_review_count" integer NOT NULL DEFAULT 0,
+  "not_importable_count" integer NOT NULL DEFAULT 0,
+  "duplicate_count" integer NOT NULL DEFAULT 0,
+  "status" "discounts"."policy_import_review_status_enum" NOT NULL,
+  "status_reason" text NULL,
+  "current_required_reviewer_role" "discounts"."policy_import_review_role_enum" NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "submitted_at" timestamptz NULL,
+  "closed_at" timestamptz NULL,
+  "superseded_by_review_submission_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_sd_policy_import_review_submissions" PRIMARY KEY ("review_submission_id"),
+  CONSTRAINT "uq_sd_policy_import_review_submissions__code" UNIQUE ("submission_code"),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__code_format" CHECK (((submission_code)::text = upper((submission_code)::text) AND ((submission_code)::text ~ '^[A-Z0-9][A-Z0-9_-]{2,95}$'::text))),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__counts_non_negative" CHECK (((total_rows >= 0) AND (pass_count >= 0) AND (warn_count >= 0) AND (fail_count >= 0) AND (importable_count >= 0) AND (manual_review_count >= 0) AND (not_importable_count >= 0) AND (duplicate_count >= 0))),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__no_failed_alignment" CHECK (((status <> 'APPROVED_FOR_DB_REPO_ALIGNMENT'::discounts.policy_import_review_status_enum) OR (fail_count = 0))),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__terminal_closed_at" CHECK (((status <> ALL (ARRAY['APPROVED_FOR_DB_REPO_ALIGNMENT'::discounts.policy_import_review_status_enum, 'REJECTED'::discounts.policy_import_review_status_enum, 'CANCELLED'::discounts.policy_import_review_status_enum, 'SUPERSEDED'::discounts.policy_import_review_status_enum])) OR (closed_at IS NOT NULL))),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__source_sha256" CHECK (((source_file_sha256 IS NULL) OR ((source_file_sha256)::text ~ '^[A-Fa-f0-9]{64}$'::text))),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__dry_run_json" CHECK ((jsonb_typeof(dry_run_summary_json) = 'object'::text)),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__row_results_json" CHECK ((jsonb_typeof(sanitized_row_results_json) = ANY (ARRAY['array'::text, 'object'::text]))),
+  CONSTRAINT "ck_sd_policy_import_review_submissions__row_version_positive" CHECK ((row_version > 0))
+);
+-- Create index "ix_sd_policy_import_review_submissions__correlation_id" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__correlation_id" ON "discounts"."statutory_discount_policy_import_review_submissions" ("correlation_id") WHERE (correlation_id IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_submissions__created_at" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__created_at" ON "discounts"."statutory_discount_policy_import_review_submissions" ("created_at");
+-- Create index "ix_sd_policy_import_review_submissions__source_file_sha256" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__source_file_sha256" ON "discounts"."statutory_discount_policy_import_review_submissions" ("source_file_sha256") WHERE (source_file_sha256 IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_submissions__status" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__status" ON "discounts"."statutory_discount_policy_import_review_submissions" ("status");
+-- Create index "ix_sd_policy_import_review_submissions__submitted_at" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__submitted_at" ON "discounts"."statutory_discount_policy_import_review_submissions" ("submitted_at") WHERE (submitted_at IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_submissions__submitted_by" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__submitted_by" ON "discounts"."statutory_discount_policy_import_review_submissions" ("submitted_by_operator_user_id") WHERE (submitted_by_operator_user_id IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_submissions__superseded_by" to table: "statutory_discount_policy_import_review_submissions"
+CREATE INDEX "ix_sd_policy_import_review_submissions__superseded_by" ON "discounts"."statutory_discount_policy_import_review_submissions" ("superseded_by_review_submission_id") WHERE (superseded_by_review_submission_id IS NOT NULL);
+-- Set comment to table: "statutory_discount_policy_import_review_submissions"
+COMMENT ON TABLE "discounts"."statutory_discount_policy_import_review_submissions" IS 'Review-only queue for production statutory discount policy import dry-run packages. This table does not import, activate, seed, or approve policy rows.';
+-- Set comment to column: "dry_run_summary_json" on table: "statutory_discount_policy_import_review_submissions"
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_import_review_submissions"."dry_run_summary_json" IS 'Sanitized dry-run aggregate summary only; no raw CSV, raw evidence, personal data, secrets, or production credentials.';
+-- Set comment to column: "sanitized_row_results_json" on table: "statutory_discount_policy_import_review_submissions"
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_import_review_submissions"."sanitized_row_results_json" IS 'Sanitized row-level dry-run results used for review reconstruction.';
+-- Set comment to column: "status" on table: "statutory_discount_policy_import_review_submissions"
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_import_review_submissions"."status" IS 'Maker/checker review state. Final approval means DB repo alignment only, not production activation.';
+-- Create "statutory_discount_policy_import_review_decisions" table
+CREATE TABLE "discounts"."statutory_discount_policy_import_review_decisions" (
+  "review_decision_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "review_submission_id" uuid NOT NULL,
+  "reviewer_operator_user_id" uuid NOT NULL,
+  "reviewer_role" "discounts"."policy_import_review_role_enum" NOT NULL,
+  "decision_action" "discounts"."policy_import_review_action_enum" NOT NULL,
+  "decision_status_from" "discounts"."policy_import_review_status_enum" NULL,
+  "decision_status_to" "discounts"."policy_import_review_status_enum" NULL,
+  "decision_reason" text NULL,
+  "decision_notes" text NULL,
+  "decided_at" timestamptz NOT NULL DEFAULT now(),
+  "correlation_id" uuid NULL,
+  CONSTRAINT "pk_sd_policy_import_review_decisions" PRIMARY KEY ("review_decision_id"),
+  CONSTRAINT "ck_sd_policy_import_review_decisions__reason_required" CHECK (((decision_action <> ALL (ARRAY['REJECT'::discounts.policy_import_review_action_enum, 'REQUEST_CHANGES'::discounts.policy_import_review_action_enum])) OR (btrim(COALESCE(decision_reason, ''::text)) <> ''::text)))
+);
+-- Create index "ix_sd_policy_import_review_decisions__correlation_id" to table: "statutory_discount_policy_import_review_decisions"
+CREATE INDEX "ix_sd_policy_import_review_decisions__correlation_id" ON "discounts"."statutory_discount_policy_import_review_decisions" ("correlation_id") WHERE (correlation_id IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_decisions__decided_at" to table: "statutory_discount_policy_import_review_decisions"
+CREATE INDEX "ix_sd_policy_import_review_decisions__decided_at" ON "discounts"."statutory_discount_policy_import_review_decisions" ("decided_at");
+-- Create index "ix_sd_policy_import_review_decisions__reviewer_role" to table: "statutory_discount_policy_import_review_decisions"
+CREATE INDEX "ix_sd_policy_import_review_decisions__reviewer_role" ON "discounts"."statutory_discount_policy_import_review_decisions" ("reviewer_role");
+-- Create index "ix_sd_policy_import_review_decisions__submission_id" to table: "statutory_discount_policy_import_review_decisions"
+CREATE INDEX "ix_sd_policy_import_review_decisions__submission_id" ON "discounts"."statutory_discount_policy_import_review_decisions" ("review_submission_id");
+-- Create index "ux_sd_policy_import_review_decisions__approval_role" to table: "statutory_discount_policy_import_review_decisions"
+CREATE UNIQUE INDEX "ux_sd_policy_import_review_decisions__approval_role" ON "discounts"."statutory_discount_policy_import_review_decisions" ("review_submission_id", "reviewer_role") WHERE (decision_action = ANY (ARRAY['APPROVE_LEGAL'::discounts.policy_import_review_action_enum, 'APPROVE_OPS'::discounts.policy_import_review_action_enum, 'APPROVE_QA'::discounts.policy_import_review_action_enum, 'APPROVE_DB'::discounts.policy_import_review_action_enum]));
+-- Set comment to table: "statutory_discount_policy_import_review_decisions"
+COMMENT ON TABLE "discounts"."statutory_discount_policy_import_review_decisions" IS 'Maker/checker review decisions for statutory discount policy import candidates. Actions intentionally exclude import, activation, apply, and seed semantics.';
+-- Set comment to column: "decision_action" on table: "statutory_discount_policy_import_review_decisions"
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_import_review_decisions"."decision_action" IS 'Review action only. No action imports, activates, applies, or seeds statutory discount policy rows.';
+-- Create "statutory_discount_policy_import_review_findings" table
+CREATE TABLE "discounts"."statutory_discount_policy_import_review_findings" (
+  "review_finding_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "review_submission_id" uuid NOT NULL,
+  "row_number" integer NULL,
+  "policy_code" character varying(128) NULL,
+  "entitlement_type" character varying(64) NULL,
+  "decision" "discounts"."policy_import_review_row_decision_enum" NULL,
+  "severity" "discounts"."policy_import_review_finding_severity_enum" NOT NULL,
+  "finding_code" character varying(96) NOT NULL,
+  "field_name" character varying(96) NULL,
+  "message" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_sd_policy_import_review_findings" PRIMARY KEY ("review_finding_id"),
+  CONSTRAINT "ck_sd_policy_import_review_findings__row_number_positive" CHECK (((row_number IS NULL) OR (row_number > 0))),
+  CONSTRAINT "ck_sd_policy_import_review_findings__code_required" CHECK ((btrim((finding_code)::text) <> ''::text)),
+  CONSTRAINT "ck_sd_policy_import_review_findings__message_required" CHECK ((btrim(message) <> ''::text))
+);
+-- Create index "ix_sd_policy_import_review_findings__policy_code" to table: "statutory_discount_policy_import_review_findings"
+CREATE INDEX "ix_sd_policy_import_review_findings__policy_code" ON "discounts"."statutory_discount_policy_import_review_findings" ("policy_code") WHERE (policy_code IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_findings__severity" to table: "statutory_discount_policy_import_review_findings"
+CREATE INDEX "ix_sd_policy_import_review_findings__severity" ON "discounts"."statutory_discount_policy_import_review_findings" ("severity");
+-- Create index "ix_sd_policy_import_review_findings__submission_id" to table: "statutory_discount_policy_import_review_findings"
+CREATE INDEX "ix_sd_policy_import_review_findings__submission_id" ON "discounts"."statutory_discount_policy_import_review_findings" ("review_submission_id");
+-- Set comment to table: "statutory_discount_policy_import_review_findings"
+COMMENT ON TABLE "discounts"."statutory_discount_policy_import_review_findings" IS 'Normalized sanitized row-level dry-run validation findings for policy import review. No raw evidence or personal data columns are present.';
+-- Create "statutory_discount_policy_import_review_history" table
+CREATE TABLE "discounts"."statutory_discount_policy_import_review_history" (
+  "review_history_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "review_submission_id" uuid NOT NULL,
+  "event_type" character varying(64) NOT NULL,
+  "event_summary" text NOT NULL,
+  "actor_operator_user_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "correlation_id" uuid NULL,
+  "event_payload_json" jsonb NULL,
+  CONSTRAINT "pk_sd_policy_import_review_history" PRIMARY KEY ("review_history_id"),
+  CONSTRAINT "ck_sd_policy_import_review_history__event_type_required" CHECK ((btrim((event_type)::text) <> ''::text)),
+  CONSTRAINT "ck_sd_policy_import_review_history__event_summary_required" CHECK ((btrim(event_summary) <> ''::text)),
+  CONSTRAINT "ck_sd_policy_import_review_history__payload_object" CHECK (((event_payload_json IS NULL) OR (jsonb_typeof(event_payload_json) = 'object'::text)))
+);
+-- Create index "ix_sd_policy_import_review_history__actor" to table: "statutory_discount_policy_import_review_history"
+CREATE INDEX "ix_sd_policy_import_review_history__actor" ON "discounts"."statutory_discount_policy_import_review_history" ("actor_operator_user_id") WHERE (actor_operator_user_id IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_history__correlation_id" to table: "statutory_discount_policy_import_review_history"
+CREATE INDEX "ix_sd_policy_import_review_history__correlation_id" ON "discounts"."statutory_discount_policy_import_review_history" ("correlation_id") WHERE (correlation_id IS NOT NULL);
+-- Create index "ix_sd_policy_import_review_history__created_at" to table: "statutory_discount_policy_import_review_history"
+CREATE INDEX "ix_sd_policy_import_review_history__created_at" ON "discounts"."statutory_discount_policy_import_review_history" ("created_at");
+-- Create index "ix_sd_policy_import_review_history__submission_id" to table: "statutory_discount_policy_import_review_history"
+CREATE INDEX "ix_sd_policy_import_review_history__submission_id" ON "discounts"."statutory_discount_policy_import_review_history" ("review_submission_id");
+-- Set comment to table: "statutory_discount_policy_import_review_history"
+COMMENT ON TABLE "discounts"."statutory_discount_policy_import_review_history" IS 'Review-only event history for statutory discount policy import candidate workflow. Payloads must be sanitized and must not contain raw CSV, raw evidence, personal data, secrets, or credentials.';
 -- Create "statutory_discount_validations" table
 CREATE TABLE "discounts"."statutory_discount_validations" (
   "statutory_discount_validation_id" uuid NOT NULL DEFAULT gen_random_uuid(),

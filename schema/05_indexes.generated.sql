@@ -390,6 +390,46 @@ CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__superseded_by_policy_id ON dis
 
 CREATE INDEX IF NOT EXISTS ix_sd_policy_registry__correlation_id ON discounts.statutory_discount_policy_registry (correlation_id) WHERE correlation_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__status ON discounts.statutory_discount_policy_import_review_submissions (status);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__submitted_by ON discounts.statutory_discount_policy_import_review_submissions (submitted_by_operator_user_id) WHERE submitted_by_operator_user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__created_at ON discounts.statutory_discount_policy_import_review_submissions (created_at);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__submitted_at ON discounts.statutory_discount_policy_import_review_submissions (submitted_at) WHERE submitted_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__source_file_sha256 ON discounts.statutory_discount_policy_import_review_submissions (source_file_sha256) WHERE source_file_sha256 IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__correlation_id ON discounts.statutory_discount_policy_import_review_submissions (correlation_id) WHERE correlation_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_submissions__superseded_by ON discounts.statutory_discount_policy_import_review_submissions (superseded_by_review_submission_id) WHERE superseded_by_review_submission_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_decisions__submission_id ON discounts.statutory_discount_policy_import_review_decisions (review_submission_id);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_decisions__reviewer_role ON discounts.statutory_discount_policy_import_review_decisions (reviewer_role);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_decisions__decided_at ON discounts.statutory_discount_policy_import_review_decisions (decided_at);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_decisions__correlation_id ON discounts.statutory_discount_policy_import_review_decisions (correlation_id) WHERE correlation_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sd_policy_import_review_decisions__approval_role
+ON discounts.statutory_discount_policy_import_review_decisions (review_submission_id, reviewer_role)
+WHERE decision_action IN ('APPROVE_LEGAL'::discounts.policy_import_review_action_enum, 'APPROVE_OPS'::discounts.policy_import_review_action_enum, 'APPROVE_QA'::discounts.policy_import_review_action_enum, 'APPROVE_DB'::discounts.policy_import_review_action_enum);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_findings__submission_id ON discounts.statutory_discount_policy_import_review_findings (review_submission_id);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_findings__policy_code ON discounts.statutory_discount_policy_import_review_findings (policy_code) WHERE policy_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_findings__severity ON discounts.statutory_discount_policy_import_review_findings (severity);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_history__submission_id ON discounts.statutory_discount_policy_import_review_history (review_submission_id);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_history__created_at ON discounts.statutory_discount_policy_import_review_history (created_at);
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_history__actor ON discounts.statutory_discount_policy_import_review_history (actor_operator_user_id) WHERE actor_operator_user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_sd_policy_import_review_history__correlation_id ON discounts.statutory_discount_policy_import_review_history (correlation_id) WHERE correlation_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__parking_session_id ON discounts.statutory_discount_validations (parking_session_id);
 
 CREATE INDEX IF NOT EXISTS ix_statutory_discount_validations__tariff_snapshot_id ON discounts.statutory_discount_validations (tariff_snapshot_id);
