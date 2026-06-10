@@ -1101,6 +1101,117 @@ COMMENT ON COLUMN discounts.statutory_discount_policy_registry.supersedes_policy
 COMMENT ON COLUMN discounts.statutory_discount_policy_registry.superseded_by_policy_id IS 'Later registry row that supersedes this row.';
 
 -- ------------------------------------------------------------
+-- discounts.statutory_discount_policy_import_review_submissions
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS discounts.statutory_discount_policy_import_review_submissions (
+
+    review_submission_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    submission_code varchar(96) NOT NULL,
+    correlation_id uuid,
+    source_file_name varchar(256),
+    source_file_sha256 varchar(64),
+    submitted_by_operator_user_id uuid,
+    submitted_by_display_name varchar(128),
+    dry_run_summary_json jsonb NOT NULL,
+    sanitized_row_results_json jsonb NOT NULL,
+    total_rows integer DEFAULT 0 NOT NULL,
+    pass_count integer DEFAULT 0 NOT NULL,
+    warn_count integer DEFAULT 0 NOT NULL,
+    fail_count integer DEFAULT 0 NOT NULL,
+    importable_count integer DEFAULT 0 NOT NULL,
+    manual_review_count integer DEFAULT 0 NOT NULL,
+    not_importable_count integer DEFAULT 0 NOT NULL,
+    duplicate_count integer DEFAULT 0 NOT NULL,
+    status discounts.policy_import_review_status_enum NOT NULL,
+    status_reason text,
+    current_required_reviewer_role discounts.policy_import_review_role_enum,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    submitted_at timestamptz,
+    closed_at timestamptz,
+    superseded_by_review_submission_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT pk_sd_policy_import_review_submissions PRIMARY KEY (review_submission_id),
+    CONSTRAINT ck_sd_policy_import_review_submissions__code_format CHECK ((((submission_code)::text = upper((submission_code)::text)) AND ((submission_code)::text ~ '^[A-Z0-9][A-Z0-9_-]{2,95}$'::text))),
+    CONSTRAINT ck_sd_policy_import_review_submissions__counts_non_negative CHECK (((total_rows >= 0) AND (pass_count >= 0) AND (warn_count >= 0) AND (fail_count >= 0) AND (importable_count >= 0) AND (manual_review_count >= 0) AND (not_importable_count >= 0) AND (duplicate_count >= 0))),
+    CONSTRAINT ck_sd_policy_import_review_submissions__no_failed_alignment CHECK (((status <> 'APPROVED_FOR_DB_REPO_ALIGNMENT'::discounts.policy_import_review_status_enum) OR (fail_count = 0))),
+    CONSTRAINT ck_sd_policy_import_review_submissions__terminal_closed_at CHECK (((status <> ALL (ARRAY['APPROVED_FOR_DB_REPO_ALIGNMENT'::discounts.policy_import_review_status_enum, 'REJECTED'::discounts.policy_import_review_status_enum, 'CANCELLED'::discounts.policy_import_review_status_enum, 'SUPERSEDED'::discounts.policy_import_review_status_enum])) OR (closed_at IS NOT NULL))),
+    CONSTRAINT ck_sd_policy_import_review_submissions__source_sha256 CHECK (((source_file_sha256 IS NULL) OR ((source_file_sha256)::text ~ '^[A-Fa-f0-9]{64}$'::text))),
+    CONSTRAINT ck_sd_policy_import_review_submissions__dry_run_json CHECK ((jsonb_typeof(dry_run_summary_json) = 'object'::text)),
+    CONSTRAINT ck_sd_policy_import_review_submissions__row_results_json CHECK ((jsonb_typeof(sanitized_row_results_json) = ANY (ARRAY['array'::text, 'object'::text]))),
+    CONSTRAINT ck_sd_policy_import_review_submissions__row_version_positive CHECK ((row_version > 0))
+);
+COMMENT ON TABLE discounts.statutory_discount_policy_import_review_submissions IS 'Review-only queue for production statutory discount policy import dry-run packages. This table does not import, activate, seed, or approve policy rows.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_import_review_submissions.dry_run_summary_json IS 'Sanitized dry-run aggregate summary only; no raw CSV, raw evidence, personal data, secrets, or production credentials.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_import_review_submissions.sanitized_row_results_json IS 'Sanitized row-level dry-run results used for review reconstruction.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_import_review_submissions.status IS 'Maker/checker review state. Final approval means DB repo alignment only, not production activation.';
+
+-- ------------------------------------------------------------
+-- discounts.statutory_discount_policy_import_review_decisions
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS discounts.statutory_discount_policy_import_review_decisions (
+
+    review_decision_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    review_submission_id uuid NOT NULL,
+    reviewer_operator_user_id uuid NOT NULL,
+    reviewer_role discounts.policy_import_review_role_enum NOT NULL,
+    decision_action discounts.policy_import_review_action_enum NOT NULL,
+    decision_status_from discounts.policy_import_review_status_enum,
+    decision_status_to discounts.policy_import_review_status_enum,
+    decision_reason text,
+    decision_notes text,
+    decided_at timestamptz DEFAULT now() NOT NULL,
+    correlation_id uuid,
+    CONSTRAINT pk_sd_policy_import_review_decisions PRIMARY KEY (review_decision_id),
+    CONSTRAINT ck_sd_policy_import_review_decisions__reason_required CHECK (((decision_action <> ALL (ARRAY['REJECT'::discounts.policy_import_review_action_enum, 'REQUEST_CHANGES'::discounts.policy_import_review_action_enum])) OR (btrim(COALESCE(decision_reason, ''::text)) <> ''::text)))
+);
+COMMENT ON TABLE discounts.statutory_discount_policy_import_review_decisions IS 'Maker/checker review decisions for statutory discount policy import candidates. Actions intentionally exclude import, activation, apply, and seed semantics.';
+COMMENT ON COLUMN discounts.statutory_discount_policy_import_review_decisions.decision_action IS 'Review action only. No action imports, activates, applies, or seeds statutory discount policy rows.';
+
+-- ------------------------------------------------------------
+-- discounts.statutory_discount_policy_import_review_findings
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS discounts.statutory_discount_policy_import_review_findings (
+
+    review_finding_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    review_submission_id uuid NOT NULL,
+    row_number integer,
+    policy_code varchar(128),
+    entitlement_type varchar(64),
+    decision discounts.policy_import_review_row_decision_enum,
+    severity discounts.policy_import_review_finding_severity_enum NOT NULL,
+    finding_code varchar(96) NOT NULL,
+    field_name varchar(96),
+    message text NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT pk_sd_policy_import_review_findings PRIMARY KEY (review_finding_id),
+    CONSTRAINT ck_sd_policy_import_review_findings__row_number_positive CHECK (((row_number IS NULL) OR (row_number > 0))),
+    CONSTRAINT ck_sd_policy_import_review_findings__code_required CHECK ((btrim((finding_code)::text) <> ''::text)),
+    CONSTRAINT ck_sd_policy_import_review_findings__message_required CHECK ((btrim(message) <> ''::text))
+);
+COMMENT ON TABLE discounts.statutory_discount_policy_import_review_findings IS 'Normalized sanitized row-level dry-run validation findings for policy import review. No raw evidence or personal data columns are present.';
+
+-- ------------------------------------------------------------
+-- discounts.statutory_discount_policy_import_review_history
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS discounts.statutory_discount_policy_import_review_history (
+
+    review_history_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    review_submission_id uuid NOT NULL,
+    event_type varchar(64) NOT NULL,
+    event_summary text NOT NULL,
+    actor_operator_user_id uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    correlation_id uuid,
+    event_payload_json jsonb,
+    CONSTRAINT pk_sd_policy_import_review_history PRIMARY KEY (review_history_id),
+    CONSTRAINT ck_sd_policy_import_review_history__event_type_required CHECK ((btrim((event_type)::text) <> ''::text)),
+    CONSTRAINT ck_sd_policy_import_review_history__event_summary_required CHECK ((btrim(event_summary) <> ''::text)),
+    CONSTRAINT ck_sd_policy_import_review_history__payload_object CHECK (((event_payload_json IS NULL) OR (jsonb_typeof(event_payload_json) = 'object'::text)))
+);
+COMMENT ON TABLE discounts.statutory_discount_policy_import_review_history IS 'Review-only event history for statutory discount policy import candidate workflow. Payloads must be sanitized and must not contain raw CSV, raw evidence, personal data, secrets, or credentials.';
+
+-- ------------------------------------------------------------
 -- discounts.statutory_discount_validations
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS discounts.statutory_discount_validations (

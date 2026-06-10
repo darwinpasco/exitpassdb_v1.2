@@ -92,6 +92,16 @@ CREATE TYPE discounts.discount_base_scope_enum AS ENUM ('VAT_EXCLUSIVE', 'GROSS'
 
 CREATE TYPE discounts.beneficiary_residency_scope_enum AS ENUM ('RESIDENT_ONLY', 'NON_RESIDENT_ALLOWED', 'MIXED_OR_CONFLICTING', 'UNVERIFIED', 'NOT_APPLICABLE');
 
+CREATE TYPE discounts.policy_import_review_status_enum AS ENUM ('DRAFT_DRY_RUN', 'SUBMITTED_FOR_REVIEW', 'LEGAL_REVIEW_PENDING', 'OPS_REVIEW_PENDING', 'QA_REVIEW_PENDING', 'DB_REVIEW_PENDING', 'APPROVED_FOR_DB_REPO_ALIGNMENT', 'REJECTED', 'CANCELLED', 'SUPERSEDED');
+
+CREATE TYPE discounts.policy_import_review_role_enum AS ENUM ('LEGAL', 'OPS', 'QA', 'DB', 'PRODUCT', 'SITE_CLIENT');
+
+CREATE TYPE discounts.policy_import_review_action_enum AS ENUM ('SUBMIT_FOR_REVIEW', 'REQUEST_CHANGES', 'APPROVE_LEGAL', 'APPROVE_OPS', 'APPROVE_QA', 'APPROVE_DB', 'REJECT', 'CANCEL', 'MARK_SUPERSEDED');
+
+CREATE TYPE discounts.policy_import_review_finding_severity_enum AS ENUM ('PASS', 'WARN', 'FAIL');
+
+CREATE TYPE discounts.policy_import_review_row_decision_enum AS ENUM ('IMPORTABLE_AFTER_APPROVAL', 'MANUAL_REVIEW_REQUIRED', 'NOT_IMPORTABLE', 'DRY_RUN_ONLY', 'DUPLICATE_IN_FILE');
+
 CREATE TYPE discounts.evidence_access_classification_enum AS ENUM ('INTERNAL', 'RESTRICTED', 'HIGHLY_RESTRICTED');
 
 CREATE TYPE discounts.evidence_capture_status_enum AS ENUM ('CAPTURED', 'REFERENCED', 'REDACTED', 'PURGED', 'HASH_ONLY', 'REJECTED');
