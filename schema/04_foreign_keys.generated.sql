@@ -44,6 +44,12 @@ ALTER TABLE core.payment_confirmations ADD CONSTRAINT fk_payment_confirmations__
 
 ALTER TABLE core.payment_confirmations ADD CONSTRAINT fk_payment_confirmations__created_by_service_identity_id FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id) DEFERRABLE INITIALLY IMMEDIATE;
 
+ALTER TABLE integration.vendor_payment_acknowledgments ADD CONSTRAINT fk_vendor_payment_ack__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE integration.vendor_payment_acknowledgments ADD CONSTRAINT fk_vendor_payment_ack__payment_confirmation_id FOREIGN KEY (payment_confirmation_id) REFERENCES core.payment_confirmations(payment_confirmation_id) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE integration.vendor_payment_acknowledgments ADD CONSTRAINT fk_vendor_payment_ack__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
+
 ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__parking_session_id FOREIGN KEY (parking_session_id) REFERENCES core.parking_sessions(parking_session_id) DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE core.exit_authorizations ADD CONSTRAINT fk_exit_authorizations__payment_attempt_id FOREIGN KEY (payment_attempt_id) REFERENCES core.payment_attempts(payment_attempt_id) DEFERRABLE INITIALLY IMMEDIATE;

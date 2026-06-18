@@ -40,6 +40,11 @@ BEGIN
         ADD CONSTRAINT uq_vendor_endpoints__vendor_endpoint_code UNIQUE (vendor_system_id, endpoint_code);
     END IF;
 
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_vendor_payment_ack__payment_confirmation_vendor') THEN
+        ALTER TABLE integration.vendor_payment_acknowledgments
+        ADD CONSTRAINT uq_vendor_payment_ack__payment_confirmation_vendor UNIQUE (payment_confirmation_id, vendor_system_code);
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_payment_rails__rail_code') THEN
         ALTER TABLE payments.payment_rails
         ADD CONSTRAINT uq_payment_rails__rail_code UNIQUE (rail_code);

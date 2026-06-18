@@ -182,6 +182,8 @@ CREATE TYPE integration.integration_health_check_type_enum AS ENUM ('SCHEDULED_H
 
 CREATE TYPE integration.integration_health_status_enum AS ENUM ('AVAILABLE', 'DEGRADED', 'UNAVAILABLE', 'ERROR', 'UNKNOWN');
 
+CREATE TYPE integration.vendor_payment_acknowledgment_status_enum AS ENUM ('PENDING', 'CONFIRMED', 'FAILED', 'SKIPPED_DISABLED', 'RETRY_PENDING', 'CANCELLED');
+
 CREATE TYPE integration.secret_store_type_enum AS ENUM ('KEY_VAULT', 'SECRETS_MANAGER', 'CERTIFICATE_STORE', 'HSM', 'ENVIRONMENT_REFERENCE', 'OTHER');
 
 CREATE TYPE integration.vendor_endpoint_status_enum AS ENUM ('DRAFT', 'ACTIVE', 'MAINTENANCE', 'SUSPENDED', 'DEPRECATED', 'RETIRED');

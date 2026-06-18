@@ -756,6 +756,16 @@ CREATE INDEX IF NOT EXISTS ix_integration_health_records__site_id ON integration
 
 CREATE INDEX IF NOT EXISTS ix_integration_health_records__correlation_id ON integration.integration_health_records (correlation_id) WHERE correlation_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS ix_vendor_payment_ack__payment_attempt_id ON integration.vendor_payment_acknowledgments (payment_attempt_id);
+
+CREATE INDEX IF NOT EXISTS ix_vendor_payment_ack__payment_confirmation_id ON integration.vendor_payment_acknowledgments (payment_confirmation_id);
+
+CREATE INDEX IF NOT EXISTS ix_vendor_payment_ack__acknowledgment_status ON integration.vendor_payment_acknowledgments (acknowledgment_status);
+
+CREATE INDEX IF NOT EXISTS ix_vendor_payment_ack__next_retry_at ON integration.vendor_payment_acknowledgments (next_retry_at) WHERE next_retry_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_vendor_payment_ack__correlation_id ON integration.vendor_payment_acknowledgments (correlation_id) WHERE correlation_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS ix_system_parameters__parameter_status ON config.system_parameters (parameter_status);
 
 CREATE INDEX IF NOT EXISTS ix_system_parameters__approved_at ON config.system_parameters (approved_at);

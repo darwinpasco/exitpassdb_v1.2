@@ -3325,6 +3325,59 @@ COMMENT ON COLUMN integration.integration_health_records.correlation_id IS 'Cros
 COMMENT ON COLUMN integration.integration_health_records.created_at IS 'Record creation timestamp.';
 
 -- ------------------------------------------------------------
+-- integration.vendor_payment_acknowledgments
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS integration.vendor_payment_acknowledgments (
+
+    vendor_payment_acknowledgment_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    payment_attempt_id uuid NOT NULL,
+    payment_confirmation_id uuid NOT NULL,
+    parking_session_id uuid,
+    vendor_system_code text NOT NULL,
+    vendor_session_ref text,
+    ticket_number text,
+    card_num text,
+    acknowledgment_status integration.vendor_payment_acknowledgment_status_enum NOT NULL,
+    vendor_code text,
+    vendor_message text,
+    request_fee_minor_units bigint,
+    request_currency_code text,
+    confirmed_fee_minor_units bigint,
+    vendor_confirmed_at timestamptz,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    last_attempted_at timestamptz,
+    next_retry_at timestamptz,
+    idempotency_key text,
+    correlation_id uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT pk_vendor_payment_acknowledgments PRIMARY KEY (vendor_payment_acknowledgment_id)
+);
+COMMENT ON TABLE integration.vendor_payment_acknowledgments IS 'Durable Vendor PMS paid-state acknowledgment status. This is external acknowledgment evidence and does not define ExitPass payment finality.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.vendor_payment_acknowledgment_id IS 'Canonical identifier of the Vendor PMS payment acknowledgment record.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.payment_attempt_id IS 'ExitPass payment attempt whose finality caused this acknowledgment record.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.payment_confirmation_id IS 'ExitPass canonical payment confirmation associated with the acknowledgment.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.parking_session_id IS 'Related parking session, when available at acknowledgment creation time.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.vendor_system_code IS 'Stable Vendor PMS system code such as HIKCENTRAL.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.vendor_session_ref IS 'Vendor PMS parking session reference, when available.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.ticket_number IS 'Physical or scanned ticket number, when available.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.card_num IS 'Vendor PMS cardNum used for ticket-only confirmation, when available.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.acknowledgment_status IS 'Vendor PMS acknowledgment lifecycle status.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.vendor_code IS 'Safe Vendor PMS response code or adapter diagnostic code.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.vendor_message IS 'Safe Vendor PMS response message or adapter diagnostic message.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.request_fee_minor_units IS 'Fee minor units sent to Vendor PMS confirmation.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.request_currency_code IS 'Currency code sent with or derived for Vendor PMS confirmation.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.confirmed_fee_minor_units IS 'Fee minor units reported by Vendor PMS confirmation response.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.vendor_confirmed_at IS 'Timestamp reported by Vendor PMS when it accepted the paid-state acknowledgment.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.attempt_count IS 'Number of Vendor PMS confirmation attempts recorded for this acknowledgment.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.last_attempted_at IS 'Most recent Vendor PMS confirmation attempt timestamp.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.next_retry_at IS 'Next scheduled retry timestamp, when retry is pending.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.idempotency_key IS 'Optional idempotency key for acknowledgment creation or later workflow execution.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.correlation_id IS 'Cross-service correlation identifier.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.created_at IS 'Record creation timestamp.';
+COMMENT ON COLUMN integration.vendor_payment_acknowledgments.updated_at IS 'Last update timestamp.';
+
+-- ------------------------------------------------------------
 -- config.system_parameters
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS config.system_parameters (
