@@ -3434,6 +3434,8 @@ CREATE TYPE "integration"."integration_credential_type_enum" AS ENUM ('API_KEY_R
 CREATE TYPE "integration"."integration_health_check_type_enum" AS ENUM ('SCHEDULED_HEALTH_CHECK', 'ON_DEMAND_CHECK', 'REQUEST_FAILURE', 'CALLBACK_FAILURE', 'LATENCY_OBSERVATION', 'RECOVERY_OBSERVATION', 'MANUAL_OBSERVATION');
 -- Create enum type "integration_health_status_enum"
 CREATE TYPE "integration"."integration_health_status_enum" AS ENUM ('AVAILABLE', 'DEGRADED', 'UNAVAILABLE', 'ERROR', 'UNKNOWN');
+-- Create enum type "vendor_payment_acknowledgment_status_enum"
+CREATE TYPE "integration"."vendor_payment_acknowledgment_status_enum" AS ENUM ('PENDING', 'CONFIRMED', 'FAILED', 'SKIPPED_DISABLED', 'RETRY_PENDING', 'CANCELLED');
 -- Create enum type "secret_store_type_enum"
 CREATE TYPE "integration"."secret_store_type_enum" AS ENUM ('KEY_VAULT', 'SECRETS_MANAGER', 'CERTIFICATE_STORE', 'HSM', 'ENVIRONMENT_REFERENCE', 'OTHER');
 -- Create enum type "vendor_endpoint_status_enum"
@@ -3680,6 +3682,89 @@ COMMENT ON COLUMN "integration"."integration_health_records"."observed_by_servic
 COMMENT ON COLUMN "integration"."integration_health_records"."correlation_id" IS 'Cross-service correlation identifier.';
 -- Set comment to column: "created_at" on table: "integration_health_records"
 COMMENT ON COLUMN "integration"."integration_health_records"."created_at" IS 'Record creation timestamp.';
+-- Create "vendor_payment_acknowledgments" table
+CREATE TABLE "integration"."vendor_payment_acknowledgments" (
+  "vendor_payment_acknowledgment_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "payment_attempt_id" uuid NOT NULL,
+  "payment_confirmation_id" uuid NOT NULL,
+  "parking_session_id" uuid NULL,
+  "vendor_system_code" text NOT NULL,
+  "vendor_session_ref" text NULL,
+  "ticket_number" text NULL,
+  "card_num" text NULL,
+  "acknowledgment_status" "integration"."vendor_payment_acknowledgment_status_enum" NOT NULL,
+  "vendor_code" text NULL,
+  "vendor_message" text NULL,
+  "request_fee_minor_units" bigint NULL,
+  "request_currency_code" text NULL,
+  "confirmed_fee_minor_units" bigint NULL,
+  "vendor_confirmed_at" timestamptz NULL,
+  "attempt_count" integer NOT NULL DEFAULT 0,
+  "last_attempted_at" timestamptz NULL,
+  "next_retry_at" timestamptz NULL,
+  "idempotency_key" text NULL,
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_vendor_payment_acknowledgments" PRIMARY KEY ("vendor_payment_acknowledgment_id"),
+  CONSTRAINT "uq_vendor_payment_ack__payment_confirmation_vendor" UNIQUE ("payment_confirmation_id", "vendor_system_code")
+);
+-- Create index "ix_vendor_payment_ack__acknowledgment_status" to table: "vendor_payment_acknowledgments"
+CREATE INDEX "ix_vendor_payment_ack__acknowledgment_status" ON "integration"."vendor_payment_acknowledgments" ("acknowledgment_status");
+-- Create index "ix_vendor_payment_ack__correlation_id" to table: "vendor_payment_acknowledgments"
+CREATE INDEX "ix_vendor_payment_ack__correlation_id" ON "integration"."vendor_payment_acknowledgments" ("correlation_id") WHERE (correlation_id IS NOT NULL);
+-- Create index "ix_vendor_payment_ack__next_retry_at" to table: "vendor_payment_acknowledgments"
+CREATE INDEX "ix_vendor_payment_ack__next_retry_at" ON "integration"."vendor_payment_acknowledgments" ("next_retry_at") WHERE (next_retry_at IS NOT NULL);
+-- Create index "ix_vendor_payment_ack__payment_attempt_id" to table: "vendor_payment_acknowledgments"
+CREATE INDEX "ix_vendor_payment_ack__payment_attempt_id" ON "integration"."vendor_payment_acknowledgments" ("payment_attempt_id");
+-- Create index "ix_vendor_payment_ack__payment_confirmation_id" to table: "vendor_payment_acknowledgments"
+CREATE INDEX "ix_vendor_payment_ack__payment_confirmation_id" ON "integration"."vendor_payment_acknowledgments" ("payment_confirmation_id");
+-- Set comment to table: "vendor_payment_acknowledgments"
+COMMENT ON TABLE "integration"."vendor_payment_acknowledgments" IS 'Durable Vendor PMS paid-state acknowledgment status. This is external acknowledgment evidence and does not define ExitPass payment finality.';
+-- Set comment to column: "vendor_payment_acknowledgment_id" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."vendor_payment_acknowledgment_id" IS 'Canonical identifier of the Vendor PMS payment acknowledgment record.';
+-- Set comment to column: "payment_attempt_id" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."payment_attempt_id" IS 'ExitPass payment attempt whose finality caused this acknowledgment record.';
+-- Set comment to column: "payment_confirmation_id" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."payment_confirmation_id" IS 'ExitPass canonical payment confirmation associated with the acknowledgment.';
+-- Set comment to column: "parking_session_id" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."parking_session_id" IS 'Related parking session, when available at acknowledgment creation time.';
+-- Set comment to column: "vendor_system_code" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."vendor_system_code" IS 'Stable Vendor PMS system code such as HIKCENTRAL.';
+-- Set comment to column: "vendor_session_ref" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."vendor_session_ref" IS 'Vendor PMS parking session reference, when available.';
+-- Set comment to column: "ticket_number" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."ticket_number" IS 'Physical or scanned ticket number, when available.';
+-- Set comment to column: "card_num" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."card_num" IS 'Vendor PMS cardNum used for ticket-only confirmation, when available.';
+-- Set comment to column: "acknowledgment_status" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."acknowledgment_status" IS 'Vendor PMS acknowledgment lifecycle status.';
+-- Set comment to column: "vendor_code" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."vendor_code" IS 'Safe Vendor PMS response code or adapter diagnostic code.';
+-- Set comment to column: "vendor_message" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."vendor_message" IS 'Safe Vendor PMS response message or adapter diagnostic message.';
+-- Set comment to column: "request_fee_minor_units" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."request_fee_minor_units" IS 'Fee minor units sent to Vendor PMS confirmation.';
+-- Set comment to column: "request_currency_code" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."request_currency_code" IS 'Currency code sent with or derived for Vendor PMS confirmation.';
+-- Set comment to column: "confirmed_fee_minor_units" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."confirmed_fee_minor_units" IS 'Fee minor units reported by Vendor PMS confirmation response.';
+-- Set comment to column: "vendor_confirmed_at" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."vendor_confirmed_at" IS 'Timestamp reported by Vendor PMS when it accepted the paid-state acknowledgment.';
+-- Set comment to column: "attempt_count" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."attempt_count" IS 'Number of Vendor PMS confirmation attempts recorded for this acknowledgment.';
+-- Set comment to column: "last_attempted_at" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."last_attempted_at" IS 'Most recent Vendor PMS confirmation attempt timestamp.';
+-- Set comment to column: "next_retry_at" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."next_retry_at" IS 'Next scheduled retry timestamp, when retry is pending.';
+-- Set comment to column: "idempotency_key" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."idempotency_key" IS 'Optional idempotency key for acknowledgment creation or later workflow execution.';
+-- Set comment to column: "correlation_id" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."correlation_id" IS 'Cross-service correlation identifier.';
+-- Set comment to column: "created_at" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."created_at" IS 'Record creation timestamp.';
+-- Set comment to column: "updated_at" on table: "vendor_payment_acknowledgments"
+COMMENT ON COLUMN "integration"."vendor_payment_acknowledgments"."updated_at" IS 'Last update timestamp.';
 -- Create "vendor_endpoints" table
 CREATE TABLE "integration"."vendor_endpoints" (
   "vendor_endpoint_id" uuid NOT NULL DEFAULT gen_random_uuid(),
