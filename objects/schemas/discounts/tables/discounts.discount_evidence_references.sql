@@ -1,0 +1,30 @@
+﻿-- Create "discount_evidence_references" table
+CREATE TABLE "discounts"."discount_evidence_references" (
+  "discount_evidence_reference_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_validation_id" uuid NOT NULL,
+  "evidence_type" "discounts"."discount_evidence_type_enum" NOT NULL,
+  "evidence_storage_type" "discounts"."evidence_storage_type_enum" NOT NULL,
+  "evidence_storage_ref" character varying(256) NULL,
+  "evidence_hash" character(64) NULL,
+  "evidence_capture_status" "discounts"."evidence_capture_status_enum" NOT NULL,
+  "access_classification" "discounts"."evidence_access_classification_enum" NOT NULL,
+  "redaction_status" "discounts"."evidence_redaction_status_enum" NOT NULL,
+  "retention_policy_code" character varying(64) NOT NULL,
+  "retention_expires_at" timestamptz NULL,
+  "captured_at" timestamptz NOT NULL,
+  "captured_by_user_id" uuid NULL,
+  "captured_by_service_identity_id" uuid NULL,
+  "purged_at" timestamptz NULL,
+  "purged_by_user_id" uuid NULL,
+  "purged_by_service_identity_id" uuid NULL,
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_discount_evidence_references" PRIMARY KEY ("discount_evidence_reference_id")
+);;
+

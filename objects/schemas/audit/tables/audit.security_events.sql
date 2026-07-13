@@ -1,0 +1,30 @@
+﻿-- Create "security_events" table
+CREATE TABLE "audit"."security_events" (
+  "security_event_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "audit_event_id" uuid NULL,
+  "security_event_type" character varying(96) NOT NULL,
+  "security_event_category" "audit"."security_event_category_enum" NOT NULL,
+  "security_severity" "audit"."security_severity_enum" NOT NULL,
+  "security_event_status" "audit"."security_event_status_enum" NOT NULL,
+  "result" "audit"."security_event_result_enum" NOT NULL,
+  "reason_code" character varying(64) NULL,
+  "target_entity_type" character varying(64) NULL,
+  "target_entity_id" uuid NULL,
+  "actor_user_id" uuid NULL,
+  "actor_service_identity_id" uuid NULL,
+  "source_ip_hash" character(64) NULL,
+  "user_agent_hash" character(64) NULL,
+  "request_fingerprint_hash" character(64) NULL,
+  "incident_record_id" uuid NULL,
+  "detected_at" timestamptz NOT NULL,
+  "recorded_at" timestamptz NOT NULL DEFAULT now(),
+  "resolved_at" timestamptz NULL,
+  "resolved_by_user_id" uuid NULL,
+  "resolution_reason_code" character varying(64) NULL,
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_security_events" PRIMARY KEY ("security_event_id")
+);;
+

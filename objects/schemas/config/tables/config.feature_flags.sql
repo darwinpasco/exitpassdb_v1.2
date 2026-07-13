@@ -1,0 +1,30 @@
+﻿-- Create "feature_flags" table
+CREATE TABLE "config"."feature_flags" (
+  "feature_flag_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "flag_code" character varying(96) NOT NULL,
+  "flag_name" character varying(128) NOT NULL,
+  "flag_description" text NULL,
+  "flag_domain" character varying(64) NOT NULL,
+  "flag_status" "config"."feature_flag_status_enum" NOT NULL,
+  "enabled" boolean NOT NULL DEFAULT false,
+  "environment_code" character varying(32) NULL,
+  "site_group_id" uuid NULL,
+  "site_id" uuid NULL,
+  "merchant_id" uuid NULL,
+  "payment_rail_id" uuid NULL,
+  "service_identity_id" uuid NULL,
+  "requires_approval" boolean NOT NULL DEFAULT false,
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "approved_at" timestamptz NULL,
+  "approved_by_user_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_feature_flags" PRIMARY KEY ("feature_flag_id")
+);;
+

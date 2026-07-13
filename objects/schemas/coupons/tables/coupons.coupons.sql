@@ -1,0 +1,30 @@
+﻿-- Create "coupons" table
+CREATE TABLE "coupons"."coupons" (
+  "coupon_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "merchant_id" uuid NOT NULL,
+  "coupon_code" character varying(64) NOT NULL,
+  "coupon_name" character varying(128) NOT NULL,
+  "coupon_description" text NULL,
+  "coupon_type" "coupons"."coupon_type_enum" NOT NULL,
+  "denomination_type" "coupons"."coupon_denomination_type_enum" NOT NULL,
+  "denomination_value" numeric(18,2) NOT NULL,
+  "currency_code" character(3) NULL,
+  "maximum_discount_amount" numeric(18,2) NULL,
+  "minimum_gross_amount" numeric(18,2) NULL,
+  "stacking_policy" "coupons"."coupon_stacking_policy_enum" NOT NULL,
+  "allows_full_waiver" boolean NOT NULL DEFAULT false,
+  "requires_elevated_approval" boolean NOT NULL DEFAULT false,
+  "coupon_status" "coupons"."coupon_status_enum" NOT NULL,
+  "valid_from" timestamptz NOT NULL,
+  "valid_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_coupons" PRIMARY KEY ("coupon_id"),
+  CONSTRAINT "uq_coupons__merchant_coupon_code" UNIQUE ("merchant_id", "coupon_code")
+);;
+

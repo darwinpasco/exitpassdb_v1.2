@@ -1,0 +1,3 @@
+﻿-- Create enum type "user_type_enum"
+CREATE TYPE "identity"."user_type_enum" AS ENUM ('INTERNAL_ADMIN', 'OPERATIONS_USER', 'SITE_OPERATOR', 'SUPPORT_USER', 'FINANCE_USER', 'COMPLIANCE_USER', 'MERCHANT_USER', 'SECURITY_USER', 'OTHER');;
+

@@ -1,0 +1,33 @@
+﻿-- Create "reconciliation_items" table
+CREATE TABLE "reconciliation"."reconciliation_items" (
+  "reconciliation_item_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "reconciliation_run_id" uuid NOT NULL,
+  "mops_transaction_record_id" uuid NULL,
+  "manual_gate_log_id" uuid NULL,
+  "payment_attempt_id" uuid NULL,
+  "payment_confirmation_id" uuid NULL,
+  "provider_outcome_id" uuid NULL,
+  "target_entity_type" character varying(64) NULL,
+  "target_entity_id" uuid NULL,
+  "comparison_basis" "reconciliation"."reconciliation_comparison_basis_enum" NOT NULL,
+  "item_status" "reconciliation"."reconciliation_item_status_enum" NOT NULL,
+  "match_status" "reconciliation"."reconciliation_match_status_enum" NOT NULL,
+  "expected_amount" numeric(18,2) NULL,
+  "actual_amount" numeric(18,2) NULL,
+  "currency_code" character(3) NULL,
+  "variance_amount" numeric(18,2) NULL,
+  "exception_reason_code" character varying(64) NULL,
+  "resolved_at" timestamptz NULL,
+  "resolved_by_user_id" uuid NULL,
+  "resolved_by_service_identity_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "correlation_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_reconciliation_items" PRIMARY KEY ("reconciliation_item_id")
+);;
+

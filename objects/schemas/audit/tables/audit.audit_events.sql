@@ -1,0 +1,30 @@
+﻿-- Create "audit_events" table
+CREATE TABLE "audit"."audit_events" (
+  "audit_event_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "event_type" character varying(96) NOT NULL,
+  "event_category" "audit"."audit_event_category_enum" NOT NULL,
+  "event_result" "audit"."audit_event_result_enum" NOT NULL,
+  "event_reason_code" character varying(64) NULL,
+  "target_entity_type" character varying(64) NULL,
+  "target_entity_id" uuid NULL,
+  "related_entity_type" character varying(64) NULL,
+  "related_entity_id" uuid NULL,
+  "source_schema" character varying(64) NULL,
+  "source_service_name" character varying(128) NULL,
+  "source_channel" character varying(64) NULL,
+  "actor_user_id" uuid NULL,
+  "actor_service_identity_id" uuid NULL,
+  "actor_ip_hash" character(64) NULL,
+  "actor_user_agent_hash" character(64) NULL,
+  "summary" character varying(256) NULL,
+  "details_ref" character varying(256) NULL,
+  "details_hash" character(64) NULL,
+  "occurred_at" timestamptz NOT NULL,
+  "recorded_at" timestamptz NOT NULL DEFAULT now(),
+  "correlation_id" uuid NULL,
+  "causation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_service_identity_id" uuid NULL,
+  CONSTRAINT "pk_audit_events" PRIMARY KEY ("audit_event_id")
+);;
+
