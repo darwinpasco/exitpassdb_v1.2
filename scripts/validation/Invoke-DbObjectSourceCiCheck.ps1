@@ -1,8 +1,14 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$RepoRoot,
     [switch]$SkipDbApply,
-    [switch]$RunDbApply
+    [switch]$RunDbApply,
+    [string]$DbHost,
+    [int]$DbPort = 5432,
+    [string]$DbUser = 'exitpass',
+    [string]$DbPassword,
+    [string]$AdminDatabase = 'postgres',
+    [string]$ValidationDatabase
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +26,17 @@ if ($SkipDbApply -and $RunDbApply) {
 & (Join-Path $RepoRoot 'scripts\validation\Validate-V13CentralPmsObjectSourceLayout.ps1') -RepoRoot $RepoRoot -SkipBuild
 
 $coverageArgs = @{ RepoRoot = $RepoRoot }
-if ($RunDbApply) { $coverageArgs.RunDbApply = $true } else { $coverageArgs.SkipDbApply = $true }
+if ($RunDbApply) {
+    $coverageArgs.RunDbApply = $true
+    if (-not [string]::IsNullOrWhiteSpace($DbHost)) { $coverageArgs.DbHost = $DbHost }
+    if ($PSBoundParameters.ContainsKey('DbPort')) { $coverageArgs.DbPort = $DbPort }
+    if (-not [string]::IsNullOrWhiteSpace($DbUser)) { $coverageArgs.DbUser = $DbUser }
+    if (-not [string]::IsNullOrWhiteSpace($DbPassword)) { $coverageArgs.DbPassword = $DbPassword }
+    if (-not [string]::IsNullOrWhiteSpace($AdminDatabase)) { $coverageArgs.AdminDatabase = $AdminDatabase }
+    if (-not [string]::IsNullOrWhiteSpace($ValidationDatabase)) { $coverageArgs.ValidationDatabase = $ValidationDatabase }
+} else {
+    $coverageArgs.SkipDbApply = $true
+}
 & (Join-Path $RepoRoot 'scripts\validation\Invoke-DbObjectSourceCoverageReport.ps1') @coverageArgs
 
 Write-Host 'DB object-source CI check passed.'

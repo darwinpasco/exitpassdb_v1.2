@@ -1,11 +1,16 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$RepoRoot,
     [string]$OutputDirectory = 'build\reports',
     [switch]$SkipDbApply,
     [switch]$RunDbApply,
     [string]$DockerContainer = 'exitpass-postgres',
+    [string]$DbHost,
+    [int]$DbPort = 5432,
     [string]$DbUser = 'exitpass',
+    [string]$DbPassword,
+    [string]$AdminDatabase = 'postgres',
+    [string]$ValidationDatabase,
     [string]$DbName = 'exitpass_object_source_coverage_validation'
 )
 
@@ -17,6 +22,13 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 if ($SkipDbApply -and $RunDbApply) {
     throw 'Use either -SkipDbApply or -RunDbApply, not both.'
 }
+if ([string]::IsNullOrWhiteSpace($ValidationDatabase)) { $ValidationDatabase = $DbName }
+if ([string]::IsNullOrWhiteSpace($DbHost) -and -not [string]::IsNullOrWhiteSpace($env:EXITPASS_DB_HOST)) { $DbHost = $env:EXITPASS_DB_HOST }
+if ($DbPort -eq 5432 -and -not [string]::IsNullOrWhiteSpace($env:EXITPASS_DB_PORT)) { $DbPort = [int]$env:EXITPASS_DB_PORT }
+if ([string]::IsNullOrWhiteSpace($DbUser) -and -not [string]::IsNullOrWhiteSpace($env:EXITPASS_DB_USER)) { $DbUser = $env:EXITPASS_DB_USER }
+if ([string]::IsNullOrWhiteSpace($DbPassword) -and -not [string]::IsNullOrWhiteSpace($env:EXITPASS_DB_PASSWORD)) { $DbPassword = $env:EXITPASS_DB_PASSWORD }
+if ([string]::IsNullOrWhiteSpace($AdminDatabase) -and -not [string]::IsNullOrWhiteSpace($env:EXITPASS_DB_ADMIN_DATABASE)) { $AdminDatabase = $env:EXITPASS_DB_ADMIN_DATABASE }
+if ($ValidationDatabase -eq $DbName -and -not [string]::IsNullOrWhiteSpace($env:EXITPASS_DB_VALIDATION_DATABASE)) { $ValidationDatabase = $env:EXITPASS_DB_VALIDATION_DATABASE }
 
 function ConvertTo-RepoPath {
     param([string]$FullPath)
@@ -226,21 +238,36 @@ foreach ($marker in $requiredMarkers) {
     $presence += [ordered]@{ marker = $marker; found = $found }
 }
 
-$dbApply = [ordered]@{ requested = [bool]$RunDbApply; skipped = -not [bool]$RunDbApply; result = if ($RunDbApply) { 'NOT_RUN' } else { 'SKIPPED' }; database = $DbName; notes = @() }
+$dbApply = [ordered]@{ requested = [bool]$RunDbApply; skipped = -not [bool]$RunDbApply; result = if ($RunDbApply) { 'NOT_RUN' } else { 'SKIPPED' }; mode = if ([string]::IsNullOrWhiteSpace($DbHost)) { 'docker-exec' } else { 'psql' }; host = if ([string]::IsNullOrWhiteSpace($DbHost)) { $null } else { $DbHost }; port = if ([string]::IsNullOrWhiteSpace($DbHost)) { $null } else { $DbPort }; adminDatabase = $AdminDatabase; database = $ValidationDatabase; notes = @() }
 if ($RunDbApply) {
     try {
-        $docker = Get-Command docker -ErrorAction Stop
-        $containerProbe = & docker ps --format '{{.Names}}' 2>$null
-        if ($containerProbe -notcontains $DockerContainer) {
-            throw "Docker container is not running or not found: $DockerContainer"
-        }
-        & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d postgres -c "DROP DATABASE IF EXISTS $DbName;"
-        & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d postgres -c "CREATE DATABASE $DbName;"
-        & docker cp $fullGenerated "$DockerContainer`:/tmp/exitpass-full-object.generated.sql"
-        & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $DbName -f /tmp/exitpass-full-object.generated.sql
+        if ($ValidationDatabase -notmatch '^[A-Za-z0-9_]+$') { throw "Validation database name is not safe for scripted creation: $ValidationDatabase" }
         $alignmentScript = Join-Path $RepoRoot 'scripts\validation\Validate-V13CentralPmsAlignment.sql'
-        & docker cp $alignmentScript "$DockerContainer`:/tmp/Validate-V13CentralPmsAlignment.sql"
-        & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $DbName -f /tmp/Validate-V13CentralPmsAlignment.sql
+        if ([string]::IsNullOrWhiteSpace($DbHost)) {
+            $docker = Get-Command docker -ErrorAction Stop
+            $containerProbe = & docker ps --format '{{.Names}}' 2>$null
+            if ($containerProbe -notcontains $DockerContainer) {
+                throw "Docker container is not running or not found: $DockerContainer"
+            }
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $AdminDatabase -c "DROP DATABASE IF EXISTS $ValidationDatabase;"
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $AdminDatabase -c "CREATE DATABASE $ValidationDatabase;"
+            & docker cp $fullGenerated "$DockerContainer`:/tmp/exitpass-full-object.generated.sql"
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/exitpass-full-object.generated.sql
+            & docker cp $alignmentScript "$DockerContainer`:/tmp/Validate-V13CentralPmsAlignment.sql"
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-V13CentralPmsAlignment.sql
+        } else {
+            $psql = Get-Command psql -ErrorAction Stop
+            $previousPassword = $env:PGPASSWORD
+            if (-not [string]::IsNullOrWhiteSpace($DbPassword)) { $env:PGPASSWORD = $DbPassword }
+            try {
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $AdminDatabase -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $ValidationDatabase;"
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $AdminDatabase -v ON_ERROR_STOP=1 -c "CREATE DATABASE $ValidationDatabase;"
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f $fullGenerated
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f $alignmentScript
+            } finally {
+                $env:PGPASSWORD = $previousPassword
+            }
+        }
         $dbApply.result = 'PASSED'
         $dbApply.skipped = $false
     } catch {
@@ -327,4 +354,3 @@ Write-Host "Markdown report: $mdPath"
 if ($failures.Count -gt 0) {
     throw ('DB object-source coverage report failed: ' + ($failures -join '; '))
 }
-

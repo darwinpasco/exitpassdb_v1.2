@@ -29,3 +29,74 @@ jobs:
           name: db-object-source-coverage
           path: build/reports/*
           if-no-files-found: ignore
+
+  db-object-source-postgres-apply:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: exitpass
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U exitpass -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      EXITPASS_DB_HOST: localhost
+      EXITPASS_DB_PORT: '5432'
+      EXITPASS_DB_USER: exitpass
+      EXITPASS_DB_PASSWORD: change_me
+      EXITPASS_DB_ADMIN_DATABASE: postgres
+      EXITPASS_DB_VALIDATION_DATABASE: exitpass_object_source_coverage_validation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for PostgreSQL readiness
+        shell: bash
+        env:
+          PGPASSWORD: ${{ env.EXITPASS_DB_PASSWORD }}
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h "$EXITPASS_DB_HOST" -p "$EXITPASS_DB_PORT" -U "$EXITPASS_DB_USER" -d "$EXITPASS_DB_ADMIN_DATABASE"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "PostgreSQL service was not ready in time" >&2
+          exit 1
+
+      - name: Run object-source CI checks with PostgreSQL apply
+        shell: pwsh
+        run: >-
+          ./scripts/validation/Invoke-DbObjectSourceCiCheck.ps1
+          -RunDbApply
+          -DbHost $env:EXITPASS_DB_HOST
+          -DbPort ([int]$env:EXITPASS_DB_PORT)
+          -DbUser $env:EXITPASS_DB_USER
+          -DbPassword $env:EXITPASS_DB_PASSWORD
+          -AdminDatabase $env:EXITPASS_DB_ADMIN_DATABASE
+          -ValidationDatabase $env:EXITPASS_DB_VALIDATION_DATABASE
+
+      - name: Check whitespace
+        shell: pwsh
+        run: git diff --check
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-object-source-coverage-postgres-apply
+          path: build/reports/*
+          if-no-files-found: ignore
