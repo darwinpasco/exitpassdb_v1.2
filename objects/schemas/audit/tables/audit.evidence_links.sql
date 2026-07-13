@@ -1,0 +1,33 @@
+﻿-- Create "evidence_links" table
+CREATE TABLE "audit"."evidence_links" (
+  "evidence_link_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "audit_event_id" uuid NULL,
+  "security_event_id" uuid NULL,
+  "target_entity_type" character varying(64) NULL,
+  "target_entity_id" uuid NULL,
+  "evidence_type" "audit"."evidence_type_enum" NOT NULL,
+  "evidence_storage_type" "audit"."evidence_storage_type_enum" NOT NULL,
+  "evidence_storage_ref" character varying(256) NULL,
+  "evidence_hash" character(64) NULL,
+  "access_classification" "audit"."evidence_access_classification_enum" NOT NULL,
+  "retention_policy_code" character varying(64) NOT NULL,
+  "retention_expires_at" timestamptz NULL,
+  "redaction_status" "audit"."evidence_redaction_status_enum" NOT NULL,
+  "link_status" "audit"."evidence_link_status_enum" NOT NULL,
+  "linked_at" timestamptz NOT NULL DEFAULT now(),
+  "linked_by_user_id" uuid NULL,
+  "linked_by_service_identity_id" uuid NULL,
+  "purged_at" timestamptz NULL,
+  "purged_by_user_id" uuid NULL,
+  "purged_by_service_identity_id" uuid NULL,
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_evidence_links" PRIMARY KEY ("evidence_link_id")
+);;
+

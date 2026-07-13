@@ -1,0 +1,33 @@
+﻿-- Create "manual_gate_logs" table
+CREATE TABLE "operations"."manual_gate_logs" (
+  "manual_gate_log_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "parking_session_id" uuid NULL,
+  "exit_authorization_id" uuid NULL,
+  "gate_authorization_consumption_id" uuid NULL,
+  "incident_record_id" uuid NULL,
+  "override_approval_id" uuid NULL,
+  "site_id" uuid NOT NULL,
+  "lane_id" uuid NULL,
+  "gate_device_id" uuid NULL,
+  "manual_action_type" "operations"."manual_gate_action_type_enum" NOT NULL,
+  "manual_action_status" "operations"."manual_gate_action_status_enum" NOT NULL,
+  "manual_reason_code" character varying(64) NOT NULL,
+  "operator_notes" text NULL,
+  "requires_reconciliation" boolean NOT NULL DEFAULT false,
+  "reconciliation_item_id" uuid NULL,
+  "performed_at" timestamptz NOT NULL,
+  "performed_by_user_id" uuid NOT NULL,
+  "recorded_at" timestamptz NOT NULL DEFAULT now(),
+  "recorded_by_user_id" uuid NULL,
+  "recorded_by_service_identity_id" uuid NULL,
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_manual_gate_logs" PRIMARY KEY ("manual_gate_log_id")
+);;
+

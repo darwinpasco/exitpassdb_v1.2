@@ -1,0 +1,6 @@
+﻿# ExitPass v1.3 Central PMS local/UAT object source apply order.
+# These files are DB-pinned local/UAT support and are intentionally not part of the main generated schema/reference artifact.
+objects/uat/management-platform.uat-identity-rbac-seed.sql
+objects/uat/management-platform.uat-identity-rbac-verify.sql
+objects/uat/operator-console.statutory-discount-pilot-fixture-seed.sql
+objects/uat/operator-console.statutory-discount-pilot-fixture-verify.sql

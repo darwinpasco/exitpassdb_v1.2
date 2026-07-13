@@ -1,0 +1,3 @@
+﻿-- Create enum type "integration_credential_type_enum"
+CREATE TYPE "integration"."integration_credential_type_enum" AS ENUM ('API_KEY_REFERENCE', 'CLIENT_SECRET_REFERENCE', 'OAUTH_CLIENT_REFERENCE', 'MTLS_CERTIFICATE_REFERENCE', 'SIGNING_KEY_REFERENCE', 'WEBHOOK_SECRET_REFERENCE', 'BASIC_AUTH_REFERENCE', 'OTHER');;
+

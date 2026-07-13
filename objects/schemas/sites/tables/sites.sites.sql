@@ -1,0 +1,31 @@
+﻿-- Create "sites" table
+CREATE TABLE "sites"."sites" (
+  "site_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "site_group_id" uuid NOT NULL,
+  "site_code" character varying(64) NOT NULL,
+  "site_name" character varying(128) NOT NULL,
+  "site_description" text NULL,
+  "site_type" "sites"."site_type_enum" NOT NULL,
+  "timezone_name" character varying(64) NOT NULL,
+  "address_line1" character varying(256) NULL,
+  "address_line2" character varying(256) NULL,
+  "city" character varying(128) NULL,
+  "province" character varying(128) NULL,
+  "country_code" character(2) NOT NULL,
+  "lgu_code" character varying(32) NULL,
+  "site_status" "sites"."site_status_enum" NOT NULL,
+  "public_lookup_enabled" boolean NOT NULL DEFAULT false,
+  "payment_enabled" boolean NOT NULL DEFAULT false,
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_sites" PRIMARY KEY ("site_id"),
+  CONSTRAINT "uq_sites__site_group_site_code" UNIQUE ("site_group_id", "site_code")
+);;
+
