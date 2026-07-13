@@ -306,9 +306,6 @@ objects/schemas/core/types/core.parking_session_status_enum.sql
 objects/schemas/core/types/core.payment_attempt_status_enum.sql
 objects/schemas/core/types/core.payment_confirmation_status_enum.sql
 objects/schemas/core/types/core.tariff_snapshot_status_enum.sql
-objects/schemas/core/functions/core.create_or_reuse_payment_attempt.sql
-objects/schemas/core/functions/core.issue_exit_authorization.sql
-objects/schemas/core/functions/core.record_payment_confirmation.sql
 objects/schemas/core/tables/core.exit_authorizations.sql
 objects/schemas/core/indexes/core.ix_exit_authorizations__authorization_status.sql
 objects/schemas/core/indexes/core.ix_exit_authorizations__correlation_id.sql
@@ -2290,6 +2287,11 @@ objects/schemas/core/comments/core.fiscal_issuance_retry_execution_attempts.comm
 objects/schemas/core/comments/core.fiscal_issuance_semantic_hash_recalculation_previews.comment.sql
 objects/schemas/core/comments/core.fiscal_issuance_semantic_hash_backfill_mutation_preparations.comment.sql
 objects/schemas/core/comments/core.fiscal_issuance_semantic_hash_backfill_workflow_requests.comment.sql
+objects/schemas/core/functions/core.create_or_reuse_payment_attempt.sql
+objects/schemas/core/functions/core.finalize_payment_attempt.sql
+objects/schemas/core/functions/core.record_payment_confirmation.sql
+objects/schemas/core/functions/core.issue_exit_authorization.sql
+objects/schemas/core/functions/core.consume_exit_authorization.sql
 objects/schemas/operator_console/schema/operator_console.schema.sql
 objects/schemas/operator_console/comments/operator_console.schema.comment.sql
 objects/schemas/operator_console/types/operator_console.hr_identity_mapping_status_enum.sql
