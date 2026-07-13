@@ -1,0 +1,31 @@
+﻿name: DB Object Source Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - main
+
+jobs:
+  db-object-source-validation:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run object-source CI checks
+        shell: pwsh
+        run: .\scripts\validation\Invoke-DbObjectSourceCiCheck.ps1 -SkipDbApply
+
+      - name: Check whitespace
+        shell: pwsh
+        run: git diff --check
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-object-source-coverage
+          path: build/reports/*
+          if-no-files-found: ignore
