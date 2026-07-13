@@ -1,0 +1,2 @@
+/build/generated/*.sql text eol=lf
+/scripts/build/*.ps1 text eol=lf
