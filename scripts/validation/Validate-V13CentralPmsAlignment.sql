@@ -33,6 +33,11 @@ BEGIN
     IF to_regclass('discounts.statutory_discount_payable_basis_applications') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_payable_basis_applications'); END IF;
     IF to_regprocedure('discounts.apply_statutory_discount_payable_basis(uuid,uuid,uuid)') IS NULL THEN missing := array_append(missing, 'discounts.apply_statutory_discount_payable_basis(uuid,uuid,uuid)'); END IF;
 
+    IF to_regprocedure('core.create_or_reuse_payment_attempt(uuid,uuid,text,text,text,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.create_or_reuse_payment_attempt(uuid,uuid,text,text,text,uuid,timestamptz)'); END IF;
+    IF to_regprocedure('core.finalize_payment_attempt(uuid,text,text,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.finalize_payment_attempt(uuid,text,text,uuid,timestamptz)'); END IF;
+    IF to_regprocedure('core.record_payment_confirmation(uuid,text,text,text,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.record_payment_confirmation(uuid,text,text,text,uuid,timestamptz)'); END IF;
+    IF to_regprocedure('core.issue_exit_authorization(uuid,uuid,uuid,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.issue_exit_authorization(uuid,uuid,uuid,uuid,timestamptz)'); END IF;
+    IF to_regprocedure('core.consume_exit_authorization(uuid,uuid,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.consume_exit_authorization(uuid,uuid,uuid,timestamptz)'); END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ux_sd_pba__validation_active') THEN missing := array_append(missing, 'ux_sd_pba__validation_active'); END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'ux_tariff_snapshots__statutory_discount_validation_applied') THEN missing := array_append(missing, 'ux_tariff_snapshots__statutory_discount_validation_applied'); END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'ux_fiscal_issuance_references__active_idempotency_scope') THEN missing := array_append(missing, 'ux_fiscal_issuance_references__active_idempotency_scope'); END IF;
