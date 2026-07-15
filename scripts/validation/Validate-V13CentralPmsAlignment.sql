@@ -5,6 +5,7 @@ DO $$
 DECLARE
     missing text[] := ARRAY[]::text[];
     gate_processing_missing_columns text[];
+    gate_commands_missing_columns text[];
     unexpected_pos_objects integer;
 BEGIN
     IF to_regclass('core.fiscal_issuance_references') IS NULL THEN missing := array_append(missing, 'core.fiscal_issuance_references'); END IF;
@@ -148,6 +149,165 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_auth_consumed_processing__consumption') THEN missing := array_append(missing, 'ix_gate_auth_consumed_processing__consumption'); END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_auth_consumed_processing__status') THEN missing := array_append(missing, 'ix_gate_auth_consumed_processing__status'); END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_auth_consumed_processing__correlation_id') THEN missing := array_append(missing, 'ix_gate_auth_consumed_processing__correlation_id'); END IF;
+    END IF;
+
+    IF to_regclass('gates.gate_commands') IS NULL THEN
+        missing := array_append(missing, 'gates.gate_commands');
+    ELSE
+        SELECT array_agg(required.column_name)
+        INTO gate_commands_missing_columns
+        FROM (
+            VALUES
+                ('command_id'),
+                ('command_type'),
+                ('source_processing_id'),
+                ('source_event_id'),
+                ('source_event_ref'),
+                ('gate_authorization_consumption_id'),
+                ('exit_authorization_id'),
+                ('parking_session_id'),
+                ('payment_attempt_id'),
+                ('tariff_snapshot_id'),
+                ('gate_device_id'),
+                ('service_identity_id'),
+                ('lane_id'),
+                ('site_id'),
+                ('vendor_system_id'),
+                ('command_status'),
+                ('attempt_count'),
+                ('max_attempts'),
+                ('retry_policy_code'),
+                ('requested_at'),
+                ('started_at'),
+                ('last_attempted_at'),
+                ('next_attempt_at'),
+                ('completed_at'),
+                ('terminal_failure_at'),
+                ('failure_code'),
+                ('failure_reason'),
+                ('last_failure_code'),
+                ('last_failure_reason'),
+                ('correlation_id'),
+                ('created_at'),
+                ('updated_at')
+        ) AS required(column_name)
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns actual
+            WHERE actual.table_schema = 'gates'
+              AND actual.table_name = 'gate_commands'
+              AND actual.column_name = required.column_name
+        );
+
+        IF array_length(gate_commands_missing_columns, 1) IS NOT NULL THEN
+            missing := array_append(missing, 'gates.gate_commands missing columns: ' || array_to_string(gate_commands_missing_columns, ', '));
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'fk_gate_commands__source_processing_id'
+              AND con.contype = 'f'
+        ) THEN missing := array_append(missing, 'fk_gate_commands__source_processing_id'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'fk_gate_commands__consumption'
+              AND con.contype = 'f'
+        ) THEN missing := array_append(missing, 'fk_gate_commands__consumption'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_index idx
+            JOIN pg_class ix ON ix.oid = idx.indexrelid
+            JOIN pg_class tbl ON tbl.oid = idx.indrelid
+            JOIN pg_namespace n ON n.oid = tbl.relnamespace
+            WHERE n.nspname = 'gates'
+              AND tbl.relname = 'gate_commands'
+              AND ix.relname = 'ux_gate_commands__source_processing_command_type'
+              AND idx.indisunique
+        ) THEN missing := array_append(missing, 'ux_gate_commands__source_processing_command_type'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'ck_gate_commands__status'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_commands__status'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'ck_gate_commands__attempt_count'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_commands__attempt_count'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'ck_gate_commands__max_attempts'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_commands__max_attempts'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'ck_gate_commands__attempt_policy'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_commands__attempt_policy'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'ck_gate_commands__retryable_next_attempt'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_commands__retryable_next_attempt'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_commands'
+              AND con.conname = 'ck_gate_commands__terminal_failure_at'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_commands__terminal_failure_at'); END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__consumption') THEN missing := array_append(missing, 'ix_gate_commands__consumption'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__status') THEN missing := array_append(missing, 'ix_gate_commands__status'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__correlation_id') THEN missing := array_append(missing, 'ix_gate_commands__correlation_id'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__next_attempt_at') THEN missing := array_append(missing, 'ix_gate_commands__next_attempt_at'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__terminal_failure_at') THEN missing := array_append(missing, 'ix_gate_commands__terminal_failure_at'); END IF;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ux_sd_pba__validation_active') THEN missing := array_append(missing, 'ux_sd_pba__validation_active'); END IF;

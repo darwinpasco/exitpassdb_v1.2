@@ -7826,6 +7826,359 @@ COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."updated_at" 
 
 
 -- ============================================================================
+-- Source object: objects/schemas/gates/tables/gates.gate_commands.sql
+-- ============================================================================
+-- Create "gate_commands" table
+CREATE TABLE "gates"."gate_commands" (
+  "command_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "command_type" character varying(128) NOT NULL,
+  "source_processing_id" uuid NOT NULL,
+  "source_event_id" uuid NULL,
+  "source_event_ref" character varying(512) NULL,
+  "gate_authorization_consumption_id" uuid NOT NULL,
+  "exit_authorization_id" uuid NOT NULL,
+  "parking_session_id" uuid NOT NULL,
+  "payment_attempt_id" uuid NOT NULL,
+  "tariff_snapshot_id" uuid NOT NULL,
+  "gate_device_id" uuid NULL,
+  "service_identity_id" uuid NULL,
+  "lane_id" uuid NULL,
+  "site_id" uuid NULL,
+  "vendor_system_id" uuid NULL,
+  "command_status" character varying(32) NOT NULL,
+  "attempt_count" integer NOT NULL DEFAULT 0,
+  "max_attempts" integer NOT NULL DEFAULT 3,
+  "retry_policy_code" character varying(128) NOT NULL DEFAULT 'GATE_COMMAND_RETRY_V1',
+  "requested_at" timestamptz NOT NULL,
+  "started_at" timestamptz NULL,
+  "last_attempted_at" timestamptz NOT NULL,
+  "next_attempt_at" timestamptz NULL,
+  "completed_at" timestamptz NULL,
+  "terminal_failure_at" timestamptz NULL,
+  "failure_code" character varying(128) NULL,
+  "failure_reason" text NULL,
+  "last_failure_code" character varying(128) NULL,
+  "last_failure_reason" text NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_gate_commands" PRIMARY KEY ("command_id"),
+  CONSTRAINT "fk_gate_commands__source_processing_id" FOREIGN KEY ("source_processing_id")
+    REFERENCES "gates"."gate_authorization_consumed_processing" ("processing_id") DEFERRABLE INITIALLY IMMEDIATE,
+  CONSTRAINT "fk_gate_commands__consumption" FOREIGN KEY ("gate_authorization_consumption_id")
+    REFERENCES "gates"."gate_authorization_consumptions" ("gate_authorization_consumption_id") DEFERRABLE INITIALLY IMMEDIATE,
+  CONSTRAINT "ck_gate_commands__status"
+    CHECK ("command_status" IN ('REQUESTED', 'IN_PROGRESS', 'SUCCEEDED', 'FAILED', 'RETRYABLE', 'TERMINAL_FAILURE')),
+  CONSTRAINT "ck_gate_commands__attempt_count"
+    CHECK ("attempt_count" >= 0),
+  CONSTRAINT "ck_gate_commands__max_attempts"
+    CHECK ("max_attempts" >= 1),
+  CONSTRAINT "ck_gate_commands__attempt_policy"
+    CHECK ("attempt_count" <= "max_attempts"),
+  CONSTRAINT "ck_gate_commands__requested_open"
+    CHECK (
+      "command_status" <> 'REQUESTED'
+      OR ("started_at" IS NULL AND "completed_at" IS NULL AND "next_attempt_at" IS NULL AND "terminal_failure_at" IS NULL)
+    ),
+  CONSTRAINT "ck_gate_commands__in_progress_attempted"
+    CHECK (
+      "command_status" <> 'IN_PROGRESS'
+      OR (("started_at" IS NOT NULL OR "last_attempted_at" IS NOT NULL) AND "completed_at" IS NULL AND "next_attempt_at" IS NULL AND "terminal_failure_at" IS NULL)
+    ),
+  CONSTRAINT "ck_gate_commands__completed_at"
+    CHECK (
+      ("command_status" IN ('SUCCEEDED', 'FAILED', 'RETRYABLE', 'TERMINAL_FAILURE') AND "completed_at" IS NOT NULL)
+      OR ("command_status" IN ('REQUESTED', 'IN_PROGRESS') AND "completed_at" IS NULL)
+    ),
+  CONSTRAINT "ck_gate_commands__retryable_next_attempt"
+    CHECK (
+      ("command_status" = 'RETRYABLE' AND "next_attempt_at" IS NOT NULL)
+      OR ("command_status" <> 'RETRYABLE' AND "next_attempt_at" IS NULL)
+    ),
+  CONSTRAINT "ck_gate_commands__terminal_failure_at"
+    CHECK (
+      ("command_status" = 'TERMINAL_FAILURE' AND "terminal_failure_at" IS NOT NULL)
+      OR ("command_status" <> 'TERMINAL_FAILURE' AND "terminal_failure_at" IS NULL)
+    ),
+  CONSTRAINT "ck_gate_commands__terminal_retry_exclusive"
+    CHECK (NOT ("terminal_failure_at" IS NOT NULL AND "next_attempt_at" IS NOT NULL))
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ux_gate_commands__source_processing_command_type.sql
+-- ============================================================================
+-- Create index "ux_gate_commands__source_processing_command_type" to table: "gate_commands"
+CREATE UNIQUE INDEX "ux_gate_commands__source_processing_command_type" ON "gates"."gate_commands" ("source_processing_id", "command_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_commands__consumption.sql
+-- ============================================================================
+-- Create index "ix_gate_commands__consumption" to table: "gate_commands"
+CREATE INDEX "ix_gate_commands__consumption" ON "gates"."gate_commands" ("gate_authorization_consumption_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_commands__status.sql
+-- ============================================================================
+-- Create index "ix_gate_commands__status" to table: "gate_commands"
+CREATE INDEX "ix_gate_commands__status" ON "gates"."gate_commands" ("command_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_commands__correlation_id.sql
+-- ============================================================================
+-- Create index "ix_gate_commands__correlation_id" to table: "gate_commands"
+CREATE INDEX "ix_gate_commands__correlation_id" ON "gates"."gate_commands" ("correlation_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_commands__next_attempt_at.sql
+-- ============================================================================
+-- Create index "ix_gate_commands__next_attempt_at" to table: "gate_commands"
+CREATE INDEX "ix_gate_commands__next_attempt_at" ON "gates"."gate_commands" ("next_attempt_at") WHERE ("command_status" = 'RETRYABLE');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_commands__terminal_failure_at.sql
+-- ============================================================================
+-- Create index "ix_gate_commands__terminal_failure_at" to table: "gate_commands"
+CREATE INDEX "ix_gate_commands__terminal_failure_at" ON "gates"."gate_commands" ("terminal_failure_at") WHERE ("command_status" = 'TERMINAL_FAILURE');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.comments.sql
+-- ============================================================================
+-- Set comment to table: "gate_commands"
+COMMENT ON TABLE "gates"."gate_commands" IS 'Vendor-neutral gate command intent and lifecycle records created from consumed authorization processing. This object records command intent and lifecycle only; its presence does not mean a physical gate was opened.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.sql
+-- ============================================================================
+-- Set comment to column: "command_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."command_id" IS 'Canonical identifier of the vendor-neutral gate command.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.1.sql
+-- ============================================================================
+-- Set comment to column: "command_type" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."command_type" IS 'Vendor-neutral command type requested for the consumed authorization handoff.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.2.sql
+-- ============================================================================
+-- Set comment to column: "source_processing_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."source_processing_id" IS 'Consumed-processing inbox row that produced this command intent.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.3.sql
+-- ============================================================================
+-- Set comment to column: "source_event_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."source_event_id" IS 'Optional source integration event identifier copied from the handoff.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.4.sql
+-- ============================================================================
+-- Set comment to column: "source_event_ref" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."source_event_ref" IS 'Optional source event reference copied from the handoff for audit and troubleshooting.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.5.sql
+-- ============================================================================
+-- Set comment to column: "gate_authorization_consumption_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."gate_authorization_consumption_id" IS 'Canonical gate authorization consumption row that the command is derived from.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.6.sql
+-- ============================================================================
+-- Set comment to column: "exit_authorization_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."exit_authorization_id" IS 'Copied transaction trace identifier for the consumed exit authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.7.sql
+-- ============================================================================
+-- Set comment to column: "parking_session_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."parking_session_id" IS 'Copied transaction trace identifier for the parking session associated with the command.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.8.sql
+-- ============================================================================
+-- Set comment to column: "payment_attempt_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."payment_attempt_id" IS 'Copied transaction trace identifier for the payment attempt supporting the consumed authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.9.sql
+-- ============================================================================
+-- Set comment to column: "tariff_snapshot_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."tariff_snapshot_id" IS 'Copied transaction trace identifier for the paid tariff snapshot.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.10.sql
+-- ============================================================================
+-- Set comment to column: "gate_device_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."gate_device_id" IS 'Gate device context for command routing, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.11.sql
+-- ============================================================================
+-- Set comment to column: "service_identity_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."service_identity_id" IS 'Service identity context associated with the command source, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.12.sql
+-- ============================================================================
+-- Set comment to column: "lane_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."lane_id" IS 'Lane context for command routing, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.13.sql
+-- ============================================================================
+-- Set comment to column: "site_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."site_id" IS 'Site context for command routing, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.14.sql
+-- ============================================================================
+-- Set comment to column: "vendor_system_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."vendor_system_id" IS 'Vendor system routing context; no vendor-specific execution payload is stored here.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.15.sql
+-- ============================================================================
+-- Set comment to column: "command_status" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."command_status" IS 'Command lifecycle status: REQUESTED, IN_PROGRESS, SUCCEEDED, FAILED, RETRYABLE, or TERMINAL_FAILURE.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.16.sql
+-- ============================================================================
+-- Set comment to column: "attempt_count" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."attempt_count" IS 'Number of command processing or execution attempts recorded for this command.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.17.sql
+-- ============================================================================
+-- Set comment to column: "max_attempts" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."max_attempts" IS 'Maximum allowed attempts under the command retry policy.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.18.sql
+-- ============================================================================
+-- Set comment to column: "retry_policy_code" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."retry_policy_code" IS 'Retry policy code governing bounded retry behavior for this command.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.19.sql
+-- ============================================================================
+-- Set comment to column: "requested_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."requested_at" IS 'Timestamp when the command intent was requested.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.20.sql
+-- ============================================================================
+-- Set comment to column: "started_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."started_at" IS 'Timestamp when command processing entered an in-progress posture.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.21.sql
+-- ============================================================================
+-- Set comment to column: "last_attempted_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."last_attempted_at" IS 'Timestamp when command processing or execution was most recently attempted.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.22.sql
+-- ============================================================================
+-- Set comment to column: "next_attempt_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."next_attempt_at" IS 'Timestamp when a retryable command is next eligible for another attempt.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.23.sql
+-- ============================================================================
+-- Set comment to column: "completed_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."completed_at" IS 'Timestamp when a terminal or retryable attempt result was recorded.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.24.sql
+-- ============================================================================
+-- Set comment to column: "terminal_failure_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."terminal_failure_at" IS 'Timestamp when the command reached terminal failure and must not be retried.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.25.sql
+-- ============================================================================
+-- Set comment to column: "failure_code" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."failure_code" IS 'Current command failure code, when a failure result is recorded.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.26.sql
+-- ============================================================================
+-- Set comment to column: "failure_reason" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."failure_reason" IS 'Current command failure reason or controlled troubleshooting detail.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.27.sql
+-- ============================================================================
+-- Set comment to column: "last_failure_code" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."last_failure_code" IS 'Most recent failure code retained for retry and terminal failure audit.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.28.sql
+-- ============================================================================
+-- Set comment to column: "last_failure_reason" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."last_failure_reason" IS 'Most recent failure reason retained for retry and terminal failure audit.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.29.sql
+-- ============================================================================
+-- Set comment to column: "correlation_id" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."correlation_id" IS 'Cross-service correlation identifier carried by the command lifecycle.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.30.sql
+-- ============================================================================
+-- Set comment to column: "created_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."created_at" IS 'Record creation timestamp.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_commands.column-comments.31.sql
+-- ============================================================================
+-- Set comment to column: "updated_at" on table: "gate_commands"
+COMMENT ON COLUMN "gates"."gate_commands"."updated_at" IS 'Last update timestamp.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/gates/tables/gates.gate_devices.sql
 -- ============================================================================
 -- Create "gate_devices" table
