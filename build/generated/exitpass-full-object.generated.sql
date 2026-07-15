@@ -7548,6 +7548,284 @@ COMMENT ON COLUMN "gates"."gate_authorization_consumptions"."row_version" IS 'Op
 
 
 -- ============================================================================
+-- Source object: objects/schemas/gates/tables/gates.gate_authorization_consumed_processing.sql
+-- ============================================================================
+-- Create "gate_authorization_consumed_processing" table
+CREATE TABLE "gates"."gate_authorization_consumed_processing" (
+  "processing_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "processing_key" uuid NOT NULL,
+  "event_id" uuid NULL,
+  "event_type" character varying(128) NOT NULL,
+  "event_ref" character varying(512) NULL,
+  "gate_authorization_consumption_id" uuid NOT NULL,
+  "exit_authorization_id" uuid NOT NULL,
+  "parking_session_id" uuid NOT NULL,
+  "payment_attempt_id" uuid NOT NULL,
+  "tariff_snapshot_id" uuid NOT NULL,
+  "gate_device_id" uuid NULL,
+  "service_identity_id" uuid NULL,
+  "lane_id" uuid NULL,
+  "site_id" uuid NULL,
+  "vendor_system_id" uuid NULL,
+  "consumed_at" timestamptz NOT NULL,
+  "correlation_id" uuid NOT NULL,
+  "processing_status" character varying(32) NOT NULL,
+  "processing_result" character varying(128) NOT NULL,
+  "attempt_count" integer NOT NULL DEFAULT 0,
+  "first_attempted_at" timestamptz NOT NULL,
+  "last_attempted_at" timestamptz NULL,
+  "processed_at" timestamptz NULL,
+  "failure_code" character varying(128) NULL,
+  "failure_reason" text NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_gate_authorization_consumed_processing" PRIMARY KEY ("processing_id"),
+  CONSTRAINT "fk_gate_auth_consumed_processing__consumption" FOREIGN KEY ("gate_authorization_consumption_id")
+    REFERENCES "gates"."gate_authorization_consumptions" ("gate_authorization_consumption_id") DEFERRABLE INITIALLY IMMEDIATE,
+  CONSTRAINT "ck_gate_auth_consumed_processing__status"
+    CHECK ("processing_status" IN ('PROCESSING', 'PROCESSED', 'FAILED')),
+  CONSTRAINT "ck_gate_auth_consumed_processing__attempt_count"
+    CHECK ("attempt_count" >= 0),
+  CONSTRAINT "ck_gate_auth_consumed_processing__processed_at"
+    CHECK (
+      ("processing_status" = 'PROCESSED' AND "processed_at" IS NOT NULL)
+      OR ("processing_status" <> 'PROCESSED' AND "processed_at" IS NULL)
+    )
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ux_gate_auth_consumed_processing__key_event_type.sql
+-- ============================================================================
+-- Create index "ux_gate_auth_consumed_processing__key_event_type" to table: "gate_authorization_consumed_processing"
+CREATE UNIQUE INDEX "ux_gate_auth_consumed_processing__key_event_type" ON "gates"."gate_authorization_consumed_processing" ("processing_key", "event_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ux_gate_auth_consumed_processing__event_id.sql
+-- ============================================================================
+-- Create index "ux_gate_auth_consumed_processing__event_id" to table: "gate_authorization_consumed_processing"
+CREATE UNIQUE INDEX "ux_gate_auth_consumed_processing__event_id" ON "gates"."gate_authorization_consumed_processing" ("event_id") WHERE ("event_id" IS NOT NULL);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_auth_consumed_processing__consumption.sql
+-- ============================================================================
+-- Create index "ix_gate_auth_consumed_processing__consumption" to table: "gate_authorization_consumed_processing"
+CREATE INDEX "ix_gate_auth_consumed_processing__consumption" ON "gates"."gate_authorization_consumed_processing" ("gate_authorization_consumption_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_auth_consumed_processing__status.sql
+-- ============================================================================
+-- Create index "ix_gate_auth_consumed_processing__status" to table: "gate_authorization_consumed_processing"
+CREATE INDEX "ix_gate_auth_consumed_processing__status" ON "gates"."gate_authorization_consumed_processing" ("processing_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_gate_auth_consumed_processing__correlation_id.sql
+-- ============================================================================
+-- Create index "ix_gate_auth_consumed_processing__correlation_id" to table: "gate_authorization_consumed_processing"
+CREATE INDEX "ix_gate_auth_consumed_processing__correlation_id" ON "gates"."gate_authorization_consumed_processing" ("correlation_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.comments.sql
+-- ============================================================================
+-- Set comment to table: "gate_authorization_consumed_processing"
+COMMENT ON TABLE "gates"."gate_authorization_consumed_processing" IS 'Durable processing inbox for GateAuthorizationConsumed handoffs before any downstream gate action processing.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.sql
+-- ============================================================================
+-- Set comment to column: "processing_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."processing_id" IS 'Canonical identifier of the consumed-authorization processing inbox row.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.1.sql
+-- ============================================================================
+-- Set comment to column: "processing_key" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."processing_key" IS 'Source processing key used with event type for idempotent handoff processing.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.2.sql
+-- ============================================================================
+-- Set comment to column: "event_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."event_id" IS 'Optional source integration event identifier; unique when supplied.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.3.sql
+-- ============================================================================
+-- Set comment to column: "event_type" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."event_type" IS 'Source event type for the consumed authorization handoff.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.4.sql
+-- ============================================================================
+-- Set comment to column: "event_ref" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."event_ref" IS 'Optional source event reference for audit and troubleshooting.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.5.sql
+-- ============================================================================
+-- Set comment to column: "gate_authorization_consumption_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."gate_authorization_consumption_id" IS 'Canonical gate authorization consumption row that must exist before processing begins.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.6.sql
+-- ============================================================================
+-- Set comment to column: "exit_authorization_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."exit_authorization_id" IS 'Copied transaction trace identifier for the consumed exit authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.7.sql
+-- ============================================================================
+-- Set comment to column: "parking_session_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."parking_session_id" IS 'Copied transaction trace identifier for the parking session associated with the consume event.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.8.sql
+-- ============================================================================
+-- Set comment to column: "payment_attempt_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."payment_attempt_id" IS 'Copied transaction trace identifier for the payment attempt supporting the consumed authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.9.sql
+-- ============================================================================
+-- Set comment to column: "tariff_snapshot_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."tariff_snapshot_id" IS 'Copied transaction trace identifier for the paid tariff snapshot.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.10.sql
+-- ============================================================================
+-- Set comment to column: "gate_device_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."gate_device_id" IS 'Gate device context copied from the consumption handoff, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.11.sql
+-- ============================================================================
+-- Set comment to column: "service_identity_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."service_identity_id" IS 'Service identity context associated with the consumed authorization handoff, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.12.sql
+-- ============================================================================
+-- Set comment to column: "lane_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."lane_id" IS 'Lane context copied from the consumption handoff, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.13.sql
+-- ============================================================================
+-- Set comment to column: "site_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."site_id" IS 'Site context copied from the consumption handoff, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.14.sql
+-- ============================================================================
+-- Set comment to column: "vendor_system_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."vendor_system_id" IS 'Vendor system context copied from the consumption handoff, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.15.sql
+-- ============================================================================
+-- Set comment to column: "consumed_at" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."consumed_at" IS 'Timestamp when the source authorization consumption occurred.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.16.sql
+-- ============================================================================
+-- Set comment to column: "correlation_id" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."correlation_id" IS 'Cross-service correlation identifier carried by the consume handoff.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.17.sql
+-- ============================================================================
+-- Set comment to column: "processing_status" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."processing_status" IS 'Processing lifecycle status: PROCESSING, PROCESSED, or FAILED.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.18.sql
+-- ============================================================================
+-- Set comment to column: "processing_result" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."processing_result" IS 'Controlled processing result or reason code for the current lifecycle state.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.19.sql
+-- ============================================================================
+-- Set comment to column: "attempt_count" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."attempt_count" IS 'Number of processing attempts recorded for this handoff.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.20.sql
+-- ============================================================================
+-- Set comment to column: "first_attempted_at" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."first_attempted_at" IS 'Timestamp when processing was first attempted.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.21.sql
+-- ============================================================================
+-- Set comment to column: "last_attempted_at" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."last_attempted_at" IS 'Timestamp when processing was most recently attempted, when different from first attempt.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.22.sql
+-- ============================================================================
+-- Set comment to column: "processed_at" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."processed_at" IS 'Timestamp when processing completed successfully; required only for PROCESSED rows.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.23.sql
+-- ============================================================================
+-- Set comment to column: "failure_code" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."failure_code" IS 'Controlled failure code captured when processing fails.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.24.sql
+-- ============================================================================
+-- Set comment to column: "failure_reason" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."failure_reason" IS 'Controlled failure reason or troubleshooting detail captured when processing fails.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.25.sql
+-- ============================================================================
+-- Set comment to column: "created_at" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."created_at" IS 'Record creation timestamp.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.gate_authorization_consumed_processing.column-comments.26.sql
+-- ============================================================================
+-- Set comment to column: "updated_at" on table: "gate_authorization_consumed_processing"
+COMMENT ON COLUMN "gates"."gate_authorization_consumed_processing"."updated_at" IS 'Last update timestamp.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/gates/tables/gates.gate_devices.sql
 -- ============================================================================
 -- Create "gate_devices" table
