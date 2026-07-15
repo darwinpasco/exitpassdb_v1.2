@@ -8179,6 +8179,387 @@ COMMENT ON COLUMN "gates"."gate_commands"."updated_at" IS 'Last update timestamp
 
 
 -- ============================================================================
+-- Source object: objects/schemas/gates/tables/gates.hikcentral_gate_action_audits.sql
+-- ============================================================================
+-- Create "hikcentral_gate_action_audits" table
+CREATE TABLE "gates"."hikcentral_gate_action_audits" (
+  "hikcentral_gate_action_audit_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "gate_command_id" uuid NOT NULL,
+  "source_processing_id" uuid NOT NULL,
+  "gate_authorization_consumption_id" uuid NOT NULL,
+  "exit_authorization_id" uuid NOT NULL,
+  "parking_session_id" uuid NOT NULL,
+  "payment_attempt_id" uuid NOT NULL,
+  "tariff_snapshot_id" uuid NOT NULL,
+  "gate_device_id" uuid NULL,
+  "service_identity_id" uuid NULL,
+  "lane_id" uuid NULL,
+  "site_id" uuid NULL,
+  "vendor_system_id" uuid NULL,
+  "vendor_code" character varying(64) NOT NULL,
+  "vendor_operation" character varying(128) NOT NULL,
+  "door_index_code" character varying(128) NOT NULL,
+  "request_method" character varying(16) NOT NULL,
+  "request_path" character varying(512) NOT NULL,
+  "request_hash" character(64) NOT NULL,
+  "signed_header_names" text NOT NULL,
+  "request_correlation_id" uuid NOT NULL,
+  "vendor_correlation_id" character varying(128) NULL,
+  "http_status_code" integer NULL,
+  "vendor_result_code" character varying(64) NULL,
+  "vendor_result_message" character varying(256) NULL,
+  "action_outcome" character varying(64) NOT NULL,
+  "retryable" boolean NOT NULL,
+  "failure_recorded" boolean NOT NULL,
+  "duration_ms" integer NOT NULL,
+  "timed_out" boolean NOT NULL,
+  "vendor_unavailable" boolean NOT NULL,
+  "transport_failure" boolean NOT NULL,
+  "requested_at" timestamptz NOT NULL,
+  "responded_at" timestamptz NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_hikcentral_gate_action_audits" PRIMARY KEY ("hikcentral_gate_action_audit_id"),
+  CONSTRAINT "fk_hikcentral_gate_action_audits__gate_command_id" FOREIGN KEY ("gate_command_id")
+    REFERENCES "gates"."gate_commands" ("command_id") DEFERRABLE INITIALLY IMMEDIATE,
+  CONSTRAINT "ck_hikcentral_gate_action_audits__vendor"
+    CHECK ("vendor_code" = 'HIKCENTRAL'),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__method"
+    CHECK ("request_method" = 'POST'),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__http_status"
+    CHECK ("http_status_code" IS NULL OR "http_status_code" BETWEEN 100 AND 599),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__duration"
+    CHECK ("duration_ms" >= 0),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__timestamps"
+    CHECK ("responded_at" >= "requested_at"),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__request_hash"
+    CHECK ("request_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__outcome"
+    CHECK ("action_outcome" IN ('SUCCEEDED', 'FAILED', 'RETRYABLE_FAILURE', 'TERMINAL_FAILURE', 'TIMEOUT', 'VENDOR_UNAVAILABLE', 'TRANSPORT_FAILURE')),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__failure_flags"
+    CHECK (
+      ("failure_recorded" = false AND "action_outcome" = 'SUCCEEDED' AND "retryable" = false AND "timed_out" = false AND "vendor_unavailable" = false AND "transport_failure" = false)
+      OR ("failure_recorded" = true AND "action_outcome" <> 'SUCCEEDED')
+    ),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__classification"
+    CHECK (
+      ("action_outcome" = 'TIMEOUT' AND "timed_out" = true)
+      OR ("action_outcome" <> 'TIMEOUT')
+    ),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__vendor_unavailable"
+    CHECK (
+      ("action_outcome" = 'VENDOR_UNAVAILABLE' AND "vendor_unavailable" = true)
+      OR ("action_outcome" <> 'VENDOR_UNAVAILABLE')
+    ),
+  CONSTRAINT "ck_hikcentral_gate_action_audits__transport_failure"
+    CHECK (
+      ("action_outcome" = 'TRANSPORT_FAILURE' AND "transport_failure" = true)
+      OR ("action_outcome" <> 'TRANSPORT_FAILURE')
+    )
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__gate_command.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__gate_command" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__gate_command" ON "gates"."hikcentral_gate_action_audits" ("gate_command_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__source_processing.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__source_processing" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__source_processing" ON "gates"."hikcentral_gate_action_audits" ("source_processing_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__consumption.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__consumption" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__consumption" ON "gates"."hikcentral_gate_action_audits" ("gate_authorization_consumption_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__exit_authorization.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__exit_authorization" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__exit_authorization" ON "gates"."hikcentral_gate_action_audits" ("exit_authorization_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__vendor_system.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__vendor_system" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__vendor_system" ON "gates"."hikcentral_gate_action_audits" ("vendor_system_id") WHERE ("vendor_system_id" IS NOT NULL);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__outcome.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__outcome" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__outcome" ON "gates"."hikcentral_gate_action_audits" ("action_outcome");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/indexes/gates.ix_hikcentral_gate_action_audits__requested_at.sql
+-- ============================================================================
+-- Create index "ix_hikcentral_gate_action_audits__requested_at" to table: "hikcentral_gate_action_audits"
+CREATE INDEX "ix_hikcentral_gate_action_audits__requested_at" ON "gates"."hikcentral_gate_action_audits" ("requested_at");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.comments.sql
+-- ============================================================================
+-- Set comment to table: "hikcentral_gate_action_audits"
+COMMENT ON TABLE "gates"."hikcentral_gate_action_audits" IS 'Secret-free HikCentral gate action request/response attempt audit associated with a canonical gate command. This table records execution evidence only; it does not authorize a gate action and does not prove that a physical barrier opened.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.sql
+-- ============================================================================
+-- Set comment to column: "hikcentral_gate_action_audit_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."hikcentral_gate_action_audit_id" IS 'Canonical identifier of the HikCentral gate action audit row.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.1.sql
+-- ============================================================================
+-- Set comment to column: "gate_command_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."gate_command_id" IS 'Canonical gate command associated with this HikCentral execution evidence.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.2.sql
+-- ============================================================================
+-- Set comment to column: "source_processing_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."source_processing_id" IS 'Copied trace identifier for the consumed-processing source that produced the command.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.3.sql
+-- ============================================================================
+-- Set comment to column: "gate_authorization_consumption_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."gate_authorization_consumption_id" IS 'Copied trace identifier for the gate authorization consumption.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.4.sql
+-- ============================================================================
+-- Set comment to column: "exit_authorization_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."exit_authorization_id" IS 'Copied trace identifier for the consumed exit authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.5.sql
+-- ============================================================================
+-- Set comment to column: "parking_session_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."parking_session_id" IS 'Copied trace identifier for the parking session associated with the command.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.6.sql
+-- ============================================================================
+-- Set comment to column: "payment_attempt_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."payment_attempt_id" IS 'Copied trace identifier for the payment attempt supporting the consumed authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.7.sql
+-- ============================================================================
+-- Set comment to column: "tariff_snapshot_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."tariff_snapshot_id" IS 'Copied trace identifier for the paid tariff snapshot.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.8.sql
+-- ============================================================================
+-- Set comment to column: "gate_device_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."gate_device_id" IS 'Gate device context copied from the command or execution attempt, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.9.sql
+-- ============================================================================
+-- Set comment to column: "service_identity_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."service_identity_id" IS 'Service identity context associated with the command or execution attempt, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.10.sql
+-- ============================================================================
+-- Set comment to column: "lane_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."lane_id" IS 'Lane context copied from the command or execution attempt, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.11.sql
+-- ============================================================================
+-- Set comment to column: "site_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."site_id" IS 'Site context copied from the command or execution attempt, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.12.sql
+-- ============================================================================
+-- Set comment to column: "vendor_system_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_system_id" IS 'Vendor system routing context copied as audit metadata.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.13.sql
+-- ============================================================================
+-- Set comment to column: "vendor_code" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_code" IS 'Canonical uppercase vendor code; constrained to HIKCENTRAL.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.14.sql
+-- ============================================================================
+-- Set comment to column: "vendor_operation" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_operation" IS 'Safe vendor operation label for the attempted HikCentral gate action.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.15.sql
+-- ============================================================================
+-- Set comment to column: "door_index_code" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."door_index_code" IS 'HikCentral door index code or configured safe target identifier used for routing evidence.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.16.sql
+-- ============================================================================
+-- Set comment to column: "request_method" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."request_method" IS 'HTTP method used by the HikCentral request; constrained to POST.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.17.sql
+-- ============================================================================
+-- Set comment to column: "request_path" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."request_path" IS 'Safe request path metadata; no host, credential, header, or body payload is stored.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.18.sql
+-- ============================================================================
+-- Set comment to column: "request_hash" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."request_hash" IS 'Lowercase SHA-256 hash of the safe canonical request body representation; raw body content is not stored.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.19.sql
+-- ============================================================================
+-- Set comment to column: "signed_header_names" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."signed_header_names" IS 'Names of signed headers only; header values and calculated signatures are intentionally excluded.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.20.sql
+-- ============================================================================
+-- Set comment to column: "request_correlation_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."request_correlation_id" IS 'Safe request correlation identifier used for cross-system tracing.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.21.sql
+-- ============================================================================
+-- Set comment to column: "vendor_correlation_id" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_correlation_id" IS 'Safe vendor correlation identifier returned or observed for the attempted request.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.22.sql
+-- ============================================================================
+-- Set comment to column: "http_status_code" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."http_status_code" IS 'HTTP response status code, when an HTTP response was received.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.23.sql
+-- ============================================================================
+-- Set comment to column: "vendor_result_code" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_result_code" IS 'Safe HikCentral result code metadata, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.24.sql
+-- ============================================================================
+-- Set comment to column: "vendor_result_message" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_result_message" IS 'Safe bounded HikCentral result message metadata, when available.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.25.sql
+-- ============================================================================
+-- Set comment to column: "action_outcome" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."action_outcome" IS 'Controlled safe outcome classification for the HikCentral gate action attempt.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.26.sql
+-- ============================================================================
+-- Set comment to column: "retryable" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."retryable" IS 'Indicates whether the observed failure classification may be retried by a separate command executor.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.27.sql
+-- ============================================================================
+-- Set comment to column: "failure_recorded" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."failure_recorded" IS 'Indicates whether the attempt recorded a non-success failure outcome.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.28.sql
+-- ============================================================================
+-- Set comment to column: "duration_ms" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."duration_ms" IS 'Measured request duration in milliseconds; constrained to non-negative values.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.29.sql
+-- ============================================================================
+-- Set comment to column: "timed_out" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."timed_out" IS 'Failure classification indicating the request timed out.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.30.sql
+-- ============================================================================
+-- Set comment to column: "vendor_unavailable" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."vendor_unavailable" IS 'Failure classification indicating HikCentral was unavailable.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.31.sql
+-- ============================================================================
+-- Set comment to column: "transport_failure" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."transport_failure" IS 'Failure classification indicating a transport-level failure occurred.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.32.sql
+-- ============================================================================
+-- Set comment to column: "requested_at" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."requested_at" IS 'Timestamp when the HikCentral request attempt began.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.33.sql
+-- ============================================================================
+-- Set comment to column: "responded_at" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."responded_at" IS 'Timestamp when the HikCentral response, timeout, or failure classification was recorded.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/gates/comments/gates.hikcentral_gate_action_audits.column-comments.34.sql
+-- ============================================================================
+-- Set comment to column: "created_at" on table: "hikcentral_gate_action_audits"
+COMMENT ON COLUMN "gates"."hikcentral_gate_action_audits"."created_at" IS 'Record creation timestamp.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/gates/tables/gates.gate_devices.sql
 -- ============================================================================
 -- Create "gate_devices" table

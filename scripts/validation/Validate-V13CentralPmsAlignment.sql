@@ -6,6 +6,8 @@ DECLARE
     missing text[] := ARRAY[]::text[];
     gate_processing_missing_columns text[];
     gate_commands_missing_columns text[];
+    hikcentral_audit_missing_columns text[];
+    hikcentral_audit_forbidden_columns text[];
     unexpected_pos_objects integer;
 BEGIN
     IF to_regclass('core.fiscal_issuance_references') IS NULL THEN missing := array_append(missing, 'core.fiscal_issuance_references'); END IF;
@@ -308,6 +310,167 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__correlation_id') THEN missing := array_append(missing, 'ix_gate_commands__correlation_id'); END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__next_attempt_at') THEN missing := array_append(missing, 'ix_gate_commands__next_attempt_at'); END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_commands__terminal_failure_at') THEN missing := array_append(missing, 'ix_gate_commands__terminal_failure_at'); END IF;
+    END IF;
+
+    IF to_regclass('gates.hikcentral_gate_action_audits') IS NULL THEN
+        missing := array_append(missing, 'gates.hikcentral_gate_action_audits');
+    ELSE
+        SELECT array_agg(required.column_name)
+        INTO hikcentral_audit_missing_columns
+        FROM (
+            VALUES
+                ('hikcentral_gate_action_audit_id'),
+                ('gate_command_id'),
+                ('source_processing_id'),
+                ('gate_authorization_consumption_id'),
+                ('exit_authorization_id'),
+                ('parking_session_id'),
+                ('payment_attempt_id'),
+                ('tariff_snapshot_id'),
+                ('gate_device_id'),
+                ('service_identity_id'),
+                ('lane_id'),
+                ('site_id'),
+                ('vendor_system_id'),
+                ('vendor_code'),
+                ('vendor_operation'),
+                ('door_index_code'),
+                ('request_method'),
+                ('request_path'),
+                ('request_hash'),
+                ('signed_header_names'),
+                ('request_correlation_id'),
+                ('vendor_correlation_id'),
+                ('http_status_code'),
+                ('vendor_result_code'),
+                ('vendor_result_message'),
+                ('action_outcome'),
+                ('retryable'),
+                ('failure_recorded'),
+                ('duration_ms'),
+                ('timed_out'),
+                ('vendor_unavailable'),
+                ('transport_failure'),
+                ('requested_at'),
+                ('responded_at'),
+                ('created_at')
+        ) AS required(column_name)
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns actual
+            WHERE actual.table_schema = 'gates'
+              AND actual.table_name = 'hikcentral_gate_action_audits'
+              AND actual.column_name = required.column_name
+        );
+
+        IF array_length(hikcentral_audit_missing_columns, 1) IS NOT NULL THEN
+            missing := array_append(missing, 'gates.hikcentral_gate_action_audits missing columns: ' || array_to_string(hikcentral_audit_missing_columns, ', '));
+        END IF;
+
+        SELECT array_agg(column_name)
+        INTO hikcentral_audit_forbidden_columns
+        FROM information_schema.columns
+        WHERE table_schema = 'gates'
+          AND table_name = 'hikcentral_gate_action_audits'
+          AND (
+              lower(column_name) IN ('app_key', 'app_secret', 'credential', 'signature', 'request_body', 'response_body', 'request_headers', 'response_headers', 'payload_json')
+              OR lower(column_name) LIKE '%credential%'
+              OR lower(column_name) LIKE '%signature%'
+              OR lower(column_name) LIKE '%request_body%'
+              OR lower(column_name) LIKE '%response_body%'
+              OR lower(column_name) LIKE '%request_headers%'
+              OR lower(column_name) LIKE '%response_headers%'
+              OR lower(column_name) LIKE '%payload_json%'
+          );
+
+        IF array_length(hikcentral_audit_forbidden_columns, 1) IS NOT NULL THEN
+            missing := array_append(missing, 'gates.hikcentral_gate_action_audits forbidden secret/raw-payload columns: ' || array_to_string(hikcentral_audit_forbidden_columns, ', '));
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'fk_hikcentral_gate_action_audits__gate_command_id'
+              AND con.contype = 'f'
+        ) THEN missing := array_append(missing, 'fk_hikcentral_gate_action_audits__gate_command_id'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'ck_hikcentral_gate_action_audits__vendor'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_hikcentral_gate_action_audits__vendor'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'ck_hikcentral_gate_action_audits__method'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_hikcentral_gate_action_audits__method'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'ck_hikcentral_gate_action_audits__duration'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_hikcentral_gate_action_audits__duration'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'ck_hikcentral_gate_action_audits__timestamps'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_hikcentral_gate_action_audits__timestamps'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'ck_hikcentral_gate_action_audits__http_status'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_hikcentral_gate_action_audits__http_status'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'hikcentral_gate_action_audits'
+              AND con.conname = 'ck_hikcentral_gate_action_audits__outcome'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_hikcentral_gate_action_audits__outcome'); END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__gate_command') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__gate_command'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__source_processing') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__source_processing'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__consumption') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__consumption'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__exit_authorization') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__exit_authorization'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__vendor_system') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__vendor_system'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__outcome') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__outcome'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_hikcentral_gate_action_audits__requested_at') THEN missing := array_append(missing, 'ix_hikcentral_gate_action_audits__requested_at'); END IF;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ux_sd_pba__validation_active') THEN missing := array_append(missing, 'ux_sd_pba__validation_active'); END IF;
