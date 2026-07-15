@@ -4,6 +4,7 @@
 DO $$
 DECLARE
     missing text[] := ARRAY[]::text[];
+    gate_processing_missing_columns text[];
     unexpected_pos_objects integer;
 BEGIN
     IF to_regclass('core.fiscal_issuance_references') IS NULL THEN missing := array_append(missing, 'core.fiscal_issuance_references'); END IF;
@@ -38,6 +39,117 @@ BEGIN
     IF to_regprocedure('core.record_payment_confirmation(uuid,text,text,text,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.record_payment_confirmation(uuid,text,text,text,uuid,timestamptz)'); END IF;
     IF to_regprocedure('core.issue_exit_authorization(uuid,uuid,uuid,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.issue_exit_authorization(uuid,uuid,uuid,uuid,timestamptz)'); END IF;
     IF to_regprocedure('core.consume_exit_authorization(uuid,uuid,uuid,timestamp with time zone)') IS NULL THEN missing := array_append(missing, 'core.consume_exit_authorization(uuid,uuid,uuid,timestamptz)'); END IF;
+
+    IF to_regclass('gates.gate_authorization_consumed_processing') IS NULL THEN
+        missing := array_append(missing, 'gates.gate_authorization_consumed_processing');
+    ELSE
+        SELECT array_agg(required.column_name)
+        INTO gate_processing_missing_columns
+        FROM (
+            VALUES
+                ('processing_id'),
+                ('processing_key'),
+                ('event_id'),
+                ('event_type'),
+                ('event_ref'),
+                ('gate_authorization_consumption_id'),
+                ('exit_authorization_id'),
+                ('parking_session_id'),
+                ('payment_attempt_id'),
+                ('tariff_snapshot_id'),
+                ('gate_device_id'),
+                ('service_identity_id'),
+                ('lane_id'),
+                ('site_id'),
+                ('vendor_system_id'),
+                ('consumed_at'),
+                ('correlation_id'),
+                ('processing_status'),
+                ('processing_result'),
+                ('attempt_count'),
+                ('first_attempted_at'),
+                ('last_attempted_at'),
+                ('processed_at'),
+                ('failure_code'),
+                ('failure_reason'),
+                ('created_at'),
+                ('updated_at')
+        ) AS required(column_name)
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns actual
+            WHERE actual.table_schema = 'gates'
+              AND actual.table_name = 'gate_authorization_consumed_processing'
+              AND actual.column_name = required.column_name
+        );
+
+        IF array_length(gate_processing_missing_columns, 1) IS NOT NULL THEN
+            missing := array_append(missing, 'gates.gate_authorization_consumed_processing missing columns: ' || array_to_string(gate_processing_missing_columns, ', '));
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_authorization_consumed_processing'
+              AND con.conname = 'fk_gate_auth_consumed_processing__consumption'
+              AND con.contype = 'f'
+        ) THEN missing := array_append(missing, 'fk_gate_auth_consumed_processing__consumption'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_authorization_consumed_processing'
+              AND con.conname = 'ck_gate_auth_consumed_processing__attempt_count'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_auth_consumed_processing__attempt_count'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint con
+            JOIN pg_class cls ON cls.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = cls.relnamespace
+            WHERE n.nspname = 'gates'
+              AND cls.relname = 'gate_authorization_consumed_processing'
+              AND con.conname = 'ck_gate_auth_consumed_processing__processed_at'
+              AND con.contype = 'c'
+        ) THEN missing := array_append(missing, 'ck_gate_auth_consumed_processing__processed_at'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_index idx
+            JOIN pg_class ix ON ix.oid = idx.indexrelid
+            JOIN pg_class tbl ON tbl.oid = idx.indrelid
+            JOIN pg_namespace n ON n.oid = tbl.relnamespace
+            WHERE n.nspname = 'gates'
+              AND tbl.relname = 'gate_authorization_consumed_processing'
+              AND ix.relname = 'ux_gate_auth_consumed_processing__key_event_type'
+              AND idx.indisunique
+        ) THEN missing := array_append(missing, 'ux_gate_auth_consumed_processing__key_event_type'); END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_index idx
+            JOIN pg_class ix ON ix.oid = idx.indexrelid
+            JOIN pg_class tbl ON tbl.oid = idx.indrelid
+            JOIN pg_namespace n ON n.oid = tbl.relnamespace
+            WHERE n.nspname = 'gates'
+              AND tbl.relname = 'gate_authorization_consumed_processing'
+              AND ix.relname = 'ux_gate_auth_consumed_processing__event_id'
+              AND idx.indisunique
+              AND pg_get_expr(idx.indpred, idx.indrelid) ILIKE '%event_id%IS NOT NULL%'
+        ) THEN missing := array_append(missing, 'ux_gate_auth_consumed_processing__event_id'); END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_auth_consumed_processing__consumption') THEN missing := array_append(missing, 'ix_gate_auth_consumed_processing__consumption'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_auth_consumed_processing__status') THEN missing := array_append(missing, 'ix_gate_auth_consumed_processing__status'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'gates' AND indexname = 'ix_gate_auth_consumed_processing__correlation_id') THEN missing := array_append(missing, 'ix_gate_auth_consumed_processing__correlation_id'); END IF;
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ux_sd_pba__validation_active') THEN missing := array_append(missing, 'ux_sd_pba__validation_active'); END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'ux_tariff_snapshots__statutory_discount_validation_applied') THEN missing := array_append(missing, 'ux_tariff_snapshots__statutory_discount_validation_applied'); END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'ux_fiscal_issuance_references__active_idempotency_scope') THEN missing := array_append(missing, 'ux_fiscal_issuance_references__active_idempotency_scope'); END IF;
