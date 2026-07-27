@@ -1,9 +1,13 @@
-﻿-- Create "statutory_discount_validations" table
+-- Create "statutory_discount_validations" table
 CREATE TABLE "discounts"."statutory_discount_validations" (
   "statutory_discount_validation_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "parking_session_id" uuid NOT NULL,
   "tariff_snapshot_id" uuid NULL,
   "entitlement_type" "discounts"."statutory_entitlement_type_enum" NOT NULL,
+  "id_document_type" character varying(64) NULL,
+  "issuing_authority" character varying(128) NULL,
+  "id_expiry_date" date NULL,
+  "masked_id_reference" character varying(64) NULL,
   "evaluated_policy_reference_id" uuid NULL,
   "applied_policy_reference_id" uuid NULL,
   "fallback_policy_reference_id" uuid NULL,
@@ -19,6 +23,8 @@ CREATE TABLE "discounts"."statutory_discount_validations" (
   "evidence_required" boolean NOT NULL DEFAULT false,
   "evidence_captured" boolean NOT NULL DEFAULT false,
   "decision_reason_code" character varying(64) NULL,
+  "requester_attestation" boolean NULL,
+  "attestation_notes" character varying(512) NULL,
   "failure_reason_code" character varying(64) NULL,
   "requested_at" timestamptz NOT NULL,
   "validated_at" timestamptz NULL,
@@ -37,4 +43,3 @@ CREATE TABLE "discounts"."statutory_discount_validations" (
   "row_version" bigint NOT NULL DEFAULT 1,
   CONSTRAINT "pk_statutory_discount_validations" PRIMARY KEY ("statutory_discount_validation_id")
 );;
-

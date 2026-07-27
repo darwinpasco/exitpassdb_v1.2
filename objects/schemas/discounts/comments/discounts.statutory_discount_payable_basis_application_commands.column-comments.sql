@@ -1,0 +1,4 @@
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."business_identity" IS 'Canonical application identity statutory-discount-payable-basis-application:{statutoryDiscountDecisionCommandId}.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."semantic_hash_source_version" IS 'Semantic source version for application-v1 privacy-safe payable-basis application facts.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_payable_basis_application_id" IS 'Link to the legacy payable-basis mutation record after durable application succeeds.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."applied_tariff_snapshot_id" IS 'Applied tariff snapshot selected or created by the authoritative payable-basis writer; callers must not supply this as authority.';;

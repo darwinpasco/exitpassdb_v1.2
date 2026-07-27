@@ -1,4 +1,4 @@
-﻿# ExitPass full object source apply order.
+# ExitPass full object source apply order.
 # Generated from schema/schema.sql baseline plus v1.3 Central PMS object source files.
 # Migrations remain deployment/change-history artifacts; object files are source decomposition.
 
@@ -723,6 +723,7 @@ objects/schemas/discounts/indexes/discounts.ix_statutory_discount_validations__f
 objects/schemas/discounts/indexes/discounts.ix_statutory_discount_validations__parking_session_id.sql
 objects/schemas/discounts/indexes/discounts.ix_statutory_discount_validations__tariff_snapshot_id.sql
 objects/schemas/discounts/indexes/discounts.ux_statutory_discount_validations__active_session_entitlement.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_disc_validations__decision_v2_fact_presence.sql
 objects/schemas/discounts/comments/discounts.statutory_discount_validations.comments.sql
 objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.sql
 objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.1.sql
@@ -759,6 +760,12 @@ objects/schemas/discounts/comments/discounts.statutory_discount_validations.colu
 objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.32.sql
 objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.33.sql
 objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.34.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.35.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.36.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.37.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.38.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.39.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_validations.column-comments.40.sql
 objects/schemas/events/types/events.consumer_checkpoint_status_enum.sql
 objects/schemas/events/types/events.dead_letter_status_enum.sql
 objects/schemas/events/types/events.dead_letter_type_enum.sql
@@ -2505,6 +2512,27 @@ objects/schemas/discounts/indexes/discounts.ix_sd_pba__parking_session.sql
 objects/schemas/discounts/indexes/discounts.ix_sd_pba__original_tariff_snapshot.sql
 objects/schemas/discounts/indexes/discounts.ix_sd_pba__status.sql
 objects/schemas/discounts/indexes/discounts.ix_sd_pba__correlation_id.sql
+objects/schemas/discounts/tables/discounts.statutory_discount_decision_commands.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__idempotency.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__request_reference.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity_text.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__parking_session.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__validation.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__correlation.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__command_status.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_decision_commands.comments.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_decision_commands.column-comments.sql
+objects/schemas/discounts/tables/discounts.statutory_discount_payable_basis_application_commands.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__business_identity.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__decision_command.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__idempotency.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__request_reference.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__parking_session.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__validation.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__correlation.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.comments.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.column-comments.sql
 objects/schemas/discounts/functions/discounts.enforce_statutory_discount_payable_basis_application.sql
 objects/schemas/discounts/triggers/discounts.trg_sd_pba__enforce.drop.sql
 objects/schemas/discounts/triggers/discounts.trg_sd_pba__enforce.sql
@@ -2528,4 +2556,11 @@ objects/schemas/operator_console/indexes/operator_console.ix_policy_import_revie
 objects/schemas/operator_console/tables/operator_console.production_policy_import_review_findings.sql
 objects/schemas/operator_console/comments/operator_console.production_policy_import_review_findings.comment.sql
 objects/schemas/operator_console/indexes/operator_console.ix_policy_import_review_findings__review.sql
+objects/schemas/operator_console/tables/operator_console.statutory_discount_service_channel_reviews.sql
+objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__pending_queue.sql
+objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__source_status.sql
+objects/schemas/operator_console/indexes/operator_console.ux_stat_disc_svc_reviews__validation.sql
+objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__decision_validation.sql
+objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.comments.sql
+objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.sql
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
