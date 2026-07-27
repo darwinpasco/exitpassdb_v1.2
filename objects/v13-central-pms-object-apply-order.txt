@@ -1,4 +1,4 @@
-﻿# ExitPass v1.3 Central PMS object source apply order.
+# ExitPass v1.3 Central PMS object source apply order.
 # Object files are source-control decomposition for the v1.3 alignment objects only.
 # Migrations remain deployment history artifacts; legacy v1.2 generated schema remains intact.
 
@@ -175,6 +175,27 @@ objects/schemas/discounts/indexes/discounts.ix_sd_pba__parking_session.sql
 objects/schemas/discounts/indexes/discounts.ix_sd_pba__original_tariff_snapshot.sql
 objects/schemas/discounts/indexes/discounts.ix_sd_pba__status.sql
 objects/schemas/discounts/indexes/discounts.ix_sd_pba__correlation_id.sql
+objects/schemas/discounts/tables/discounts.statutory_discount_decision_commands.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__idempotency.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__request_reference.sql
+objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity_text.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__parking_session.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__validation.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__correlation.sql
+objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__command_status.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_decision_commands.comments.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_decision_commands.column-comments.sql
+objects/schemas/discounts/tables/discounts.statutory_discount_payable_basis_application_commands.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__business_identity.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__decision_command.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__idempotency.sql
+objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__request_reference.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__parking_session.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__validation.sql
+objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__correlation.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.comments.sql
+objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.column-comments.sql
 objects/schemas/discounts/functions/discounts.enforce_statutory_discount_payable_basis_application.sql
 objects/schemas/discounts/triggers/discounts.trg_sd_pba__enforce.drop.sql
 objects/schemas/discounts/triggers/discounts.trg_sd_pba__enforce.sql
@@ -198,4 +219,11 @@ objects/schemas/operator_console/indexes/operator_console.ix_policy_import_revie
 objects/schemas/operator_console/tables/operator_console.production_policy_import_review_findings.sql
 objects/schemas/operator_console/comments/operator_console.production_policy_import_review_findings.comment.sql
 objects/schemas/operator_console/indexes/operator_console.ix_policy_import_review_findings__review.sql
+objects/schemas/operator_console/tables/operator_console.statutory_discount_service_channel_reviews.sql
+objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__pending_queue.sql
+objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__source_status.sql
+objects/schemas/operator_console/indexes/operator_console.ux_stat_disc_svc_reviews__validation.sql
+objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__decision_validation.sql
+objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.comments.sql
+objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.sql
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql

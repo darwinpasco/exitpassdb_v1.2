@@ -1,0 +1,5 @@
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_decision_command_id" IS 'Canonical decision command reviewed by Operator Console; this primary key is not a second decision authority.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."source_channel" IS 'Original service-channel attribution for WEBPAY or ASSISTED_PAYMENT_TERMINAL intake.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."evidence_references" IS 'Reference-only evidence metadata. Raw images, Base64 evidence, raw bytes, and full statutory ID values are prohibited.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_validation_id" IS 'Approved discounts.statutory_discount_validations row created during actual Operator Console review completion. Null while awaiting review or rejected.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."review_status" IS 'Operator Console review lifecycle for service-channel-originated canonical decisions.';;

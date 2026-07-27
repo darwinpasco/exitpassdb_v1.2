@@ -1,0 +1,2 @@
+-- Set comment to table: "statutory_discount_decision_commands"
+COMMENT ON TABLE "discounts"."statutory_discount_decision_commands" IS 'Canonical Central PMS statutory-discount decision command store for shared and Operator Console routes. WebPay and APT submit facts but do not approve entitlement; Operator Console review completes decisions; the table does not apply payable basis, finalize payment, issue fiscal documents, issue ExitAuthorization, or control gates.';;

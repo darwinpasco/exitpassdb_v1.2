@@ -2629,6 +2629,270 @@ CREATE INDEX IF NOT EXISTS ix_sd_pba__correlation_id
 
 
 -- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_decision_commands.sql
+-- ============================================================================
+-- Create "statutory_discount_decision_commands" table
+CREATE TABLE "discounts"."statutory_discount_decision_commands" (
+  "statutory_discount_decision_command_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "request_reference" uuid NOT NULL,
+  "parking_session_id" uuid NOT NULL,
+  "source_channel" character varying(64) NOT NULL,
+  "entitlement_type" character varying(64) NOT NULL,
+  "business_identity" character varying(256) NULL,
+  "idempotency_scope" character varying(256) NOT NULL,
+  "idempotency_key" character varying(128) NOT NULL,
+  "semantic_request_hash" character varying(80) NOT NULL,
+  "semantic_hash_source_version" character varying(64) NOT NULL,
+  "statutory_discount_validation_id" uuid NULL,
+  "payable_basis_application_id" uuid NULL,
+  "original_tariff_snapshot_id" uuid NULL,
+  "applied_tariff_snapshot_id" uuid NULL,
+  "decision_status" character varying(64) NOT NULL,
+  "command_status" character varying(64) NOT NULL DEFAULT 'PROCESSING',
+  "decision_result_status" character varying(64) NOT NULL DEFAULT 'NOT_DECIDED',
+  "result_classification" character varying(64) NOT NULL,
+  "retryable" boolean NOT NULL DEFAULT false,
+  "recovery_classification" character varying(80) NOT NULL DEFAULT 'NONE',
+  "policy_resolution_basis" character varying(80) NULL,
+  "applied_policy_reference_id" uuid NULL,
+  "fallback_policy_reference_id" uuid NULL,
+  "local_ordinance_applied" boolean NOT NULL DEFAULT false,
+  "gross_amount_minor_units" bigint NULL,
+  "vat_exclusive_amount_minor_units" bigint NULL,
+  "vat_amount_minor_units" bigint NULL,
+  "statutory_discount_amount_minor_units" bigint NULL,
+  "net_payable_amount_minor_units" bigint NULL,
+  "currency_code" character(3) NULL,
+  "evidence_required" boolean NOT NULL DEFAULT false,
+  "evidence_recorded" boolean NOT NULL DEFAULT false,
+  "reason_code" character varying(128) NULL,
+  "error_code" character varying(128) NULL,
+  "original_correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "processing_started_at" timestamptz NULL,
+  "decided_at" timestamptz NULL,
+  "applied_at" timestamptz NULL,
+  "completed_at" timestamptz NULL,
+  "failed_at" timestamptz NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_statutory_discount_decision_commands" PRIMARY KEY ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_statutory_discount_decision_commands__parking_session" FOREIGN KEY ("parking_session_id") REFERENCES "core"."parking_sessions" ("parking_session_id"),
+  CONSTRAINT "fk_statutory_discount_decision_commands__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "fk_statutory_discount_decision_commands__payable_basis_application" FOREIGN KEY ("payable_basis_application_id") REFERENCES "discounts"."statutory_discount_payable_basis_applications" ("statutory_discount_payable_basis_application_id"),
+  CONSTRAINT "fk_statutory_discount_decision_commands__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "fk_statutory_discount_decision_commands__applied_tariff_snapshot" FOREIGN KEY ("applied_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "ck_statutory_discount_decision_commands__source_channel" CHECK (source_channel IN ('OPERATOR_CONSOLE', 'WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
+  CONSTRAINT "ck_statutory_discount_decision_commands__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
+  CONSTRAINT "ck_statutory_discount_decision_commands__hash" CHECK (semantic_request_hash ~ '^sha256:[0-9a-f]{64}$'),
+  CONSTRAINT "ck_statutory_discount_decision_commands__semantic_version" CHECK (semantic_hash_source_version IN ('statutory-discount-decision:sha256:v1', 'statutory-discount-decision:sha256:v2')),
+  CONSTRAINT "ck_statutory_discount_decision_commands__decision_status" CHECK (decision_status IN ('PROCESSING', 'REQUESTED', 'PENDING_OPERATOR_REVIEW', 'APPROVED', 'REJECTED', 'FAILED', 'EXPIRED', 'CANCELLED', 'APPLIED_PAYABLE_BASIS')),
+  CONSTRAINT "ck_statutory_discount_decision_commands__command_status" CHECK (command_status IN ('RECEIVED', 'PROCESSING', 'AWAITING_REVIEW', 'COMPLETED', 'FAILED_RETRYABLE', 'FAILED_NON_RETRYABLE')),
+  CONSTRAINT "ck_statutory_discount_decision_commands__decision_result_status" CHECK (decision_result_status IN ('APPROVED', 'REJECTED', 'NOT_DECIDED')),
+  CONSTRAINT "ck_statutory_discount_decision_commands__result_classification" CHECK (result_classification IN ('ACCEPTED', 'IDEMPOTENT_REPLAY', 'AWAITING_REVIEW')),
+  CONSTRAINT "ck_stat_disc_decision_cmds__recovery" CHECK (recovery_classification IN ('NONE', 'AWAITING_REVIEW', 'READ_CANONICAL_RESULT', 'RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'WAIT_THEN_RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'CORRECT_REQUEST_REQUIRED', 'NOT_RECOVERABLE'))
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__idempotency.sql
+-- ============================================================================
+-- Create index "ux_statutory_discount_decision_commands__idempotency"
+CREATE UNIQUE INDEX "ux_statutory_discount_decision_commands__idempotency" ON "discounts"."statutory_discount_decision_commands" ("idempotency_scope", "idempotency_key");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity.sql
+-- ============================================================================
+-- Create index "ux_statutory_discount_decision_commands__business_identity"
+CREATE UNIQUE INDEX "ux_statutory_discount_decision_commands__business_identity" ON "discounts"."statutory_discount_decision_commands" ("parking_session_id", "entitlement_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__request_reference.sql
+-- ============================================================================
+-- Create index "ux_statutory_discount_decision_commands__request_reference"
+CREATE UNIQUE INDEX "ux_statutory_discount_decision_commands__request_reference" ON "discounts"."statutory_discount_decision_commands" ("request_reference");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity_text.sql
+-- ============================================================================
+-- Create index "ux_statutory_discount_decision_commands__business_identity_text"
+CREATE UNIQUE INDEX "ux_statutory_discount_decision_commands__business_identity_text" ON "discounts"."statutory_discount_decision_commands" ("business_identity") WHERE business_identity IS NOT NULL;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__parking_session.sql
+-- ============================================================================
+-- Create index "ix_statutory_discount_decision_commands__parking_session"
+CREATE INDEX "ix_statutory_discount_decision_commands__parking_session" ON "discounts"."statutory_discount_decision_commands" ("parking_session_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__validation.sql
+-- ============================================================================
+-- Create index "ix_statutory_discount_decision_commands__validation"
+CREATE INDEX "ix_statutory_discount_decision_commands__validation" ON "discounts"."statutory_discount_decision_commands" ("statutory_discount_validation_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__correlation.sql
+-- ============================================================================
+-- Create index "ix_statutory_discount_decision_commands__correlation"
+CREATE INDEX "ix_statutory_discount_decision_commands__correlation" ON "discounts"."statutory_discount_decision_commands" ("original_correlation_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_statutory_discount_decision_commands__command_status.sql
+-- ============================================================================
+-- Create index "ix_statutory_discount_decision_commands__command_status"
+CREATE INDEX "ix_statutory_discount_decision_commands__command_status" ON "discounts"."statutory_discount_decision_commands" ("command_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_decision_commands.comments.sql
+-- ============================================================================
+-- Set comment to table: "statutory_discount_decision_commands"
+COMMENT ON TABLE "discounts"."statutory_discount_decision_commands" IS 'Canonical Central PMS statutory-discount decision command store for shared and Operator Console routes. WebPay and APT submit facts but do not approve entitlement; Operator Console review completes decisions; the table does not apply payable basis, finalize payment, issue fiscal documents, issue ExitAuthorization, or control gates.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_decision_commands.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_commands"."business_identity" IS 'Canonical business identity statutory-discount-decision:{parkingSessionId}:{entitlementType}; source channel, request reference, correlation, and transport idempotency are not business identity.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_commands"."semantic_hash_source_version" IS 'Semantic source version for the privacy-safe statutory discount decision command hash; v1 historical commands and v2 canonical staged commands coexist.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_commands"."command_status" IS 'Canonical staged command lifecycle, including AWAITING_REVIEW for service-channel intake that is waiting for Operator Console review.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_commands"."decision_result_status" IS 'Business decision result. NOT_DECIDED is explicit pending-review posture, not approval or rejection.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_commands"."statutory_discount_validation_id" IS 'Approved statutory validation created by Central PMS/Operator Console review when available; null for pending review or historical compatibility.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_payable_basis_application_commands.sql
+-- ============================================================================
+-- Create "statutory_discount_payable_basis_application_commands" table
+CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands" (
+  "statutory_discount_payable_basis_application_command_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "request_reference" uuid NOT NULL,
+  "statutory_discount_decision_command_id" uuid NOT NULL,
+  "parking_session_id" uuid NOT NULL,
+  "site_id" uuid NULL,
+  "entitlement_type" character varying(64) NOT NULL,
+  "business_identity" character varying(256) NOT NULL,
+  "idempotency_scope" character varying(256) NOT NULL,
+  "idempotency_key" character varying(128) NOT NULL,
+  "semantic_request_hash" character varying(80) NOT NULL,
+  "semantic_hash_source_version" character varying(80) NOT NULL,
+  "command_status" character varying(64) NOT NULL,
+  "result_classification" character varying(64) NOT NULL,
+  "retryable" boolean NOT NULL DEFAULT false,
+  "recovery_classification" character varying(80) NOT NULL DEFAULT 'NONE',
+  "safe_error_code" character varying(128) NULL,
+  "statutory_discount_validation_id" uuid NULL,
+  "statutory_discount_payable_basis_application_id" uuid NULL,
+  "original_tariff_snapshot_id" uuid NULL,
+  "target_tariff_snapshot_id" uuid NULL,
+  "applied_tariff_snapshot_id" uuid NULL,
+  "applied_policy_reference_id" uuid NULL,
+  "policy_resolution_basis" character varying(80) NULL,
+  "approved_discount_amount_minor_units" bigint NOT NULL,
+  "approved_vat_exclusive_amount_minor_units" bigint NULL,
+  "approved_vat_amount_minor_units" bigint NULL,
+  "approved_final_payable_amount_minor_units" bigint NOT NULL,
+  "currency_code" character(3) NOT NULL,
+  "source_channel" character varying(64) NOT NULL,
+  "original_correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "processing_started_at" timestamptz NULL,
+  "applied_at" timestamptz NULL,
+  "completed_at" timestamptz NULL,
+  "failed_at" timestamptz NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_statutory_discount_payable_basis_application_commands" PRIMARY KEY ("statutory_discount_payable_basis_application_command_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__decision_command" FOREIGN KEY ("statutory_discount_decision_command_id") REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__parking_session" FOREIGN KEY ("parking_session_id") REFERENCES "core"."parking_sessions" ("parking_session_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__payable_basis_application" FOREIGN KEY ("statutory_discount_payable_basis_application_id") REFERENCES "discounts"."statutory_discount_payable_basis_applications" ("statutory_discount_payable_basis_application_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__target_tariff_snapshot" FOREIGN KEY ("target_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__applied_tariff_snapshot" FOREIGN KEY ("applied_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "ck_stat_discount_pba_commands__source_channel" CHECK (source_channel IN ('OPERATOR_CONSOLE', 'WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
+  CONSTRAINT "ck_stat_discount_pba_commands__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
+  CONSTRAINT "ck_stat_discount_pba_commands__hash" CHECK (semantic_request_hash ~ '^sha256:[0-9a-f]{64}$'),
+  CONSTRAINT "ck_stat_discount_pba_commands__semantic_version" CHECK (semantic_hash_source_version = 'statutory-discount-payable-basis-application:sha256:v1'),
+  CONSTRAINT "ck_stat_discount_pba_commands__command_status" CHECK (command_status IN ('RECEIVED', 'PROCESSING', 'APPLIED', 'FAILED_RETRYABLE', 'FAILED_NON_RETRYABLE')),
+  CONSTRAINT "ck_stat_discount_pba_commands__result_classification" CHECK (result_classification IN ('APPLIED', 'IDEMPOTENT_REPLAY', 'SEMANTIC_CONFLICT', 'DECISION_NOT_APPROVED', 'DECISION_NOT_FOUND', 'IN_PROGRESS', 'RETRYABLE_FAILURE', 'NON_RETRYABLE_FAILURE')),
+  CONSTRAINT "ck_stat_discount_pba_commands__recovery_classification" CHECK (recovery_classification IN ('NONE', 'AWAITING_REVIEW', 'READ_CANONICAL_RESULT', 'RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'WAIT_THEN_RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'CORRECT_REQUEST_REQUIRED', 'NOT_RECOVERABLE')),
+  CONSTRAINT "ck_stat_discount_pba_commands__amounts_non_negative" CHECK (approved_discount_amount_minor_units >= 0 AND approved_final_payable_amount_minor_units >= 0 AND (approved_vat_exclusive_amount_minor_units IS NULL OR approved_vat_exclusive_amount_minor_units >= 0) AND (approved_vat_amount_minor_units IS NULL OR approved_vat_amount_minor_units >= 0))
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__business_identity.sql
+-- ============================================================================
+-- Create index
+CREATE UNIQUE INDEX "ux_stat_discount_pba_commands__business_identity" ON "discounts"."statutory_discount_payable_basis_application_commands" ("business_identity");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__decision_command.sql
+-- ============================================================================
+-- Create index
+CREATE UNIQUE INDEX "ux_stat_discount_pba_commands__decision_command" ON "discounts"."statutory_discount_payable_basis_application_commands" ("statutory_discount_decision_command_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__idempotency.sql
+-- ============================================================================
+-- Create index
+CREATE UNIQUE INDEX "ux_stat_discount_pba_commands__idempotency" ON "discounts"."statutory_discount_payable_basis_application_commands" ("idempotency_scope", "idempotency_key");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_stat_discount_pba_commands__request_reference.sql
+-- ============================================================================
+-- Create index
+CREATE UNIQUE INDEX "ux_stat_discount_pba_commands__request_reference" ON "discounts"."statutory_discount_payable_basis_application_commands" ("request_reference");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__parking_session.sql
+-- ============================================================================
+-- Create index
+CREATE INDEX "ix_stat_discount_pba_commands__parking_session" ON "discounts"."statutory_discount_payable_basis_application_commands" ("parking_session_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__validation.sql
+-- ============================================================================
+-- Create index
+CREATE INDEX "ix_stat_discount_pba_commands__validation" ON "discounts"."statutory_discount_payable_basis_application_commands" ("statutory_discount_validation_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__correlation.sql
+-- ============================================================================
+-- Create index
+CREATE INDEX "ix_stat_discount_pba_commands__correlation" ON "discounts"."statutory_discount_payable_basis_application_commands" ("original_correlation_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.comments.sql
+-- ============================================================================
+-- Set comment to table: "statutory_discount_payable_basis_application_commands"
+COMMENT ON TABLE "discounts"."statutory_discount_payable_basis_application_commands" IS 'Canonical Central PMS staged command store for statutory-discount payable-basis application-v1. One application command is permitted per canonical decision; application is distinct from decision approval, payment finality, fiscal issuance, ExitAuthorization, and gate action.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."business_identity" IS 'Canonical application identity statutory-discount-payable-basis-application:{statutoryDiscountDecisionCommandId}.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."semantic_hash_source_version" IS 'Semantic source version for application-v1 privacy-safe payable-basis application facts.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_payable_basis_application_id" IS 'Link to the legacy payable-basis mutation record after durable application succeeds.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."applied_tariff_snapshot_id" IS 'Applied tariff snapshot selected or created by the authoritative payable-basis writer; callers must not supply this as authority.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/functions/discounts.enforce_statutory_discount_payable_basis_application.sql
 -- ============================================================================
 CREATE OR REPLACE FUNCTION discounts.enforce_statutory_discount_payable_basis_application()
@@ -3479,6 +3743,103 @@ COMMENT ON TABLE operator_console.production_policy_import_review_findings IS
 -- ============================================================================
 CREATE INDEX IF NOT EXISTS ix_policy_import_review_findings__review
     ON operator_console.production_policy_import_review_findings (review_id, created_at);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/tables/operator_console.statutory_discount_service_channel_reviews.sql
+-- ============================================================================
+-- Create "statutory_discount_service_channel_reviews" table
+CREATE TABLE "operator_console"."statutory_discount_service_channel_reviews" (
+  "statutory_discount_decision_command_id" uuid NOT NULL,
+  "request_reference" uuid NOT NULL,
+  "parking_session_id" uuid NOT NULL,
+  "source_channel" character varying(64) NOT NULL,
+  "site_id" uuid NULL,
+  "site_group_id" uuid NULL,
+  "ticket_reference" character varying(160) NULL,
+  "plate_number" character varying(32) NULL,
+  "entitlement_type" character varying(64) NOT NULL,
+  "id_document_type" character varying(64) NULL,
+  "issuing_authority" character varying(160) NULL,
+  "expiry_date" date NULL,
+  "masked_id_reference" character varying(128) NULL,
+  "evidence_references" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "requester_attestation" boolean NOT NULL DEFAULT false,
+  "attestation_notes" character varying(512) NULL,
+  "reason_code" character varying(128) NULL,
+  "original_tariff_snapshot_id" uuid NULL,
+  "review_status" character varying(64) NOT NULL,
+  "reviewer_user_id" uuid NULL,
+  "reviewer_operator_device_binding_id" uuid NULL,
+  "reviewer_operator_shift_id" uuid NULL,
+  "reviewer_access_evaluation_id" uuid NULL,
+  "reviewer_decision" character varying(16) NULL,
+  "reviewer_decision_reason_code" character varying(128) NULL,
+  "statutory_discount_validation_id" uuid NULL,
+  "intake_correlation_id" uuid NOT NULL,
+  "review_correlation_id" uuid NULL,
+  "submitted_at" timestamptz NOT NULL,
+  "reviewed_at" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_stat_disc_service_channel_reviews" PRIMARY KEY ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__decision_command" FOREIGN KEY ("statutory_discount_decision_command_id") REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__parking_session" FOREIGN KEY ("parking_session_id") REFERENCES "core"."parking_sessions" ("parking_session_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "ck_stat_disc_svc_reviews__source_channel" CHECK (source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
+  CONSTRAINT "ck_stat_disc_svc_reviews__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
+  CONSTRAINT "ck_stat_disc_svc_reviews__review_status" CHECK (review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED', 'REVIEW_FACTS_UNAVAILABLE')),
+  CONSTRAINT "ck_stat_disc_svc_reviews__reviewer_decision" CHECK (reviewer_decision IS NULL OR reviewer_decision IN ('APPROVE', 'REJECT')),
+  CONSTRAINT "ck_stat_disc_svc_reviews__review_completion" CHECK ((review_status = 'PENDING_REVIEW' AND reviewer_user_id IS NULL AND reviewer_decision IS NULL AND reviewed_at IS NULL) OR (review_status IN ('APPROVED', 'REJECTED') AND reviewer_user_id IS NOT NULL AND reviewer_access_evaluation_id IS NOT NULL AND reviewer_decision IS NOT NULL AND reviewed_at IS NOT NULL) OR review_status = 'REVIEW_FACTS_UNAVAILABLE'),
+  CONSTRAINT "ck_stat_disc_svc_reviews__evidence_json" CHECK (jsonb_typeof(evidence_references) = 'array')
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__pending_queue.sql
+-- ============================================================================
+-- Create index
+CREATE INDEX "ix_stat_disc_svc_reviews__pending_queue" ON "operator_console"."statutory_discount_service_channel_reviews" ("review_status", "site_id", "submitted_at", "statutory_discount_decision_command_id") WHERE review_status = 'PENDING_REVIEW';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__source_status.sql
+-- ============================================================================
+-- Create index
+CREATE INDEX "ix_stat_disc_svc_reviews__source_status" ON "operator_console"."statutory_discount_service_channel_reviews" ("source_channel", "review_status", "submitted_at");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/indexes/operator_console.ux_stat_disc_svc_reviews__validation.sql
+-- ============================================================================
+-- Create index
+CREATE UNIQUE INDEX "ux_stat_disc_svc_reviews__validation" ON "operator_console"."statutory_discount_service_channel_reviews" ("statutory_discount_validation_id") WHERE statutory_discount_validation_id IS NOT NULL;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__decision_validation.sql
+-- ============================================================================
+-- Create index
+CREATE INDEX "ix_stat_disc_svc_reviews__decision_validation" ON "operator_console"."statutory_discount_service_channel_reviews" ("statutory_discount_decision_command_id", "statutory_discount_validation_id") WHERE statutory_discount_validation_id IS NOT NULL;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.comments.sql
+-- ============================================================================
+-- Set comment to table: "statutory_discount_service_channel_reviews"
+COMMENT ON TABLE "operator_console"."statutory_discount_service_channel_reviews" IS 'Safe Operator Console review linkage/read model for service-channel statutory-discount decisions. It stores masked/reference-only submitted facts and reviewer attribution; the canonical decision table remains authoritative.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_decision_command_id" IS 'Canonical decision command reviewed by Operator Console; this primary key is not a second decision authority.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."source_channel" IS 'Original service-channel attribution for WEBPAY or ASSISTED_PAYMENT_TERMINAL intake.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."evidence_references" IS 'Reference-only evidence metadata. Raw images, Base64 evidence, raw bytes, and full statutory ID values are prohibited.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_validation_id" IS 'Approved discounts.statutory_discount_validations row created during actual Operator Console review completion. Null while awaiting review or rejected.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."review_status" IS 'Operator Console review lifecycle for service-channel-originated canonical decisions.';;
 
 
 -- ============================================================================

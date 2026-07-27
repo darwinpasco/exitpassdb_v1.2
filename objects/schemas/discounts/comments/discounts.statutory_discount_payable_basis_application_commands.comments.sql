@@ -1,0 +1,2 @@
+-- Set comment to table: "statutory_discount_payable_basis_application_commands"
+COMMENT ON TABLE "discounts"."statutory_discount_payable_basis_application_commands" IS 'Canonical Central PMS staged command store for statutory-discount payable-basis application-v1. One application command is permitted per canonical decision; application is distinct from decision approval, payment finality, fiscal issuance, ExitAuthorization, and gate action.';;

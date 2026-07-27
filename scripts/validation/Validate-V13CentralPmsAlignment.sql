@@ -1,4 +1,4 @@
-﻿-- ExitPass v1.3 Central PMS DB alignment validation.
+-- ExitPass v1.3 Central PMS DB alignment validation.
 -- Run after applying migrations and, for RBAC/UAT checks, after applying the v1.3 UAT seed script.
 
 DO $$
@@ -477,6 +477,35 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'ux_tariff_snapshots__statutory_discount_validation_applied') THEN missing := array_append(missing, 'ux_tariff_snapshots__statutory_discount_validation_applied'); END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'ux_fiscal_issuance_references__active_idempotency_scope') THEN missing := array_append(missing, 'ux_fiscal_issuance_references__active_idempotency_scope'); END IF;
 
+    IF to_regclass('discounts.statutory_discount_decision_commands') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_decision_commands'); END IF;
+    IF to_regclass('discounts.statutory_discount_payable_basis_application_commands') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_payable_basis_application_commands'); END IF;
+    IF to_regclass('operator_console.statutory_discount_service_channel_reviews') IS NULL THEN missing := array_append(missing, 'operator_console.statutory_discount_service_channel_reviews'); END IF;
+
+    IF to_regclass('discounts.statutory_discount_decision_commands') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'discounts' AND table_name = 'statutory_discount_decision_commands' AND column_name = 'business_identity') THEN missing := array_append(missing, 'decision command business_identity'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'discounts' AND table_name = 'statutory_discount_decision_commands' AND column_name = 'decision_result_status') THEN missing := array_append(missing, 'decision command decision_result_status'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_decision_commands' AND con.conname = 'ck_statutory_discount_decision_commands__command_status' AND pg_get_constraintdef(con.oid) LIKE '%AWAITING_REVIEW%') THEN missing := array_append(missing, 'decision command AWAITING_REVIEW constraint'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_decision_commands' AND con.conname = 'ck_statutory_discount_decision_commands__decision_result_status' AND pg_get_constraintdef(con.oid) LIKE '%NOT_DECIDED%') THEN missing := array_append(missing, 'decision command NOT_DECIDED constraint'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_decision_commands' AND con.conname = 'ck_statutory_discount_decision_commands__semantic_version' AND pg_get_constraintdef(con.oid) LIKE '%statutory-discount-decision:sha256:v1%' AND pg_get_constraintdef(con.oid) LIKE '%statutory-discount-decision:sha256:v2%') THEN missing := array_append(missing, 'decision command v1/v2 semantic source constraint'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ux_statutory_discount_decision_commands__business_identity_text') THEN missing := array_append(missing, 'ux_statutory_discount_decision_commands__business_identity_text'); END IF;
+    END IF;
+
+    IF to_regclass('discounts.statutory_discount_payable_basis_application_commands') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_payable_basis_application_commands' AND con.conname = 'ck_stat_discount_pba_commands__semantic_version' AND pg_get_constraintdef(con.oid) LIKE '%statutory-discount-payable-basis-application:sha256:v1%') THEN missing := array_append(missing, 'application command v1 semantic source constraint'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ux_stat_discount_pba_commands__decision_command') THEN missing := array_append(missing, 'ux_stat_discount_pba_commands__decision_command'); END IF;
+    END IF;
+
+    IF to_regclass('operator_console.statutory_discount_service_channel_reviews') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'operator_console' AND table_name = 'statutory_discount_service_channel_reviews' AND column_name = 'statutory_discount_validation_id') THEN missing := array_append(missing, 'service-channel review statutory_discount_validation_id'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'operator_console' AND cls.relname = 'statutory_discount_service_channel_reviews' AND con.conname = 'fk_stat_disc_svc_reviews__validation' AND con.contype = 'f') THEN missing := array_append(missing, 'fk_stat_disc_svc_reviews__validation'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'operator_console' AND indexname = 'ux_stat_disc_svc_reviews__validation') THEN missing := array_append(missing, 'ux_stat_disc_svc_reviews__validation'); END IF;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE (table_schema, table_name) IN (('discounts','statutory_discount_validations'), ('operator_console','statutory_discount_service_channel_reviews'))
+          AND (lower(column_name) LIKE '%base64%' OR lower(column_name) LIKE '%full_id%' OR lower(column_name) LIKE '%image_bytes%' OR lower(column_name) LIKE '%raw_evidence%')
+    ) THEN missing := array_append(missing, 'statutory discount unsafe raw evidence/full-ID style column'); END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'pos') THEN
         SELECT count(*) INTO unexpected_pos_objects FROM information_schema.tables WHERE table_schema = 'pos';
         missing := array_append(missing, 'unexpected POS Server-owned pos.* objects: ' || unexpected_pos_objects::text);
@@ -488,4 +517,3 @@ BEGIN
 END $$;
 
 SELECT 'ExitPass v1.3 Central PMS DB alignment schema validation passed.' AS validation_result;
-
