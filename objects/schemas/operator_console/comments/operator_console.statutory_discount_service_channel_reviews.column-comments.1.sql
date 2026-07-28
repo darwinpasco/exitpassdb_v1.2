@@ -1,0 +1,2 @@
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_policy_version_id" IS 'Optional immutable policy version for reviewer readback. Operator Console must not choose another policy during review.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_decision_policy_authority_id" IS 'Optional link to the frozen decision policy authority for service-channel review; prevents review from becoming a second legal authority source.';;

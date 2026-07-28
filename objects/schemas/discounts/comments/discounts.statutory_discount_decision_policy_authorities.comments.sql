@@ -1,0 +1,1 @@
+COMMENT ON TABLE "discounts"."statutory_discount_decision_policy_authorities" IS 'One-to-one frozen policy authority snapshot for a statutory discount decision. It prevents replay, review, and application from silently switching to a newer ordinance or policy version.';;

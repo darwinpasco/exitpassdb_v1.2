@@ -1,0 +1,1 @@
+COMMENT ON TABLE "sites"."jurisdictions" IS 'Canonical city or municipality jurisdiction authority for statutory parking policy resolution. Display names are descriptive only; jurisdiction_code and jurisdiction_id are the stable business references.';;

@@ -1,0 +1,1 @@
+COMMENT ON TABLE "discounts"."statutory_discount_policy_version_relationships" IS 'Canonical amendment, supersession, replacement, and related-ordinance edges between immutable statutory parking policy versions.';;

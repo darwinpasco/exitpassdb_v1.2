@@ -1,0 +1,1 @@
+COMMENT ON TABLE "discounts"."statutory_discount_policy_versions" IS 'Immutable transaction-use statutory parking local-ordinance policy authority. This table separates source verification from publication for transaction use and prevents Senior Citizen/PWD parking benefits from relying on national fallback alone.';;

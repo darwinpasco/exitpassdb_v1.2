@@ -11,6 +11,7 @@ CREATE TABLE "discounts"."statutory_discount_validations" (
   "evaluated_policy_reference_id" uuid NULL,
   "applied_policy_reference_id" uuid NULL,
   "fallback_policy_reference_id" uuid NULL,
+  "statutory_discount_policy_version_id" uuid NULL,
   "policy_resolution_basis" "discounts"."policy_resolution_basis_enum" NOT NULL,
   "local_ordinance_applied" boolean NOT NULL DEFAULT false,
   "national_law_fallback_applied" boolean NOT NULL DEFAULT false,

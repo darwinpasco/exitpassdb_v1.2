@@ -1467,6 +1467,473 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;;
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/types/sites.jurisdiction_type_enum.sql
+-- ============================================================================
+-- Create enum type "jurisdiction_type_enum"
+CREATE TYPE "sites"."jurisdiction_type_enum" AS ENUM ('CITY', 'MUNICIPALITY');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/types/sites.jurisdiction_status_enum.sql
+-- ============================================================================
+-- Create enum type "jurisdiction_status_enum"
+CREATE TYPE "sites"."jurisdiction_status_enum" AS ENUM ('ACTIVE', 'INACTIVE', 'REPLACED', 'RETIRED', 'STATUS_UNRESOLVED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/types/sites.site_jurisdiction_assignment_status_enum.sql
+-- ============================================================================
+-- Create enum type "site_jurisdiction_assignment_status_enum"
+CREATE TYPE "sites"."site_jurisdiction_assignment_status_enum" AS ENUM ('ACTIVE', 'PENDING_APPROVAL', 'SUSPENDED', 'SUPERSEDED', 'RETIRED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_policy_publication_status_enum.sql
+-- ============================================================================
+-- Create enum type "statutory_policy_publication_status_enum"
+CREATE TYPE "discounts"."statutory_policy_publication_status_enum" AS ENUM ('DRAFT', 'APPROVED_FOR_CONTROLLED_TRANSACTION_USE', 'ACTIVE_FOR_TRANSACTION_USE', 'SUSPENDED', 'WITHDRAWN', 'RETIRED', 'SUPERSEDED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.parking_service_applicability_status_enum.sql
+-- ============================================================================
+-- Create enum type "parking_service_applicability_status_enum"
+CREATE TYPE "discounts"."parking_service_applicability_status_enum" AS ENUM ('COVERED', 'EXCLUDED', 'UNRESOLVED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.policy_detail_verification_status_enum.sql
+-- ============================================================================
+-- Create enum type "policy_detail_verification_status_enum"
+CREATE TYPE "discounts"."policy_detail_verification_status_enum" AS ENUM ('VERIFIED', 'PARTIALLY_VERIFIED', 'UNVERIFIED', 'STATUS_UNRESOLVED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.policy_scope_type_enum.sql
+-- ============================================================================
+-- Create enum type "policy_scope_type_enum"
+CREATE TYPE "discounts"."policy_scope_type_enum" AS ENUM ('JURISDICTION', 'SITE_GROUP', 'SITE');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.policy_source_type_enum.sql
+-- ============================================================================
+-- Create enum type "policy_source_type_enum"
+CREATE TYPE "discounts"."policy_source_type_enum" AS ENUM ('OFFICIAL_LGU_DOCUMENT', 'OFFICIAL_LGU_CONFIRMATION', 'CONTROLLED_OFFLINE_AUTHORITY', 'SECONDARY_SOURCE', 'OPERATIONAL_OBSERVATION', 'NO_LOCAL_RULE_RECORD', 'STATUS_UNRESOLVED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.policy_relationship_type_enum.sql
+-- ============================================================================
+-- Create enum type "policy_relationship_type_enum"
+CREATE TYPE "discounts"."policy_relationship_type_enum" AS ENUM ('AMENDS', 'AMENDED_BY', 'SUPERSEDES', 'SUPERSEDED_BY', 'REPLACES', 'CLARIFIES', 'RELATED_ORDINANCE');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.policy_effect_support_status_enum.sql
+-- ============================================================================
+-- Create enum type "policy_effect_support_status_enum"
+CREATE TYPE "discounts"."policy_effect_support_status_enum" AS ENUM ('SUPPORTED_BY_CURRENT_CALCULATION', 'SUPPORTED_BY_FUTURE_ENGINE', 'NOT_SUPPORTED', 'UNRESOLVED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.policy_requirement_status_enum.sql
+-- ============================================================================
+-- Create enum type "policy_requirement_status_enum"
+CREATE TYPE "discounts"."policy_requirement_status_enum" AS ENUM ('REQUIRED', 'OPTIONAL', 'NOT_REQUIRED', 'UNRESOLVED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.jurisdictions.sql
+-- ============================================================================
+-- Create "jurisdictions" table
+CREATE TABLE "sites"."jurisdictions" (
+  "jurisdiction_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "jurisdiction_code" character varying(64) NOT NULL,
+  "jurisdiction_type" "sites"."jurisdiction_type_enum" NOT NULL,
+  "display_name" character varying(160) NOT NULL,
+  "province_name" character varying(128) NULL,
+  "region_name" character varying(128) NULL,
+  "country_code" character(2) NOT NULL DEFAULT 'PH',
+  "psgc_code" character varying(16) NULL,
+  "jurisdiction_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NULL,
+  "effective_to" timestamptz NULL,
+  "replaced_by_jurisdiction_id" uuid NULL,
+  "source_reference" character varying(256) NULL,
+  "source_provenance" text NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_jurisdictions" PRIMARY KEY ("jurisdiction_id"),
+  CONSTRAINT "uq_jurisdictions__code" UNIQUE ("jurisdiction_code"),
+  CONSTRAINT "uq_jurisdictions__psgc_code" UNIQUE ("psgc_code"),
+  CONSTRAINT "fk_jurisdictions__replaced_by" FOREIGN KEY ("replaced_by_jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "ck_jurisdictions__code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
+  CONSTRAINT "ck_jurisdictions__display_name" CHECK (btrim((display_name)::text) <> ''::text),
+  CONSTRAINT "ck_jurisdictions__country_code" CHECK (country_code = upper(country_code)),
+  CONSTRAINT "ck_jurisdictions__effective_window" CHECK ((effective_to IS NULL) OR (effective_from IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_jurisdictions__no_self_replacement" CHECK ((replaced_by_jurisdiction_id IS NULL) OR (replaced_by_jurisdiction_id <> jurisdiction_id)),
+  CONSTRAINT "ck_jurisdictions__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_jurisdictions__status.sql
+-- ============================================================================
+-- Create index "ix_jurisdictions__status"
+CREATE INDEX "ix_jurisdictions__status" ON "sites"."jurisdictions" ("jurisdiction_status", "jurisdiction_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.jurisdictions.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."jurisdictions" IS 'Canonical city or municipality jurisdiction authority for statutory parking policy resolution. Display names are descriptive only; jurisdiction_code and jurisdiction_id are the stable business references.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.jurisdictions.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_id" IS 'Stable canonical jurisdiction identifier for city or municipality policy authority.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_code" IS 'Canonical jurisdiction code. This is not a display name and may be mapped to PSGC when available.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_type" IS 'City or municipality classification for current parking-policy scope.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."psgc_code" IS 'Official PSGC or equivalent code when available; null means not yet assigned, not that no jurisdiction exists.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."replaced_by_jurisdiction_id" IS 'Historical correction or replacement pointer. Runtime must not rewrite past transaction authority when this value changes.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.site_jurisdiction_assignments.sql
+-- ============================================================================
+-- Create "site_jurisdiction_assignments" table
+CREATE TABLE "sites"."site_jurisdiction_assignments" (
+  "site_jurisdiction_assignment_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "site_id" uuid NOT NULL,
+  "jurisdiction_id" uuid NOT NULL,
+  "assignment_status" "sites"."site_jurisdiction_assignment_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "source_reference" character varying(256) NULL,
+  "approval_reference" character varying(256) NULL,
+  "correction_reason" character varying(256) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_site_jurisdiction_assignments" PRIMARY KEY ("site_jurisdiction_assignment_id"),
+  CONSTRAINT "fk_site_jurisdiction_assignments__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_site_jurisdiction_assignments__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "ck_site_jurisdiction_assignments__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_site_jurisdiction_assignments__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_site_jurisdiction_assignments__site_effective.sql
+-- ============================================================================
+-- Create index "ix_site_jurisdiction_assignments__site_effective"
+CREATE INDEX "ix_site_jurisdiction_assignments__site_effective" ON "sites"."site_jurisdiction_assignments" ("site_id", "assignment_status", "effective_from", "effective_to");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ux_site_jurisdiction_assignments__one_open_active.sql
+-- ============================================================================
+-- Create unique index "ux_site_jurisdiction_assignments__one_open_active"
+CREATE UNIQUE INDEX "ux_site_jurisdiction_assignments__one_open_active" ON "sites"."site_jurisdiction_assignments" ("site_id") WHERE ((assignment_status = 'ACTIVE'::sites.site_jurisdiction_assignment_status_enum) AND (effective_to IS NULL));;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.site_jurisdiction_assignments.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."site_jurisdiction_assignments" IS 'Effective-dated Site to city/municipality assignment used by Central PMS statutory parking eligibility. A Site must not resolve to multiple active jurisdictions for one transaction instant.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.site_jurisdiction_assignments.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "sites"."site_jurisdiction_assignments"."site_id" IS 'Authoritative Site whose parking sessions resolve to this jurisdiction assignment.';;
+COMMENT ON COLUMN "sites"."site_jurisdiction_assignments"."jurisdiction_id" IS 'Canonical city or municipality assigned to the Site for the effective window.';;
+COMMENT ON COLUMN "sites"."site_jurisdiction_assignments"."effective_from" IS 'Start of assignment authority. Future transactions use this; historical transactions keep the authority frozen on their decision.';;
+COMMENT ON COLUMN "sites"."site_jurisdiction_assignments"."effective_to" IS 'End of assignment authority. Null means currently open-ended, not permanent legal certainty.';;
+COMMENT ON COLUMN "sites"."site_jurisdiction_assignments"."source_reference" IS 'Safe controlled source or approval reference for the assignment; no raw evidence or secrets.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_policy_versions.sql
+-- ============================================================================
+-- Create "statutory_discount_policy_versions" table
+CREATE TABLE "discounts"."statutory_discount_policy_versions" (
+  "statutory_discount_policy_version_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_policy_registry_id" uuid NOT NULL,
+  "policy_code" character varying(128) NOT NULL,
+  "policy_version" character varying(64) NOT NULL,
+  "policy_version_label" character varying(160) NULL,
+  "entitlement_type" "discounts"."statutory_entitlement_type_enum" NOT NULL,
+  "jurisdiction_id" uuid NOT NULL,
+  "jurisdiction_code" character varying(64) NOT NULL,
+  "jurisdiction_display_name" character varying(160) NOT NULL,
+  "policy_scope_type" "discounts"."policy_scope_type_enum" NOT NULL,
+  "site_group_id" uuid NULL,
+  "site_id" uuid NULL,
+  "policy_level" "discounts"."discount_policy_level_enum" NOT NULL,
+  "policy_type" "discounts"."discount_policy_type_enum" NOT NULL,
+  "policy_resolution_basis" "discounts"."policy_resolution_basis_enum" NOT NULL DEFAULT 'LOCAL_ORDINANCE_APPLIED',
+  "source_verification_status" "discounts"."policy_verification_status_enum" NOT NULL,
+  "transaction_publication_status" "discounts"."statutory_policy_publication_status_enum" NOT NULL DEFAULT 'DRAFT',
+  "detailed_rule_verification_status" "discounts"."policy_detail_verification_status_enum" NOT NULL DEFAULT 'STATUS_UNRESOLVED',
+  "parking_service_applicability" "discounts"."parking_service_applicability_status_enum" NOT NULL DEFAULT 'UNRESOLVED',
+  "benefit_type" "discounts"."parking_benefit_type_enum" NOT NULL,
+  "policy_effect_support_status" "discounts"."policy_effect_support_status_enum" NOT NULL DEFAULT 'UNRESOLVED',
+  "discount_base_scope" "discounts"."discount_base_scope_enum" NOT NULL,
+  "beneficiary_residency_scope" "discounts"."beneficiary_residency_scope_enum" NOT NULL,
+  "official_source_identified" boolean NULL,
+  "official_source_available" boolean NULL,
+  "ordinance_text_available" boolean NULL,
+  "ordinance_number_available" boolean NULL,
+  "ordinance_title_available" boolean NULL,
+  "ordinance_number" character varying(128) NULL,
+  "ordinance_title" character varying(256) NULL,
+  "legal_basis_reference" character varying(256) NULL,
+  "source_type" "discounts"."policy_source_type_enum" NOT NULL DEFAULT 'STATUS_UNRESOLVED',
+  "source_reference" text NOT NULL,
+  "source_document_reference" character varying(512) NULL,
+  "source_document_hash" character varying(128) NULL,
+  "source_retrieved_at" timestamptz NULL,
+  "source_verified_at" timestamptz NULL,
+  "unresolved_policy_facts" text NULL,
+  "safe_channel_summary" text NULL,
+  "safe_reviewer_guidance" text NULL,
+  "facility_scope" text NULL,
+  "standalone_parking_excluded" boolean NULL,
+  "valet_excluded" boolean NULL,
+  "overnight_excluded" boolean NULL,
+  "driver_or_passenger_required" boolean NULL,
+  "discount_percentage_basis_points" integer NULL,
+  "free_duration_minutes" integer NULL,
+  "cap_amount_minor_units" bigint NULL,
+  "cap_currency_code" character(3) NULL,
+  "full_fee_exempt" boolean NULL,
+  "initial_rate_exempt" boolean NULL,
+  "enactment_date" date NULL,
+  "legal_effective_from" timestamptz NULL,
+  "legal_effective_to" timestamptz NULL,
+  "operational_confirmed_at" timestamptz NULL,
+  "transaction_use_effective_from" timestamptz NULL,
+  "transaction_use_effective_to" timestamptz NULL,
+  "suspension_starts_at" timestamptz NULL,
+  "suspension_ends_at" timestamptz NULL,
+  "withdrawn_at" timestamptz NULL,
+  "retired_at" timestamptz NULL,
+  "supersedes_policy_version_id" uuid NULL,
+  "superseded_by_policy_version_id" uuid NULL,
+  "precedence_rank" integer NOT NULL DEFAULT 1000,
+  "conflict_group_key" character varying(160) NULL,
+  "policy_semantic_hash" character varying(80) NOT NULL,
+  "policy_semantic_hash_source_version" character varying(80) NOT NULL DEFAULT 'statutory-parking-policy-authority:sha256:v1',
+  "reviewed_by_user_id" uuid NULL,
+  "reviewed_by" character varying(128) NULL,
+  "reviewed_at" timestamptz NULL,
+  "approved_by_user_id" uuid NULL,
+  "approved_by" character varying(128) NULL,
+  "approved_at" timestamptz NULL,
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_discount_policy_versions" PRIMARY KEY ("statutory_discount_policy_version_id"),
+  CONSTRAINT "uq_sd_policy_versions__code_version" UNIQUE ("policy_code", "policy_version"),
+  CONSTRAINT "fk_sd_policy_versions__registry" FOREIGN KEY ("statutory_discount_policy_registry_id") REFERENCES "discounts"."statutory_discount_policy_registry" ("statutory_discount_policy_registry_id"),
+  CONSTRAINT "fk_sd_policy_versions__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "fk_sd_policy_versions__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "fk_sd_policy_versions__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_sd_policy_versions__supersedes" FOREIGN KEY ("supersedes_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_sd_policy_versions__superseded_by" FOREIGN KEY ("superseded_by_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "ck_sd_policy_versions__policy_code_format" CHECK (((policy_code)::text = upper((policy_code)::text) AND ((policy_code)::text ~ '^[A-Z0-9][A-Z0-9_]{2,127}$'::text))),
+  CONSTRAINT "ck_sd_policy_versions__jurisdiction_code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
+  CONSTRAINT "ck_sd_policy_versions__source_reference_required" CHECK (btrim(source_reference) <> ''::text),
+  CONSTRAINT "ck_sd_policy_versions__hash" CHECK ((policy_semantic_hash)::text ~ '^sha256:[0-9a-f]{64}$'::text),
+  CONSTRAINT "ck_sd_policy_versions__hash_version" CHECK ((policy_semantic_hash_source_version)::text = 'statutory-parking-policy-authority:sha256:v1'::text),
+  CONSTRAINT "ck_sd_policy_versions__scope" CHECK (((policy_scope_type = 'JURISDICTION'::discounts.policy_scope_type_enum AND site_group_id IS NULL AND site_id IS NULL) OR (policy_scope_type = 'SITE_GROUP'::discounts.policy_scope_type_enum AND site_group_id IS NOT NULL AND site_id IS NULL) OR (policy_scope_type = 'SITE'::discounts.policy_scope_type_enum AND site_id IS NOT NULL))),
+  CONSTRAINT "ck_sd_policy_versions__local_resolution" CHECK ((policy_level = 'LOCAL_ORDINANCE'::discounts.discount_policy_level_enum) AND (policy_resolution_basis = 'LOCAL_ORDINANCE_APPLIED'::discounts.policy_resolution_basis_enum)),
+  CONSTRAINT "ck_sd_policy_versions__transaction_active_verification" CHECK ((transaction_publication_status <> 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum) OR (source_verification_status = ANY (ARRAY['VERIFIED_OFFICIAL'::discounts.policy_verification_status_enum, 'VERIFIED_ACTIVE_OPERATIONAL'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum]))),
+  CONSTRAINT "ck_sd_policy_versions__proposed_unverified_not_active" CHECK ((transaction_publication_status <> 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum) OR (source_verification_status <> ALL (ARRAY['LEAD_UNVERIFIED'::discounts.policy_verification_status_enum, 'VERIFIED_SECONDARY'::discounts.policy_verification_status_enum, 'PROPOSED_ONLY'::discounts.policy_verification_status_enum, 'PROPOSED'::discounts.policy_verification_status_enum, 'NO_LOCAL_RULE_FOUND'::discounts.policy_verification_status_enum, 'STATUS_UNRESOLVED'::discounts.policy_verification_status_enum, 'REJECTED'::discounts.policy_verification_status_enum]))),
+  CONSTRAINT "ck_sd_policy_versions__active_parking_covered" CHECK ((transaction_publication_status <> 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum) OR (parking_service_applicability = 'COVERED'::discounts.parking_service_applicability_status_enum)),
+  CONSTRAINT "ck_sd_policy_versions__active_approved" CHECK ((transaction_publication_status <> 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum) OR (approved_at IS NOT NULL AND (approved_by_user_id IS NOT NULL OR btrim(COALESCE(approved_by, ''::character varying)::text) <> ''::text))),
+  CONSTRAINT "ck_sd_policy_versions__transaction_window" CHECK ((transaction_use_effective_to IS NULL) OR (transaction_use_effective_from IS NULL) OR (transaction_use_effective_to > transaction_use_effective_from)),
+  CONSTRAINT "ck_sd_policy_versions__legal_window" CHECK ((legal_effective_to IS NULL) OR (legal_effective_from IS NULL) OR (legal_effective_to > legal_effective_from)),
+  CONSTRAINT "ck_sd_policy_versions__suspension_window" CHECK ((suspension_ends_at IS NULL) OR (suspension_starts_at IS NULL) OR (suspension_ends_at > suspension_starts_at)),
+  CONSTRAINT "ck_sd_policy_versions__suspended_status" CHECK ((transaction_publication_status <> 'SUSPENDED'::discounts.statutory_policy_publication_status_enum) OR (suspension_starts_at IS NOT NULL)),
+  CONSTRAINT "ck_sd_policy_versions__withdrawn_status" CHECK ((transaction_publication_status <> 'WITHDRAWN'::discounts.statutory_policy_publication_status_enum) OR (withdrawn_at IS NOT NULL)),
+  CONSTRAINT "ck_sd_policy_versions__retired_status" CHECK ((transaction_publication_status <> 'RETIRED'::discounts.statutory_policy_publication_status_enum) OR (retired_at IS NOT NULL)),
+  CONSTRAINT "ck_sd_policy_versions__superseded_status" CHECK ((transaction_publication_status <> 'SUPERSEDED'::discounts.statutory_policy_publication_status_enum) OR (superseded_by_policy_version_id IS NOT NULL)),
+  CONSTRAINT "ck_sd_policy_versions__no_self_supersession" CHECK ((supersedes_policy_version_id IS NULL OR supersedes_policy_version_id <> statutory_discount_policy_version_id) AND (superseded_by_policy_version_id IS NULL OR superseded_by_policy_version_id <> statutory_discount_policy_version_id)),
+  CONSTRAINT "ck_sd_policy_versions__percentage_range" CHECK ((discount_percentage_basis_points IS NULL) OR (discount_percentage_basis_points BETWEEN 0 AND 10000)),
+  CONSTRAINT "ck_sd_policy_versions__free_duration_non_negative" CHECK ((free_duration_minutes IS NULL) OR (free_duration_minutes >= 0)),
+  CONSTRAINT "ck_sd_policy_versions__cap_non_negative" CHECK ((cap_amount_minor_units IS NULL) OR (cap_amount_minor_units >= 0)),
+  CONSTRAINT "ck_sd_policy_versions__cap_currency" CHECK ((cap_amount_minor_units IS NULL) OR (cap_currency_code IS NOT NULL)),
+  CONSTRAINT "ck_sd_policy_versions__full_fee_flag" CHECK ((benefit_type <> 'FULL_FEE_EXEMPTION'::discounts.parking_benefit_type_enum) OR (full_fee_exempt IS NULL OR full_fee_exempt = true)),
+  CONSTRAINT "ck_sd_policy_versions__unknown_not_zero" CHECK ((free_duration_minutes IS NULL OR free_duration_minutes > 0) AND (cap_amount_minor_units IS NULL OR cap_amount_minor_units > 0)),
+  CONSTRAINT "ck_sd_policy_versions__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_versions__active_lookup.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_versions__active_lookup"
+CREATE INDEX "ix_sd_policy_versions__active_lookup" ON "discounts"."statutory_discount_policy_versions" ("entitlement_type", "jurisdiction_id", "policy_scope_type", "site_group_id", "site_id", "transaction_publication_status", "parking_service_applicability", "transaction_use_effective_from", "transaction_use_effective_to");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_versions__jurisdiction.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_versions__jurisdiction"
+CREATE INDEX "ix_sd_policy_versions__jurisdiction" ON "discounts"."statutory_discount_policy_versions" ("jurisdiction_id", "jurisdiction_code");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_versions__publication.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_versions__publication"
+CREATE INDEX "ix_sd_policy_versions__publication" ON "discounts"."statutory_discount_policy_versions" ("transaction_publication_status", "source_verification_status", "parking_service_applicability");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_versions__supersession.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_versions__supersession"
+CREATE INDEX "ix_sd_policy_versions__supersession" ON "discounts"."statutory_discount_policy_versions" ("supersedes_policy_version_id", "superseded_by_policy_version_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_versions__semantic_hash.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_versions__semantic_hash"
+CREATE INDEX "ix_sd_policy_versions__semantic_hash" ON "discounts"."statutory_discount_policy_versions" ("policy_semantic_hash");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_policy_versions.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "discounts"."statutory_discount_policy_versions" IS 'Immutable transaction-use statutory parking local-ordinance policy authority. This table separates source verification from publication for transaction use and prevents Senior Citizen/PWD parking benefits from relying on national fallback alone.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_policy_versions.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."statutory_discount_policy_version_id" IS 'Immutable policy version identifier to freeze legal authority on future decisions.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."source_verification_status" IS 'Source/legal verification classification. VERIFIED_ACTIVE_OPERATIONAL may represent confirmed active practice even when online ordinance text or number is unavailable.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."transaction_publication_status" IS 'Controlled transaction-use publication status. Verification alone never makes a policy usable for live benefit decisions.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."parking_service_applicability" IS 'Explicit parking-service applicability. Runtime must fail closed when this is EXCLUDED or UNRESOLVED.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."benefit_type" IS 'Parking benefit classification, such as full fee exemption or free duration. Free parking is not a 20 percent Senior/PWD formula.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."policy_effect_support_status" IS 'Whether the policy effect is supported by current calculation/application logic. Unsupported effects must not be applied as a distorted discount.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."beneficiary_residency_scope" IS 'Resident-only, non-resident, mixed, or unresolved eligibility scope. Residency evidence is separate from ID evidence.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."official_source_available" IS 'Whether an official source is available to the controlled publisher. False does not mean the benefit does not exist.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_text_available" IS 'Whether governing ordinance text is available. ParaÃ±aque verified active operational policy can be represented with this false.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_number_available" IS 'Whether the ordinance number is available. Unknown numbers remain null and must not be fabricated.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."unresolved_policy_facts" IS 'Safe notes for unknown legal facts; never raw ID evidence, images, credentials, or unpublished legal notes.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."transaction_use_effective_from" IS 'Controlled publication effective instant for transaction use. This is distinct from unknown legal enactment dates.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."policy_semantic_hash" IS 'Privacy-safe semantic hash over legally material policy authority facts for replay and drift detection.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_policy_version_evidence_requirements.sql
+-- ============================================================================
+-- Create "statutory_discount_policy_version_evidence_requirements" table
+CREATE TABLE "discounts"."statutory_discount_policy_version_evidence_requirements" (
+  "statutory_discount_policy_version_evidence_requirement_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_policy_version_id" uuid NOT NULL,
+  "evidence_type" "discounts"."discount_evidence_type_enum" NOT NULL,
+  "requirement_status" "discounts"."policy_requirement_status_enum" NOT NULL DEFAULT 'REQUIRED',
+  "safe_requirement_label" character varying(160) NOT NULL,
+  "safe_requirement_notes" character varying(512) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  CONSTRAINT "pk_sd_policy_version_evidence_requirements" PRIMARY KEY ("statutory_discount_policy_version_evidence_requirement_id"),
+  CONSTRAINT "fk_sd_policy_version_evidence_requirements__version" FOREIGN KEY ("statutory_discount_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "uq_sd_policy_version_evidence_requirements__type" UNIQUE ("statutory_discount_policy_version_id", "evidence_type"),
+  CONSTRAINT "ck_sd_policy_version_evidence_requirements__label" CHECK (btrim((safe_requirement_label)::text) <> ''::text)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_version_evidence__version.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_version_evidence__version"
+CREATE INDEX "ix_sd_policy_version_evidence__version" ON "discounts"."statutory_discount_policy_version_evidence_requirements" ("statutory_discount_policy_version_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_policy_version_evidence_requirements.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "discounts"."statutory_discount_policy_version_evidence_requirements" IS 'Normalized safe evidence requirements for a policy version. It stores required evidence types only, never raw evidence, images, or full statutory ID values.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_policy_version_relationships.sql
+-- ============================================================================
+-- Create "statutory_discount_policy_version_relationships" table
+CREATE TABLE "discounts"."statutory_discount_policy_version_relationships" (
+  "statutory_discount_policy_version_relationship_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "source_policy_version_id" uuid NOT NULL,
+  "target_policy_version_id" uuid NOT NULL,
+  "relationship_type" "discounts"."policy_relationship_type_enum" NOT NULL,
+  "effective_from" timestamptz NULL,
+  "effective_to" timestamptz NULL,
+  "source_reference" character varying(256) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  CONSTRAINT "pk_sd_policy_version_relationships" PRIMARY KEY ("statutory_discount_policy_version_relationship_id"),
+  CONSTRAINT "fk_sd_policy_version_relationships__source" FOREIGN KEY ("source_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_sd_policy_version_relationships__target" FOREIGN KEY ("target_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "uq_sd_policy_version_relationships__edge" UNIQUE ("source_policy_version_id", "target_policy_version_id", "relationship_type"),
+  CONSTRAINT "ck_sd_policy_version_relationships__no_self" CHECK (source_policy_version_id <> target_policy_version_id),
+  CONSTRAINT "ck_sd_policy_version_relationships__effective_window" CHECK ((effective_to IS NULL) OR (effective_from IS NULL) OR (effective_to > effective_from))
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_version_relationships__target.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_version_relationships__target"
+CREATE INDEX "ix_sd_policy_version_relationships__target" ON "discounts"."statutory_discount_policy_version_relationships" ("target_policy_version_id", "relationship_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_policy_version_relationships.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "discounts"."statutory_discount_policy_version_relationships" IS 'Canonical amendment, supersession, replacement, and related-ordinance edges between immutable statutory parking policy versions.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/constraints/discounts.fk_statutory_discount_validations__policy_version.sql
+-- ============================================================================
+-- Add foreign key "fk_statutory_discount_validations__policy_version"
+ALTER TABLE "discounts"."statutory_discount_validations"
+  ADD CONSTRAINT "fk_statutory_discount_validations__policy_version"
+  FOREIGN KEY ("statutory_discount_policy_version_id")
+  REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id");;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/operator_console/tables/operator_console.hr_identity_mappings.sql
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS operator_console.hr_identity_mappings (
@@ -2767,6 +3234,82 @@ COMMENT ON COLUMN "discounts"."statutory_discount_decision_commands"."statutory_
 
 
 -- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_decision_policy_authorities.sql
+-- ============================================================================
+-- Create "statutory_discount_decision_policy_authorities" table
+CREATE TABLE "discounts"."statutory_discount_decision_policy_authorities" (
+  "statutory_discount_decision_command_id" uuid NOT NULL,
+  "statutory_discount_policy_version_id" uuid NOT NULL,
+  "jurisdiction_id" uuid NOT NULL,
+  "jurisdiction_code" character varying(64) NOT NULL,
+  "jurisdiction_display_name" character varying(160) NOT NULL,
+  "policy_code" character varying(128) NOT NULL,
+  "policy_version" character varying(64) NOT NULL,
+  "entitlement_type" character varying(64) NOT NULL,
+  "source_verification_status" "discounts"."policy_verification_status_enum" NOT NULL,
+  "transaction_publication_status" "discounts"."statutory_policy_publication_status_enum" NOT NULL,
+  "detailed_rule_verification_status" "discounts"."policy_detail_verification_status_enum" NOT NULL,
+  "parking_service_applicability" "discounts"."parking_service_applicability_status_enum" NOT NULL,
+  "benefit_type" "discounts"."parking_benefit_type_enum" NOT NULL,
+  "beneficiary_residency_scope" "discounts"."beneficiary_residency_scope_enum" NOT NULL,
+  "official_source_available" boolean NULL,
+  "ordinance_text_available" boolean NULL,
+  "ordinance_number_available" boolean NULL,
+  "ordinance_number" character varying(128) NULL,
+  "ordinance_title" character varying(256) NULL,
+  "legal_basis_reference" character varying(256) NULL,
+  "source_reference" text NOT NULL,
+  "transaction_use_effective_from" timestamptz NULL,
+  "transaction_use_effective_to" timestamptz NULL,
+  "resolved_at" timestamptz NOT NULL DEFAULT now(),
+  "policy_authority_semantic_hash" character varying(80) NOT NULL,
+  "policy_authority_semantic_hash_source_version" character varying(80) NOT NULL DEFAULT 'statutory-decision-policy-authority:sha256:v1',
+  "correlation_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_statutory_discount_decision_policy_authorities" PRIMARY KEY ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_sd_decision_policy_authorities__decision" FOREIGN KEY ("statutory_discount_decision_command_id") REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_sd_decision_policy_authorities__policy_version" FOREIGN KEY ("statutory_discount_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_sd_decision_policy_authorities__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "ck_sd_decision_policy_authorities__entitlement" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
+  CONSTRAINT "ck_sd_decision_policy_authorities__source_reference" CHECK (btrim(source_reference) <> ''::text),
+  CONSTRAINT "ck_sd_decision_policy_authorities__hash" CHECK ((policy_authority_semantic_hash)::text ~ '^sha256:[0-9a-f]{64}$'::text),
+  CONSTRAINT "ck_sd_decision_policy_authorities__hash_version" CHECK ((policy_authority_semantic_hash_source_version)::text = 'statutory-decision-policy-authority:sha256:v1'::text),
+  CONSTRAINT "ck_sd_decision_policy_authorities__active_authority" CHECK (transaction_publication_status = 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum AND parking_service_applicability = 'COVERED'::discounts.parking_service_applicability_status_enum)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_decision_policy_authorities__policy_version.sql
+-- ============================================================================
+-- Create index "ix_sd_decision_policy_authorities__policy_version"
+CREATE INDEX "ix_sd_decision_policy_authorities__policy_version" ON "discounts"."statutory_discount_decision_policy_authorities" ("statutory_discount_policy_version_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_decision_policy_authorities__jurisdiction.sql
+-- ============================================================================
+-- Create index "ix_sd_decision_policy_authorities__jurisdiction"
+CREATE INDEX "ix_sd_decision_policy_authorities__jurisdiction" ON "discounts"."statutory_discount_decision_policy_authorities" ("jurisdiction_id", "entitlement_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_decision_policy_authorities.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "discounts"."statutory_discount_decision_policy_authorities" IS 'One-to-one frozen policy authority snapshot for a statutory discount decision. It prevents replay, review, and application from silently switching to a newer ordinance or policy version.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_decision_policy_authorities.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."statutory_discount_decision_command_id" IS 'Canonical decision command owning this frozen policy authority snapshot.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."statutory_discount_policy_version_id" IS 'Immutable governing policy version resolved before decision creation.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."transaction_publication_status" IS 'Publication state at decision resolution; must be active for transaction use.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."source_reference" IS 'Safe source reference copied from the policy version. Do not store raw ordinance documents or evidence payloads here.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."policy_authority_semantic_hash" IS 'Semantic hash of the frozen authority facts used by runtime to detect policy drift and replay conflicts.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_payable_basis_application_commands.sql
 -- ============================================================================
 -- Create "statutory_discount_payable_basis_application_commands" table
@@ -2793,6 +3336,8 @@ CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands"
   "target_tariff_snapshot_id" uuid NULL,
   "applied_tariff_snapshot_id" uuid NULL,
   "applied_policy_reference_id" uuid NULL,
+  "statutory_discount_policy_version_id" uuid NULL,
+  "statutory_discount_decision_policy_authority_id" uuid NULL,
   "policy_resolution_basis" character varying(80) NULL,
   "approved_discount_amount_minor_units" bigint NOT NULL,
   "approved_vat_exclusive_amount_minor_units" bigint NULL,
@@ -2816,6 +3361,8 @@ CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands"
   CONSTRAINT "fk_stat_discount_pba_commands__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
   CONSTRAINT "fk_stat_discount_pba_commands__target_tariff_snapshot" FOREIGN KEY ("target_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
   CONSTRAINT "fk_stat_discount_pba_commands__applied_tariff_snapshot" FOREIGN KEY ("applied_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__policy_version" FOREIGN KEY ("statutory_discount_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__decision_policy_authority" FOREIGN KEY ("statutory_discount_decision_policy_authority_id") REFERENCES "discounts"."statutory_discount_decision_policy_authorities" ("statutory_discount_decision_command_id"),
   CONSTRAINT "ck_stat_discount_pba_commands__source_channel" CHECK (source_channel IN ('OPERATOR_CONSOLE', 'WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
   CONSTRAINT "ck_stat_discount_pba_commands__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
   CONSTRAINT "ck_stat_discount_pba_commands__hash" CHECK (semantic_request_hash ~ '^sha256:[0-9a-f]{64}$'),
@@ -2823,7 +3370,8 @@ CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands"
   CONSTRAINT "ck_stat_discount_pba_commands__command_status" CHECK (command_status IN ('RECEIVED', 'PROCESSING', 'APPLIED', 'FAILED_RETRYABLE', 'FAILED_NON_RETRYABLE')),
   CONSTRAINT "ck_stat_discount_pba_commands__result_classification" CHECK (result_classification IN ('APPLIED', 'IDEMPOTENT_REPLAY', 'SEMANTIC_CONFLICT', 'DECISION_NOT_APPROVED', 'DECISION_NOT_FOUND', 'IN_PROGRESS', 'RETRYABLE_FAILURE', 'NON_RETRYABLE_FAILURE')),
   CONSTRAINT "ck_stat_discount_pba_commands__recovery_classification" CHECK (recovery_classification IN ('NONE', 'AWAITING_REVIEW', 'READ_CANONICAL_RESULT', 'RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'WAIT_THEN_RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'CORRECT_REQUEST_REQUIRED', 'NOT_RECOVERABLE')),
-  CONSTRAINT "ck_stat_discount_pba_commands__amounts_non_negative" CHECK (approved_discount_amount_minor_units >= 0 AND approved_final_payable_amount_minor_units >= 0 AND (approved_vat_exclusive_amount_minor_units IS NULL OR approved_vat_exclusive_amount_minor_units >= 0) AND (approved_vat_amount_minor_units IS NULL OR approved_vat_amount_minor_units >= 0))
+  CONSTRAINT "ck_stat_discount_pba_commands__amounts_non_negative" CHECK (approved_discount_amount_minor_units >= 0 AND approved_final_payable_amount_minor_units >= 0 AND (approved_vat_exclusive_amount_minor_units IS NULL OR approved_vat_exclusive_amount_minor_units >= 0) AND (approved_vat_amount_minor_units IS NULL OR approved_vat_amount_minor_units >= 0)),
+  CONSTRAINT "ck_stat_discount_pba_commands__policy_authority_matches_decision" CHECK ((statutory_discount_decision_policy_authority_id IS NULL) OR (statutory_discount_decision_policy_authority_id = statutory_discount_decision_command_id))
 );;
 
 
@@ -2877,6 +3425,13 @@ CREATE INDEX "ix_stat_discount_pba_commands__correlation" ON "discounts"."statut
 
 
 -- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_stat_discount_pba_commands__policy_authority.sql
+-- ============================================================================
+-- Create index "ix_stat_discount_pba_commands__policy_authority"
+CREATE INDEX "ix_stat_discount_pba_commands__policy_authority" ON "discounts"."statutory_discount_payable_basis_application_commands" ("statutory_discount_decision_policy_authority_id") WHERE statutory_discount_decision_policy_authority_id IS NOT NULL;;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.comments.sql
 -- ============================================================================
 -- Set comment to table: "statutory_discount_payable_basis_application_commands"
@@ -2890,6 +3445,13 @@ COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_comm
 COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."semantic_hash_source_version" IS 'Semantic source version for application-v1 privacy-safe payable-basis application facts.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_payable_basis_application_id" IS 'Link to the legacy payable-basis mutation record after durable application succeeds.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."applied_tariff_snapshot_id" IS 'Applied tariff snapshot selected or created by the authoritative payable-basis writer; callers must not supply this as authority.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_payable_basis_application_commands.column-comments.1.sql
+-- ============================================================================
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_policy_version_id" IS 'Optional immutable policy version consumed from the approved decision authority; application must not resolve a newer ordinance independently.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_decision_policy_authority_id" IS 'Optional link to the decision policy-authority snapshot. When present it must equal the decision command ID.';;
 
 
 -- ============================================================================
@@ -3776,6 +4338,8 @@ CREATE TABLE "operator_console"."statutory_discount_service_channel_reviews" (
   "reviewer_decision" character varying(16) NULL,
   "reviewer_decision_reason_code" character varying(128) NULL,
   "statutory_discount_validation_id" uuid NULL,
+  "statutory_discount_policy_version_id" uuid NULL,
+  "statutory_discount_decision_policy_authority_id" uuid NULL,
   "intake_correlation_id" uuid NOT NULL,
   "review_correlation_id" uuid NULL,
   "submitted_at" timestamptz NOT NULL,
@@ -3788,12 +4352,15 @@ CREATE TABLE "operator_console"."statutory_discount_service_channel_reviews" (
   CONSTRAINT "fk_stat_disc_svc_reviews__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
   CONSTRAINT "fk_stat_disc_svc_reviews__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
   CONSTRAINT "fk_stat_disc_svc_reviews__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__policy_version" FOREIGN KEY ("statutory_discount_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__decision_policy_authority" FOREIGN KEY ("statutory_discount_decision_policy_authority_id") REFERENCES "discounts"."statutory_discount_decision_policy_authorities" ("statutory_discount_decision_command_id"),
   CONSTRAINT "ck_stat_disc_svc_reviews__source_channel" CHECK (source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
   CONSTRAINT "ck_stat_disc_svc_reviews__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
   CONSTRAINT "ck_stat_disc_svc_reviews__review_status" CHECK (review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED', 'REVIEW_FACTS_UNAVAILABLE')),
   CONSTRAINT "ck_stat_disc_svc_reviews__reviewer_decision" CHECK (reviewer_decision IS NULL OR reviewer_decision IN ('APPROVE', 'REJECT')),
   CONSTRAINT "ck_stat_disc_svc_reviews__review_completion" CHECK ((review_status = 'PENDING_REVIEW' AND reviewer_user_id IS NULL AND reviewer_decision IS NULL AND reviewed_at IS NULL) OR (review_status IN ('APPROVED', 'REJECTED') AND reviewer_user_id IS NOT NULL AND reviewer_access_evaluation_id IS NOT NULL AND reviewer_decision IS NOT NULL AND reviewed_at IS NOT NULL) OR review_status = 'REVIEW_FACTS_UNAVAILABLE'),
-  CONSTRAINT "ck_stat_disc_svc_reviews__evidence_json" CHECK (jsonb_typeof(evidence_references) = 'array')
+  CONSTRAINT "ck_stat_disc_svc_reviews__evidence_json" CHECK (jsonb_typeof(evidence_references) = 'array'),
+  CONSTRAINT "ck_stat_disc_svc_reviews__policy_authority_matches_decision" CHECK ((statutory_discount_decision_policy_authority_id IS NULL) OR (statutory_discount_decision_policy_authority_id = statutory_discount_decision_command_id))
 );;
 
 
@@ -3826,6 +4393,13 @@ CREATE INDEX "ix_stat_disc_svc_reviews__decision_validation" ON "operator_consol
 
 
 -- ============================================================================
+-- Source object: objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_reviews__policy_authority.sql
+-- ============================================================================
+-- Create index "ix_stat_disc_svc_reviews__policy_authority"
+CREATE INDEX "ix_stat_disc_svc_reviews__policy_authority" ON "operator_console"."statutory_discount_service_channel_reviews" ("statutory_discount_decision_policy_authority_id") WHERE statutory_discount_decision_policy_authority_id IS NOT NULL;;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.comments.sql
 -- ============================================================================
 -- Set comment to table: "statutory_discount_service_channel_reviews"
@@ -3840,6 +4414,13 @@ COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews
 COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."evidence_references" IS 'Reference-only evidence metadata. Raw images, Base64 evidence, raw bytes, and full statutory ID values are prohibited.';;
 COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_validation_id" IS 'Approved discounts.statutory_discount_validations row created during actual Operator Console review completion. Null while awaiting review or rejected.';;
 COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."review_status" IS 'Operator Console review lifecycle for service-channel-originated canonical decisions.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.1.sql
+-- ============================================================================
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_policy_version_id" IS 'Optional immutable policy version for reviewer readback. Operator Console must not choose another policy during review.';;
+COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews"."statutory_discount_decision_policy_authority_id" IS 'Optional link to the frozen decision policy authority for service-channel review; prevents review from becoming a second legal authority source.';;
 
 
 -- ============================================================================

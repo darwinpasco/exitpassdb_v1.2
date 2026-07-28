@@ -22,6 +22,8 @@ CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands"
   "target_tariff_snapshot_id" uuid NULL,
   "applied_tariff_snapshot_id" uuid NULL,
   "applied_policy_reference_id" uuid NULL,
+  "statutory_discount_policy_version_id" uuid NULL,
+  "statutory_discount_decision_policy_authority_id" uuid NULL,
   "policy_resolution_basis" character varying(80) NULL,
   "approved_discount_amount_minor_units" bigint NOT NULL,
   "approved_vat_exclusive_amount_minor_units" bigint NULL,
@@ -45,6 +47,8 @@ CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands"
   CONSTRAINT "fk_stat_discount_pba_commands__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
   CONSTRAINT "fk_stat_discount_pba_commands__target_tariff_snapshot" FOREIGN KEY ("target_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
   CONSTRAINT "fk_stat_discount_pba_commands__applied_tariff_snapshot" FOREIGN KEY ("applied_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__policy_version" FOREIGN KEY ("statutory_discount_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_stat_discount_pba_commands__decision_policy_authority" FOREIGN KEY ("statutory_discount_decision_policy_authority_id") REFERENCES "discounts"."statutory_discount_decision_policy_authorities" ("statutory_discount_decision_command_id"),
   CONSTRAINT "ck_stat_discount_pba_commands__source_channel" CHECK (source_channel IN ('OPERATOR_CONSOLE', 'WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
   CONSTRAINT "ck_stat_discount_pba_commands__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
   CONSTRAINT "ck_stat_discount_pba_commands__hash" CHECK (semantic_request_hash ~ '^sha256:[0-9a-f]{64}$'),
@@ -52,5 +56,6 @@ CREATE TABLE "discounts"."statutory_discount_payable_basis_application_commands"
   CONSTRAINT "ck_stat_discount_pba_commands__command_status" CHECK (command_status IN ('RECEIVED', 'PROCESSING', 'APPLIED', 'FAILED_RETRYABLE', 'FAILED_NON_RETRYABLE')),
   CONSTRAINT "ck_stat_discount_pba_commands__result_classification" CHECK (result_classification IN ('APPLIED', 'IDEMPOTENT_REPLAY', 'SEMANTIC_CONFLICT', 'DECISION_NOT_APPROVED', 'DECISION_NOT_FOUND', 'IN_PROGRESS', 'RETRYABLE_FAILURE', 'NON_RETRYABLE_FAILURE')),
   CONSTRAINT "ck_stat_discount_pba_commands__recovery_classification" CHECK (recovery_classification IN ('NONE', 'AWAITING_REVIEW', 'READ_CANONICAL_RESULT', 'RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'WAIT_THEN_RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'CORRECT_REQUEST_REQUIRED', 'NOT_RECOVERABLE')),
-  CONSTRAINT "ck_stat_discount_pba_commands__amounts_non_negative" CHECK (approved_discount_amount_minor_units >= 0 AND approved_final_payable_amount_minor_units >= 0 AND (approved_vat_exclusive_amount_minor_units IS NULL OR approved_vat_exclusive_amount_minor_units >= 0) AND (approved_vat_amount_minor_units IS NULL OR approved_vat_amount_minor_units >= 0))
+  CONSTRAINT "ck_stat_discount_pba_commands__amounts_non_negative" CHECK (approved_discount_amount_minor_units >= 0 AND approved_final_payable_amount_minor_units >= 0 AND (approved_vat_exclusive_amount_minor_units IS NULL OR approved_vat_exclusive_amount_minor_units >= 0) AND (approved_vat_amount_minor_units IS NULL OR approved_vat_amount_minor_units >= 0)),
+  CONSTRAINT "ck_stat_discount_pba_commands__policy_authority_matches_decision" CHECK ((statutory_discount_decision_policy_authority_id IS NULL) OR (statutory_discount_decision_policy_authority_id = statutory_discount_decision_command_id))
 );;

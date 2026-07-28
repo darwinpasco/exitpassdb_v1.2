@@ -1,0 +1,1 @@
+COMMENT ON TABLE "sites"."site_jurisdiction_assignments" IS 'Effective-dated Site to city/municipality assignment used by Central PMS statutory parking eligibility. A Site must not resolve to multiple active jurisdictions for one transaction instant.';;

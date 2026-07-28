@@ -1,0 +1,5 @@
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."statutory_discount_decision_command_id" IS 'Canonical decision command owning this frozen policy authority snapshot.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."statutory_discount_policy_version_id" IS 'Immutable governing policy version resolved before decision creation.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."transaction_publication_status" IS 'Publication state at decision resolution; must be active for transaction use.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."source_reference" IS 'Safe source reference copied from the policy version. Do not store raw ordinance documents or evidence payloads here.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_decision_policy_authorities"."policy_authority_semantic_hash" IS 'Semantic hash of the frozen authority facts used by runtime to detect policy drift and replay conflicts.';;

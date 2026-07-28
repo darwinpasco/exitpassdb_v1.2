@@ -1,0 +1,2 @@
+-- Create index "ix_stat_discount_pba_commands__policy_authority"
+CREATE INDEX "ix_stat_discount_pba_commands__policy_authority" ON "discounts"."statutory_discount_payable_basis_application_commands" ("statutory_discount_decision_policy_authority_id") WHERE statutory_discount_decision_policy_authority_id IS NOT NULL;;

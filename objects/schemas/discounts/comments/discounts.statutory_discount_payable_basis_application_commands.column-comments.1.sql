@@ -1,0 +1,2 @@
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_policy_version_id" IS 'Optional immutable policy version consumed from the approved decision authority; application must not resolve a newer ordinance independently.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_payable_basis_application_commands"."statutory_discount_decision_policy_authority_id" IS 'Optional link to the decision policy-authority snapshot. When present it must equal the decision command ID.';;
