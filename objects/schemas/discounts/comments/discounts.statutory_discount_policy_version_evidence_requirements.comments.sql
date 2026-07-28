@@ -1,0 +1,1 @@
+COMMENT ON TABLE "discounts"."statutory_discount_policy_version_evidence_requirements" IS 'Normalized safe evidence requirements for a policy version. It stores required evidence types only, never raw evidence, images, or full statutory ID values.';;

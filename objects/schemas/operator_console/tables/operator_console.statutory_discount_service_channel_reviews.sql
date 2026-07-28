@@ -26,6 +26,8 @@ CREATE TABLE "operator_console"."statutory_discount_service_channel_reviews" (
   "reviewer_decision" character varying(16) NULL,
   "reviewer_decision_reason_code" character varying(128) NULL,
   "statutory_discount_validation_id" uuid NULL,
+  "statutory_discount_policy_version_id" uuid NULL,
+  "statutory_discount_decision_policy_authority_id" uuid NULL,
   "intake_correlation_id" uuid NOT NULL,
   "review_correlation_id" uuid NULL,
   "submitted_at" timestamptz NOT NULL,
@@ -38,10 +40,13 @@ CREATE TABLE "operator_console"."statutory_discount_service_channel_reviews" (
   CONSTRAINT "fk_stat_disc_svc_reviews__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
   CONSTRAINT "fk_stat_disc_svc_reviews__original_tariff_snapshot" FOREIGN KEY ("original_tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id"),
   CONSTRAINT "fk_stat_disc_svc_reviews__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__policy_version" FOREIGN KEY ("statutory_discount_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
+  CONSTRAINT "fk_stat_disc_svc_reviews__decision_policy_authority" FOREIGN KEY ("statutory_discount_decision_policy_authority_id") REFERENCES "discounts"."statutory_discount_decision_policy_authorities" ("statutory_discount_decision_command_id"),
   CONSTRAINT "ck_stat_disc_svc_reviews__source_channel" CHECK (source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL')),
   CONSTRAINT "ck_stat_disc_svc_reviews__entitlement_type" CHECK (entitlement_type IN ('SENIOR_CITIZEN', 'PWD')),
   CONSTRAINT "ck_stat_disc_svc_reviews__review_status" CHECK (review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED', 'REVIEW_FACTS_UNAVAILABLE')),
   CONSTRAINT "ck_stat_disc_svc_reviews__reviewer_decision" CHECK (reviewer_decision IS NULL OR reviewer_decision IN ('APPROVE', 'REJECT')),
   CONSTRAINT "ck_stat_disc_svc_reviews__review_completion" CHECK ((review_status = 'PENDING_REVIEW' AND reviewer_user_id IS NULL AND reviewer_decision IS NULL AND reviewed_at IS NULL) OR (review_status IN ('APPROVED', 'REJECTED') AND reviewer_user_id IS NOT NULL AND reviewer_access_evaluation_id IS NOT NULL AND reviewer_decision IS NOT NULL AND reviewed_at IS NOT NULL) OR review_status = 'REVIEW_FACTS_UNAVAILABLE'),
-  CONSTRAINT "ck_stat_disc_svc_reviews__evidence_json" CHECK (jsonb_typeof(evidence_references) = 'array')
+  CONSTRAINT "ck_stat_disc_svc_reviews__evidence_json" CHECK (jsonb_typeof(evidence_references) = 'array'),
+  CONSTRAINT "ck_stat_disc_svc_reviews__policy_authority_matches_decision" CHECK ((statutory_discount_decision_policy_authority_id IS NULL) OR (statutory_discount_decision_policy_authority_id = statutory_discount_decision_command_id))
 );;

@@ -501,6 +501,84 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'operator_console' AND indexname = 'ux_stat_disc_svc_reviews__validation') THEN missing := array_append(missing, 'ux_stat_disc_svc_reviews__validation'); END IF;
     END IF;
 
+    IF to_regclass('sites.jurisdictions') IS NULL THEN missing := array_append(missing, 'sites.jurisdictions'); END IF;
+    IF to_regclass('sites.site_jurisdiction_assignments') IS NULL THEN missing := array_append(missing, 'sites.site_jurisdiction_assignments'); END IF;
+    IF to_regclass('discounts.statutory_discount_policy_versions') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_policy_versions'); END IF;
+    IF to_regclass('discounts.statutory_discount_policy_version_evidence_requirements') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_policy_version_evidence_requirements'); END IF;
+    IF to_regclass('discounts.statutory_discount_policy_version_relationships') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_policy_version_relationships'); END IF;
+    IF to_regclass('discounts.statutory_discount_decision_policy_authorities') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_decision_policy_authorities'); END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'discounts' AND t.typname = 'policy_verification_status_enum' AND e.enumlabel = 'VERIFIED_ACTIVE_OPERATIONAL') THEN missing := array_append(missing, 'policy_verification_status_enum VERIFIED_ACTIVE_OPERATIONAL'); END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'discounts' AND t.typname = 'statutory_policy_publication_status_enum' AND e.enumlabel = 'ACTIVE_FOR_TRANSACTION_USE') THEN missing := array_append(missing, 'statutory_policy_publication_status_enum ACTIVE_FOR_TRANSACTION_USE'); END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'discounts' AND t.typname = 'parking_service_applicability_status_enum' AND e.enumlabel = 'COVERED') THEN missing := array_append(missing, 'parking_service_applicability_status_enum COVERED'); END IF;
+
+    IF to_regclass('sites.jurisdictions') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'sites' AND cls.relname = 'jurisdictions' AND con.conname = 'uq_jurisdictions__code' AND con.contype = 'u') THEN missing := array_append(missing, 'uq_jurisdictions__code'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'sites' AND cls.relname = 'jurisdictions' AND con.conname = 'ck_jurisdictions__no_self_replacement' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_jurisdictions__no_self_replacement'); END IF;
+    END IF;
+
+    IF to_regclass('sites.site_jurisdiction_assignments') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'sites' AND indexname = 'ux_site_jurisdiction_assignments__one_open_active') THEN missing := array_append(missing, 'ux_site_jurisdiction_assignments__one_open_active'); END IF;
+        IF EXISTS (
+            SELECT 1
+            FROM sites.site_jurisdiction_assignments a
+            JOIN sites.site_jurisdiction_assignments b
+              ON a.site_id = b.site_id
+             AND a.site_jurisdiction_assignment_id <> b.site_jurisdiction_assignment_id
+             AND a.assignment_status = 'ACTIVE'::sites.site_jurisdiction_assignment_status_enum
+             AND b.assignment_status = 'ACTIVE'::sites.site_jurisdiction_assignment_status_enum
+             AND tstzrange(a.effective_from, COALESCE(a.effective_to, 'infinity'::timestamptz), '[)') &&
+                 tstzrange(b.effective_from, COALESCE(b.effective_to, 'infinity'::timestamptz), '[)')
+        ) THEN missing := array_append(missing, 'overlapping active site jurisdiction assignments'); END IF;
+    END IF;
+
+    IF to_regclass('discounts.statutory_discount_policy_versions') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_policy_versions' AND con.conname = 'ck_sd_policy_versions__transaction_active_verification' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_sd_policy_versions__transaction_active_verification'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_policy_versions' AND con.conname = 'ck_sd_policy_versions__proposed_unverified_not_active' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_sd_policy_versions__proposed_unverified_not_active'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_policy_versions' AND con.conname = 'ck_sd_policy_versions__active_parking_covered' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_sd_policy_versions__active_parking_covered'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ix_sd_policy_versions__active_lookup') THEN missing := array_append(missing, 'ix_sd_policy_versions__active_lookup'); END IF;
+        IF EXISTS (SELECT 1 FROM discounts.statutory_discount_policy_versions WHERE transaction_publication_status = 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum AND source_verification_status IN ('LEAD_UNVERIFIED'::discounts.policy_verification_status_enum, 'VERIFIED_SECONDARY'::discounts.policy_verification_status_enum, 'PROPOSED_ONLY'::discounts.policy_verification_status_enum, 'PROPOSED'::discounts.policy_verification_status_enum, 'NO_LOCAL_RULE_FOUND'::discounts.policy_verification_status_enum, 'STATUS_UNRESOLVED'::discounts.policy_verification_status_enum, 'REJECTED'::discounts.policy_verification_status_enum)) THEN missing := array_append(missing, 'unverified/proposed/no-local policy is transaction active'); END IF;
+        IF EXISTS (SELECT 1 FROM discounts.statutory_discount_policy_versions WHERE transaction_publication_status = 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum AND parking_service_applicability <> 'COVERED'::discounts.parking_service_applicability_status_enum) THEN missing := array_append(missing, 'transaction-active policy without covered parking applicability'); END IF;
+        IF EXISTS (
+            SELECT 1
+            FROM discounts.statutory_discount_policy_versions a
+            JOIN discounts.statutory_discount_policy_versions b
+              ON a.statutory_discount_policy_version_id <> b.statutory_discount_policy_version_id
+             AND a.entitlement_type = b.entitlement_type
+             AND a.jurisdiction_id = b.jurisdiction_id
+             AND a.policy_scope_type = b.policy_scope_type
+             AND COALESCE(a.site_group_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE(b.site_group_id, '00000000-0000-0000-0000-000000000000'::uuid)
+             AND COALESCE(a.site_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE(b.site_id, '00000000-0000-0000-0000-000000000000'::uuid)
+             AND a.transaction_publication_status = 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum
+             AND b.transaction_publication_status = 'ACTIVE_FOR_TRANSACTION_USE'::discounts.statutory_policy_publication_status_enum
+             AND a.parking_service_applicability = 'COVERED'::discounts.parking_service_applicability_status_enum
+             AND b.parking_service_applicability = 'COVERED'::discounts.parking_service_applicability_status_enum
+             AND a.precedence_rank = b.precedence_rank
+             AND tstzrange(COALESCE(a.transaction_use_effective_from, '-infinity'::timestamptz), COALESCE(a.transaction_use_effective_to, 'infinity'::timestamptz), '[)') &&
+                 tstzrange(COALESCE(b.transaction_use_effective_from, '-infinity'::timestamptz), COALESCE(b.transaction_use_effective_to, 'infinity'::timestamptz), '[)')
+        ) THEN missing := array_append(missing, 'overlapping active statutory policy versions without deterministic precedence'); END IF;
+    END IF;
+
+    IF to_regclass('discounts.statutory_discount_decision_policy_authorities') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_decision_policy_authorities' AND con.conname = 'ck_sd_decision_policy_authorities__active_authority' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_sd_decision_policy_authorities__active_authority'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'discounts' AND indexname = 'ix_sd_decision_policy_authorities__policy_version') THEN missing := array_append(missing, 'ix_sd_decision_policy_authorities__policy_version'); END IF;
+    END IF;
+
+    IF to_regclass('discounts.statutory_discount_validations') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'discounts' AND table_name = 'statutory_discount_validations' AND column_name = 'statutory_discount_policy_version_id') THEN missing := array_append(missing, 'validation statutory_discount_policy_version_id'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_validations' AND con.conname = 'fk_statutory_discount_validations__policy_version' AND con.contype = 'f') THEN missing := array_append(missing, 'fk_statutory_discount_validations__policy_version'); END IF;
+    END IF;
+
+    IF to_regclass('discounts.statutory_discount_payable_basis_application_commands') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'discounts' AND table_name = 'statutory_discount_payable_basis_application_commands' AND column_name = 'statutory_discount_decision_policy_authority_id') THEN missing := array_append(missing, 'application command statutory_discount_decision_policy_authority_id'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'discounts' AND cls.relname = 'statutory_discount_payable_basis_application_commands' AND con.conname = 'ck_stat_discount_pba_commands__policy_authority_matches_decision' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_stat_discount_pba_commands__policy_authority_matches_decision'); END IF;
+    END IF;
+
+    IF to_regclass('operator_console.statutory_discount_service_channel_reviews') IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'operator_console' AND table_name = 'statutory_discount_service_channel_reviews' AND column_name = 'statutory_discount_decision_policy_authority_id') THEN missing := array_append(missing, 'service-channel review statutory_discount_decision_policy_authority_id'); END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'operator_console' AND cls.relname = 'statutory_discount_service_channel_reviews' AND con.conname = 'ck_stat_disc_svc_reviews__policy_authority_matches_decision' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_stat_disc_svc_reviews__policy_authority_matches_decision'); END IF;
+    END IF;
+
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE (table_schema, table_name) IN (('discounts','statutory_discount_validations'), ('operator_console','statutory_discount_service_channel_reviews'))

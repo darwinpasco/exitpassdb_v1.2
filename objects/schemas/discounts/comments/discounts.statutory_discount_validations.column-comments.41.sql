@@ -1,0 +1,1 @@
+COMMENT ON COLUMN "discounts"."statutory_discount_validations"."statutory_discount_policy_version_id" IS 'Optional immutable local-ordinance policy version linked to the validation. Existing historical rows may remain null.';;
