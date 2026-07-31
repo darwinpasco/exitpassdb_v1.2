@@ -1,0 +1,2 @@
+-- Create unique index "ux_sd_policy_registry__active_lgu_policy"
+CREATE UNIQUE INDEX "ux_sd_policy_registry__active_lgu_policy" ON "discounts"."statutory_discount_policy_registry" ("local_government_unit_id", "entitlement_type", "policy_code") WHERE ((local_government_unit_id IS NOT NULL) AND (policy_status = 'ACTIVE'::discounts.discount_policy_status_enum) AND (effective_to IS NULL));;

@@ -1481,6 +1481,13 @@ CREATE TYPE "sites"."jurisdiction_status_enum" AS ENUM ('ACTIVE', 'INACTIVE', 'R
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/types/sites.city_classification_enum.sql
+-- ============================================================================
+-- Create enum type "city_classification_enum"
+CREATE TYPE "sites"."city_classification_enum" AS ENUM ('HIGHLY_URBANIZED', 'INDEPENDENT_COMPONENT', 'COMPONENT');;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/sites/types/sites.site_jurisdiction_assignment_status_enum.sql
 -- ============================================================================
 -- Create enum type "site_jurisdiction_assignment_status_enum"
@@ -1544,6 +1551,106 @@ CREATE TYPE "discounts"."policy_requirement_status_enum" AS ENUM ('REQUIRED', 'O
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.philippine_regions.sql
+-- ============================================================================
+-- Create "philippine_regions" table
+CREATE TABLE "sites"."philippine_regions" (
+  "philippine_region_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "psgc_code" character varying(10) NOT NULL,
+  "correspondence_code" character varying(16) NULL,
+  "region_code" character varying(16) NOT NULL,
+  "official_name" character varying(160) NOT NULL,
+  "short_name" character varying(80) NULL,
+  "region_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_philippine_regions" PRIMARY KEY ("philippine_region_id"),
+  CONSTRAINT "uq_philippine_regions__psgc_code" UNIQUE ("psgc_code"),
+  CONSTRAINT "uq_philippine_regions__region_code" UNIQUE ("region_code"),
+  CONSTRAINT "ck_philippine_regions__psgc_code" CHECK ((psgc_code)::text ~ '^[0-9]{10}$'::text),
+  CONSTRAINT "ck_philippine_regions__region_code" CHECK (btrim((region_code)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_regions__official_name" CHECK (btrim((official_name)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_regions__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_regions__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_philippine_regions__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_philippine_regions__status.sql
+-- ============================================================================
+-- Create index "ix_philippine_regions__status"
+CREATE INDEX "ix_philippine_regions__status" ON "sites"."philippine_regions" ("region_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.philippine_regions.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."philippine_regions" IS 'Canonical Philippine region reference data for jurisdiction and statutory parking policy coverage. NCR is a region and is not modeled as a province.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."psgc_code" IS 'Official 10-digit Philippine Standard Geographic Code for the region.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."correspondence_code" IS 'PSGC correspondence or legacy code where used by existing integrations; null means no controlled value has been assigned.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."region_code" IS 'Stable controlled ExitPass region code.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.philippine_provinces.sql
+-- ============================================================================
+-- Create "philippine_provinces" table
+CREATE TABLE "sites"."philippine_provinces" (
+  "philippine_province_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "philippine_region_id" uuid NOT NULL,
+  "psgc_code" character varying(10) NOT NULL,
+  "correspondence_code" character varying(16) NULL,
+  "province_code" character varying(32) NOT NULL,
+  "official_name" character varying(160) NOT NULL,
+  "province_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_philippine_provinces" PRIMARY KEY ("philippine_province_id"),
+  CONSTRAINT "uq_philippine_provinces__psgc_code" UNIQUE ("psgc_code"),
+  CONSTRAINT "uq_philippine_provinces__province_code" UNIQUE ("province_code"),
+  CONSTRAINT "fk_philippine_provinces__region" FOREIGN KEY ("philippine_region_id") REFERENCES "sites"."philippine_regions" ("philippine_region_id"),
+  CONSTRAINT "ck_philippine_provinces__psgc_code" CHECK ((psgc_code)::text ~ '^[0-9]{10}$'::text),
+  CONSTRAINT "ck_philippine_provinces__province_code" CHECK (btrim((province_code)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_provinces__official_name" CHECK (btrim((official_name)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_provinces__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_provinces__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_philippine_provinces__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_philippine_provinces__region.sql
+-- ============================================================================
+-- Create index "ix_philippine_provinces__region"
+CREATE INDEX "ix_philippine_provinces__region" ON "sites"."philippine_provinces" ("philippine_region_id", "province_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.philippine_provinces.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."philippine_provinces" IS 'Canonical Philippine province reference data. Metro Manila/NCR local governments intentionally have no province row.';;
+COMMENT ON COLUMN "sites"."philippine_provinces"."psgc_code" IS 'Official 10-digit PSGC province code.';;
+COMMENT ON COLUMN "sites"."philippine_provinces"."province_code" IS 'Stable controlled ExitPass province code.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/sites/tables/sites.jurisdictions.sql
 -- ============================================================================
 -- Create "jurisdictions" table
@@ -1551,6 +1658,11 @@ CREATE TABLE "sites"."jurisdictions" (
   "jurisdiction_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "jurisdiction_code" character varying(64) NOT NULL,
   "jurisdiction_type" "sites"."jurisdiction_type_enum" NOT NULL,
+  "philippine_region_id" uuid NULL,
+  "philippine_province_id" uuid NULL,
+  "correspondence_code" character varying(16) NULL,
+  "short_display_name" character varying(160) NULL,
+  "city_classification" "sites"."city_classification_enum" NULL,
   "display_name" character varying(160) NOT NULL,
   "province_name" character varying(128) NULL,
   "region_name" character varying(128) NULL,
@@ -1573,9 +1685,14 @@ CREATE TABLE "sites"."jurisdictions" (
   CONSTRAINT "uq_jurisdictions__code" UNIQUE ("jurisdiction_code"),
   CONSTRAINT "uq_jurisdictions__psgc_code" UNIQUE ("psgc_code"),
   CONSTRAINT "fk_jurisdictions__replaced_by" FOREIGN KEY ("replaced_by_jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "fk_jurisdictions__philippine_region" FOREIGN KEY ("philippine_region_id") REFERENCES "sites"."philippine_regions" ("philippine_region_id"),
+  CONSTRAINT "fk_jurisdictions__philippine_province" FOREIGN KEY ("philippine_province_id") REFERENCES "sites"."philippine_provinces" ("philippine_province_id"),
   CONSTRAINT "ck_jurisdictions__code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
   CONSTRAINT "ck_jurisdictions__display_name" CHECK (btrim((display_name)::text) <> ''::text),
   CONSTRAINT "ck_jurisdictions__country_code" CHECK (country_code = upper(country_code)),
+  CONSTRAINT "ck_jurisdictions__psgc_code_format" CHECK ((psgc_code IS NULL) OR ((psgc_code)::text ~ '^[0-9]{10}$'::text)),
+  CONSTRAINT "ck_jurisdictions__short_display_name" CHECK ((short_display_name IS NULL) OR (btrim((short_display_name)::text) <> ''::text)),
+  CONSTRAINT "ck_jurisdictions__city_classification" CHECK ((jurisdiction_type = 'CITY'::sites.jurisdiction_type_enum) OR (city_classification IS NULL)),
   CONSTRAINT "ck_jurisdictions__effective_window" CHECK ((effective_to IS NULL) OR (effective_from IS NULL) OR (effective_to > effective_from)),
   CONSTRAINT "ck_jurisdictions__no_self_replacement" CHECK ((replaced_by_jurisdiction_id IS NULL) OR (replaced_by_jurisdiction_id <> jurisdiction_id)),
   CONSTRAINT "ck_jurisdictions__row_version_positive" CHECK (row_version > 0)
@@ -1603,6 +1720,9 @@ COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_code" IS 'Canonical juri
 COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_type" IS 'City or municipality classification for current parking-policy scope.';;
 COMMENT ON COLUMN "sites"."jurisdictions"."psgc_code" IS 'Official PSGC or equivalent code when available; null means not yet assigned, not that no jurisdiction exists.';;
 COMMENT ON COLUMN "sites"."jurisdictions"."replaced_by_jurisdiction_id" IS 'Historical correction or replacement pointer. Runtime must not rewrite past transaction authority when this value changes.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."philippine_region_id" IS 'Canonical Philippine region parent for city or municipality LGUs; nullable only for legacy unresolved rows.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."philippine_province_id" IS 'Canonical Philippine province parent when official PSGC hierarchy has one; null for NCR LGUs and administratively independent highly urbanized cities.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."city_classification" IS 'Controlled classification for city LGUs, preserving HUC and independent-component semantics where known.';;
 
 
 -- ============================================================================
@@ -1676,6 +1796,7 @@ CREATE TABLE "discounts"."statutory_discount_policy_versions" (
   "policy_version_label" character varying(160) NULL,
   "entitlement_type" "discounts"."statutory_entitlement_type_enum" NOT NULL,
   "jurisdiction_id" uuid NOT NULL,
+  "local_government_unit_id" uuid NULL,
   "jurisdiction_code" character varying(64) NOT NULL,
   "jurisdiction_display_name" character varying(160) NOT NULL,
   "policy_scope_type" "discounts"."policy_scope_type_enum" NOT NULL,
@@ -1754,12 +1875,14 @@ CREATE TABLE "discounts"."statutory_discount_policy_versions" (
   CONSTRAINT "uq_sd_policy_versions__code_version" UNIQUE ("policy_code", "policy_version"),
   CONSTRAINT "fk_sd_policy_versions__registry" FOREIGN KEY ("statutory_discount_policy_registry_id") REFERENCES "discounts"."statutory_discount_policy_registry" ("statutory_discount_policy_registry_id"),
   CONSTRAINT "fk_sd_policy_versions__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "fk_sd_policy_versions__local_government_unit" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
   CONSTRAINT "fk_sd_policy_versions__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
   CONSTRAINT "fk_sd_policy_versions__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
   CONSTRAINT "fk_sd_policy_versions__supersedes" FOREIGN KEY ("supersedes_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
   CONSTRAINT "fk_sd_policy_versions__superseded_by" FOREIGN KEY ("superseded_by_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
   CONSTRAINT "ck_sd_policy_versions__policy_code_format" CHECK (((policy_code)::text = upper((policy_code)::text) AND ((policy_code)::text ~ '^[A-Z0-9][A-Z0-9_]{2,127}$'::text))),
   CONSTRAINT "ck_sd_policy_versions__jurisdiction_code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
+  CONSTRAINT "ck_sd_policy_versions__lgu_consistency" CHECK ((local_government_unit_id IS NULL) OR (local_government_unit_id = jurisdiction_id)),
   CONSTRAINT "ck_sd_policy_versions__source_reference_required" CHECK (btrim(source_reference) <> ''::text),
   CONSTRAINT "ck_sd_policy_versions__hash" CHECK ((policy_semantic_hash)::text ~ '^sha256:[0-9a-f]{64}$'::text),
   CONSTRAINT "ck_sd_policy_versions__hash_version" CHECK ((policy_semantic_hash_source_version)::text = 'statutory-parking-policy-authority:sha256:v1'::text),
@@ -1844,6 +1967,7 @@ COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_nu
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."unresolved_policy_facts" IS 'Safe notes for unknown legal facts; never raw ID evidence, images, credentials, or unpublished legal notes.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."transaction_use_effective_from" IS 'Controlled publication effective instant for transaction use. This is distinct from unknown legal enactment dates.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."policy_semantic_hash" IS 'Privacy-safe semantic hash over legally material policy authority facts for replay and drift detection.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."local_government_unit_id" IS 'Semantic alias for jurisdiction_id when the jurisdiction is a city or municipality LGU. Runtime compatibility keeps jurisdiction_id as the durable existing reference.';;
 
 
 -- ============================================================================

@@ -1,0 +1,4 @@
+COMMENT ON TABLE "sites"."philippine_regions" IS 'Canonical Philippine region reference data for jurisdiction and statutory parking policy coverage. NCR is a region and is not modeled as a province.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."psgc_code" IS 'Official 10-digit Philippine Standard Geographic Code for the region.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."correspondence_code" IS 'PSGC correspondence or legacy code where used by existing integrations; null means no controlled value has been assigned.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."region_code" IS 'Stable controlled ExitPass region code.';;

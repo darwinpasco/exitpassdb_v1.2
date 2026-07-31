@@ -1,0 +1,25 @@
+-- Create "statutory_discount_policy_registry_lgu_scopes" table
+CREATE TABLE "discounts"."statutory_discount_policy_registry_lgu_scopes" (
+  "statutory_discount_policy_registry_lgu_scope_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_policy_registry_id" uuid NOT NULL,
+  "local_government_unit_id" uuid NOT NULL,
+  "coverage_available" boolean NOT NULL DEFAULT false,
+  "auto_application_allowed" boolean NOT NULL DEFAULT false,
+  "source_scan_date" date NOT NULL,
+  "source_reference" text NOT NULL,
+  "scope_status" "discounts"."discount_policy_status_enum" NOT NULL DEFAULT 'DRAFT',
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_sd_policy_registry_lgu_scopes" PRIMARY KEY ("statutory_discount_policy_registry_lgu_scope_id"),
+  CONSTRAINT "fk_sd_policy_registry_lgu_scopes__registry" FOREIGN KEY ("statutory_discount_policy_registry_id") REFERENCES "discounts"."statutory_discount_policy_registry" ("statutory_discount_policy_registry_id"),
+  CONSTRAINT "fk_sd_policy_registry_lgu_scopes__lgu" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "uq_sd_policy_registry_lgu_scopes__registry_lgu" UNIQUE ("statutory_discount_policy_registry_id", "local_government_unit_id"),
+  CONSTRAINT "ck_sd_policy_registry_lgu_scopes__source_reference" CHECK (btrim(source_reference) <> ''::text),
+  CONSTRAINT "ck_sd_policy_registry_lgu_scopes__auto_requires_active" CHECK ((auto_application_allowed = false) OR ((coverage_available = true) AND (scope_status = 'ACTIVE'::discounts.discount_policy_status_enum))),
+  CONSTRAINT "ck_sd_policy_registry_lgu_scopes__row_version_positive" CHECK (row_version > 0)
+);;

@@ -1,0 +1,25 @@
+-- Create "metropolitan_area_jurisdictions" table
+CREATE TABLE "sites"."metropolitan_area_jurisdictions" (
+  "metropolitan_area_jurisdiction_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "metropolitan_area_id" uuid NOT NULL,
+  "jurisdiction_id" uuid NOT NULL,
+  "membership_classification" character varying(64) NOT NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "membership_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_metropolitan_area_jurisdictions" PRIMARY KEY ("metropolitan_area_jurisdiction_id"),
+  CONSTRAINT "fk_metropolitan_area_jurisdictions__area" FOREIGN KEY ("metropolitan_area_id") REFERENCES "sites"."metropolitan_areas" ("metropolitan_area_id"),
+  CONSTRAINT "fk_metropolitan_area_jurisdictions__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__classification" CHECK (btrim((membership_classification)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__row_version_positive" CHECK (row_version > 0)
+);;

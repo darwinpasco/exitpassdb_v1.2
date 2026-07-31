@@ -1,0 +1,1 @@
+COMMENT ON TABLE "sites"."metropolitan_areas" IS 'Controlled metropolitan-area reference data used for reporting and sample coverage. It is not a legal source of statutory parking authority.';;

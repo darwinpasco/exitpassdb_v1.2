@@ -1,0 +1,1 @@
+COMMENT ON TABLE "sites"."metropolitan_area_jurisdictions" IS 'Many-to-many membership between controlled metropolitan areas and city/municipality LGUs. Duplicate active membership is prohibited.';;

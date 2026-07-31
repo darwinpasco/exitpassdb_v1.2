@@ -1,0 +1,2 @@
+-- Create unique index "ux_metropolitan_area_jurisdictions__active"
+CREATE UNIQUE INDEX "ux_metropolitan_area_jurisdictions__active" ON "sites"."metropolitan_area_jurisdictions" ("metropolitan_area_id", "jurisdiction_id") WHERE ((membership_status = 'ACTIVE'::sites.jurisdiction_status_enum) AND (effective_to IS NULL));;

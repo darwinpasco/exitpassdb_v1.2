@@ -1,0 +1,2 @@
+COMMENT ON TABLE "discounts"."statutory_discount_policy_registry_lgu_scopes" IS 'Canonical LGU scope bridge for statutory parking policy research rows. This enables LGU-level inheritance without duplicating ordinances per Site.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry_lgu_scopes"."auto_application_allowed" IS 'Controlled production automation flag. I-006 research-derived seed rows keep this false even when coverage is known.';;

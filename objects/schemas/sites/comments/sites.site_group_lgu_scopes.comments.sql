@@ -1,0 +1,1 @@
+COMMENT ON VIEW "sites"."site_group_lgu_scopes" IS 'Read-only derived Site Group jurisdiction coverage from Sites and their authoritative local_government_unit_id. Site Group is not the legal ordinance authority.';;

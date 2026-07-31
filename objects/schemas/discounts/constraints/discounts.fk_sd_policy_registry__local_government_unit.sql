@@ -1,0 +1,2 @@
+-- Add foreign key "fk_sd_policy_registry__local_government_unit"
+ALTER TABLE "discounts"."statutory_discount_policy_registry" ADD CONSTRAINT "fk_sd_policy_registry__local_government_unit" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id");;

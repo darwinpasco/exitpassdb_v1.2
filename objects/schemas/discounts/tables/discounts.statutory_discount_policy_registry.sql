@@ -1,4 +1,4 @@
-﻿-- Create "statutory_discount_policy_registry" table
+-- Create "statutory_discount_policy_registry" table
 CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   "statutory_discount_policy_registry_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "policy_code" character varying(128) NOT NULL,
@@ -13,6 +13,7 @@ CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   "benefit_type" "discounts"."parking_benefit_type_enum" NOT NULL,
   "discount_base_scope" "discounts"."discount_base_scope_enum" NOT NULL,
   "jurisdiction_id" uuid NULL,
+  "local_government_unit_id" uuid NULL,
   "jurisdiction_code" character varying(64) NULL,
   "jurisdiction_name" character varying(160) NULL,
   "site_group_id" uuid NULL,
@@ -26,6 +27,10 @@ CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   "valet_excluded" boolean NOT NULL DEFAULT false,
   "standalone_parking_excluded" boolean NOT NULL DEFAULT false,
   "driver_or_passenger_required" boolean NOT NULL DEFAULT false,
+  "coverage_available" boolean NOT NULL DEFAULT false,
+  "auto_application_allowed" boolean NOT NULL DEFAULT false,
+  "source_scan_date" date NULL,
+  "source_document_available" boolean NULL,
   "requires_evidence" boolean NOT NULL DEFAULT true,
   "required_evidence_type" "discounts"."discount_evidence_type_enum" NULL,
   "requires_operator_validation" boolean NOT NULL DEFAULT true,
@@ -60,6 +65,9 @@ CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   CONSTRAINT "ck_sd_policy_registry__source_reference_required" CHECK ((btrim(source_reference) <> ''::text)),
   CONSTRAINT "ck_sd_policy_registry__row_version_positive" CHECK ((row_version > 0)),
   CONSTRAINT "ck_sd_policy_registry__free_duration_non_negative" CHECK (((free_duration_minutes IS NULL) OR (free_duration_minutes >= 0))),
+  CONSTRAINT "ck_sd_policy_registry__lgu_consistency" CHECK ((local_government_unit_id IS NULL) OR (jurisdiction_id IS NULL) OR (local_government_unit_id = jurisdiction_id)),
+  CONSTRAINT "ck_sd_policy_registry__no_rule_not_available" CHECK ((verification_status <> 'NO_LOCAL_RULE_FOUND'::discounts.policy_verification_status_enum) OR (coverage_available = false)),
+  CONSTRAINT "ck_sd_policy_registry__auto_requires_active_verified" CHECK ((auto_application_allowed = false) OR ((coverage_available = true) AND (policy_status = 'ACTIVE'::discounts.discount_policy_status_enum) AND (verification_status = ANY (ARRAY['VERIFIED_OFFICIAL'::discounts.policy_verification_status_enum, 'VERIFIED_ACTIVE_OPERATIONAL'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum])))),
   CONSTRAINT "ck_sd_policy_registry__evidence_type_required" CHECK (((requires_evidence = false) OR (required_evidence_type IS NOT NULL))),
   CONSTRAINT "ck_sd_policy_registry__reviewed_metadata" CHECK (((verification_status <> ALL (ARRAY['VERIFIED_SECONDARY'::discounts.policy_verification_status_enum, 'VERIFIED_OFFICIAL'::discounts.policy_verification_status_enum, 'APPROVED_FOR_PILOT'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum])) OR (((reviewed_by_user_id IS NOT NULL) OR (btrim((COALESCE(reviewed_by, ''::character varying))::text) <> ''::text)) AND (reviewed_at IS NOT NULL)))),
   CONSTRAINT "ck_sd_policy_registry__approved_metadata" CHECK (((verification_status <> ALL (ARRAY['APPROVED_FOR_PILOT'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum])) OR (((approved_by_user_id IS NOT NULL) OR (btrim((COALESCE(approved_by, ''::character varying))::text) <> ''::text)) AND (approved_at IS NOT NULL)))),
