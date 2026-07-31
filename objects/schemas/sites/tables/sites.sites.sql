@@ -1,4 +1,4 @@
-﻿-- Create "sites" table
+-- Create "sites" table
 CREATE TABLE "sites"."sites" (
   "site_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "site_group_id" uuid NOT NULL,
@@ -13,6 +13,7 @@ CREATE TABLE "sites"."sites" (
   "province" character varying(128) NULL,
   "country_code" character(2) NOT NULL,
   "lgu_code" character varying(32) NULL,
+  "local_government_unit_id" uuid NULL,
   "site_status" "sites"."site_status_enum" NOT NULL,
   "public_lookup_enabled" boolean NOT NULL DEFAULT false,
   "payment_enabled" boolean NOT NULL DEFAULT false,
@@ -26,6 +27,7 @@ CREATE TABLE "sites"."sites" (
   "updated_by_service_identity_id" uuid NULL,
   "row_version" bigint NOT NULL DEFAULT 1,
   CONSTRAINT "pk_sites" PRIMARY KEY ("site_id"),
-  CONSTRAINT "uq_sites__site_group_site_code" UNIQUE ("site_group_id", "site_code")
+  CONSTRAINT "uq_sites__site_group_site_code" UNIQUE ("site_group_id", "site_code"),
+  CONSTRAINT "fk_sites__local_government_unit" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id")
 );;
 

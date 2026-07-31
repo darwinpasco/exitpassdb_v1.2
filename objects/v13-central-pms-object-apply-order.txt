@@ -92,6 +92,7 @@ objects/schemas/operator_console/types/operator_console.access_evaluation_status
 objects/schemas/discounts/types/discounts.entitlement_fingerprint_status_enum.sql
 objects/schemas/sites/types/sites.jurisdiction_type_enum.sql
 objects/schemas/sites/types/sites.jurisdiction_status_enum.sql
+objects/schemas/sites/types/sites.city_classification_enum.sql
 objects/schemas/sites/types/sites.site_jurisdiction_assignment_status_enum.sql
 objects/schemas/discounts/types/discounts.statutory_policy_publication_status_enum.sql
 objects/schemas/discounts/types/discounts.parking_service_applicability_status_enum.sql
@@ -101,6 +102,12 @@ objects/schemas/discounts/types/discounts.policy_source_type_enum.sql
 objects/schemas/discounts/types/discounts.policy_relationship_type_enum.sql
 objects/schemas/discounts/types/discounts.policy_effect_support_status_enum.sql
 objects/schemas/discounts/types/discounts.policy_requirement_status_enum.sql
+objects/schemas/sites/tables/sites.philippine_regions.sql
+objects/schemas/sites/indexes/sites.ix_philippine_regions__status.sql
+objects/schemas/sites/comments/sites.philippine_regions.comments.sql
+objects/schemas/sites/tables/sites.philippine_provinces.sql
+objects/schemas/sites/indexes/sites.ix_philippine_provinces__region.sql
+objects/schemas/sites/comments/sites.philippine_provinces.comments.sql
 objects/schemas/sites/tables/sites.jurisdictions.sql
 objects/schemas/sites/indexes/sites.ix_jurisdictions__status.sql
 objects/schemas/sites/comments/sites.jurisdictions.comments.sql

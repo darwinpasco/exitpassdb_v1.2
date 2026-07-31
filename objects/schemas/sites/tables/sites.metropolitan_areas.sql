@@ -1,0 +1,25 @@
+-- Create "metropolitan_areas" table
+CREATE TABLE "sites"."metropolitan_areas" (
+  "metropolitan_area_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "metropolitan_area_code" character varying(64) NOT NULL,
+  "metropolitan_area_name" character varying(160) NOT NULL,
+  "description" text NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "metropolitan_area_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_metropolitan_areas" PRIMARY KEY ("metropolitan_area_id"),
+  CONSTRAINT "uq_metropolitan_areas__code" UNIQUE ("metropolitan_area_code"),
+  CONSTRAINT "ck_metropolitan_areas__code" CHECK (((metropolitan_area_code)::text = upper((metropolitan_area_code)::text) AND ((metropolitan_area_code)::text ~ '^[A-Z0-9][A-Z0-9_]{2,63}$'::text))),
+  CONSTRAINT "ck_metropolitan_areas__name" CHECK (btrim((metropolitan_area_name)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_areas__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_areas__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_metropolitan_areas__row_version_positive" CHECK (row_version > 0)
+);;

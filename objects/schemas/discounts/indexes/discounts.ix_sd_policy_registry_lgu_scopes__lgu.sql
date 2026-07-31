@@ -1,0 +1,2 @@
+-- Create index "ix_sd_policy_registry_lgu_scopes__lgu"
+CREATE INDEX "ix_sd_policy_registry_lgu_scopes__lgu" ON "discounts"."statutory_discount_policy_registry_lgu_scopes" ("local_government_unit_id", "coverage_available", "auto_application_allowed", "scope_status");;

@@ -1,0 +1,2 @@
+-- Create index "ix_sd_policy_versions__local_government_unit"
+CREATE INDEX "ix_sd_policy_versions__local_government_unit" ON "discounts"."statutory_discount_policy_versions" ("local_government_unit_id", "entitlement_type", "transaction_publication_status", "transaction_use_effective_from", "transaction_use_effective_to");;

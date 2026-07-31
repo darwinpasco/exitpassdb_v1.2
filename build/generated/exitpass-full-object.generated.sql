@@ -5198,6 +5198,7 @@ CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   "benefit_type" "discounts"."parking_benefit_type_enum" NOT NULL,
   "discount_base_scope" "discounts"."discount_base_scope_enum" NOT NULL,
   "jurisdiction_id" uuid NULL,
+  "local_government_unit_id" uuid NULL,
   "jurisdiction_code" character varying(64) NULL,
   "jurisdiction_name" character varying(160) NULL,
   "site_group_id" uuid NULL,
@@ -5211,6 +5212,10 @@ CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   "valet_excluded" boolean NOT NULL DEFAULT false,
   "standalone_parking_excluded" boolean NOT NULL DEFAULT false,
   "driver_or_passenger_required" boolean NOT NULL DEFAULT false,
+  "coverage_available" boolean NOT NULL DEFAULT false,
+  "auto_application_allowed" boolean NOT NULL DEFAULT false,
+  "source_scan_date" date NULL,
+  "source_document_available" boolean NULL,
   "requires_evidence" boolean NOT NULL DEFAULT true,
   "required_evidence_type" "discounts"."discount_evidence_type_enum" NULL,
   "requires_operator_validation" boolean NOT NULL DEFAULT true,
@@ -5245,6 +5250,9 @@ CREATE TABLE "discounts"."statutory_discount_policy_registry" (
   CONSTRAINT "ck_sd_policy_registry__source_reference_required" CHECK ((btrim(source_reference) <> ''::text)),
   CONSTRAINT "ck_sd_policy_registry__row_version_positive" CHECK ((row_version > 0)),
   CONSTRAINT "ck_sd_policy_registry__free_duration_non_negative" CHECK (((free_duration_minutes IS NULL) OR (free_duration_minutes >= 0))),
+  CONSTRAINT "ck_sd_policy_registry__lgu_consistency" CHECK ((local_government_unit_id IS NULL) OR (jurisdiction_id IS NULL) OR (local_government_unit_id = jurisdiction_id)),
+  CONSTRAINT "ck_sd_policy_registry__no_rule_not_available" CHECK ((verification_status <> 'NO_LOCAL_RULE_FOUND'::discounts.policy_verification_status_enum) OR (coverage_available = false)),
+  CONSTRAINT "ck_sd_policy_registry__auto_requires_active_verified" CHECK ((auto_application_allowed = false) OR ((coverage_available = true) AND (policy_status = 'ACTIVE'::discounts.discount_policy_status_enum) AND (verification_status = ANY (ARRAY['VERIFIED_OFFICIAL'::discounts.policy_verification_status_enum, 'VERIFIED_ACTIVE_OPERATIONAL'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum])))),
   CONSTRAINT "ck_sd_policy_registry__evidence_type_required" CHECK (((requires_evidence = false) OR (required_evidence_type IS NOT NULL))),
   CONSTRAINT "ck_sd_policy_registry__reviewed_metadata" CHECK (((verification_status <> ALL (ARRAY['VERIFIED_SECONDARY'::discounts.policy_verification_status_enum, 'VERIFIED_OFFICIAL'::discounts.policy_verification_status_enum, 'APPROVED_FOR_PILOT'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum])) OR (((reviewed_by_user_id IS NOT NULL) OR (btrim((COALESCE(reviewed_by, ''::character varying))::text) <> ''::text)) AND (reviewed_at IS NOT NULL)))),
   CONSTRAINT "ck_sd_policy_registry__approved_metadata" CHECK (((verification_status <> ALL (ARRAY['APPROVED_FOR_PILOT'::discounts.policy_verification_status_enum, 'ACTIVE_APPROVED'::discounts.policy_verification_status_enum])) OR (((approved_by_user_id IS NOT NULL) OR (btrim((COALESCE(approved_by, ''::character varying))::text) <> ''::text)) AND (approved_at IS NOT NULL)))),
@@ -5301,6 +5309,13 @@ CREATE INDEX "ix_sd_policy_registry__jurisdiction_code" ON "discounts"."statutor
 -- ============================================================================
 -- Create index "ix_sd_policy_registry__jurisdiction_id" to table: "statutory_discount_policy_registry"
 CREATE INDEX "ix_sd_policy_registry__jurisdiction_id" ON "discounts"."statutory_discount_policy_registry" ("jurisdiction_id") WHERE (jurisdiction_id IS NOT NULL);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_registry__local_government_unit_id.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_registry__local_government_unit_id"
+CREATE INDEX "ix_sd_policy_registry__local_government_unit_id" ON "discounts"."statutory_discount_policy_registry" ("local_government_unit_id", "entitlement_type", "policy_status", "verification_status", "effective_from", "effective_to");;
 
 
 -- ============================================================================
@@ -5374,6 +5389,13 @@ CREATE UNIQUE INDEX "ux_sd_policy_registry__active_national_fallback" ON "discou
 
 
 -- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_sd_policy_registry__active_lgu_policy.sql
+-- ============================================================================
+-- Create unique index "ux_sd_policy_registry__active_lgu_policy"
+CREATE UNIQUE INDEX "ux_sd_policy_registry__active_lgu_policy" ON "discounts"."statutory_discount_policy_registry" ("local_government_unit_id", "entitlement_type", "policy_code") WHERE ((local_government_unit_id IS NOT NULL) AND (policy_status = 'ACTIVE'::discounts.discount_policy_status_enum) AND (effective_to IS NULL));;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_policy_registry.comments.sql
 -- ============================================================================
 -- Set comment to table: "statutory_discount_policy_registry"
@@ -5385,6 +5407,10 @@ COMMENT ON TABLE "discounts"."statutory_discount_policy_registry" IS 'Governed s
 -- ============================================================================
 -- Set comment to column: "statutory_discount_policy_registry_id" on table: "statutory_discount_policy_registry"
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."statutory_discount_policy_registry_id" IS 'Canonical identifier of the statutory discount policy registry row.';;
+
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."local_government_unit_id" IS 'Canonical city/municipality LGU scope for statutory parking research and future policy inheritance; jurisdiction_id remains compatibility for existing runtime.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."coverage_available" IS 'Controlled research result indicating whether current policy research found a local statutory parking measure. This is not transaction-use publication.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry"."auto_application_allowed" IS 'Production auto-application authorization flag. I-006 research-derived seed rows keep this false.';;
 
 
 -- ============================================================================
@@ -17603,6 +17629,13 @@ CREATE TYPE "sites"."jurisdiction_status_enum" AS ENUM ('ACTIVE', 'INACTIVE', 'R
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/types/sites.city_classification_enum.sql
+-- ============================================================================
+-- Create enum type "city_classification_enum"
+CREATE TYPE "sites"."city_classification_enum" AS ENUM ('HIGHLY_URBANIZED', 'INDEPENDENT_COMPONENT', 'COMPONENT');;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/sites/types/sites.site_jurisdiction_assignment_status_enum.sql
 -- ============================================================================
 -- Create enum type "site_jurisdiction_assignment_status_enum"
@@ -18195,6 +18228,181 @@ COMMENT ON COLUMN "sites"."site_groups"."row_version" IS 'Optimistic concurrency
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.philippine_regions.sql
+-- ============================================================================
+-- Create "philippine_regions" table
+CREATE TABLE "sites"."philippine_regions" (
+  "philippine_region_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "psgc_code" character varying(10) NOT NULL,
+  "correspondence_code" character varying(16) NULL,
+  "region_code" character varying(16) NOT NULL,
+  "official_name" character varying(160) NOT NULL,
+  "short_name" character varying(80) NULL,
+  "region_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_philippine_regions" PRIMARY KEY ("philippine_region_id"),
+  CONSTRAINT "uq_philippine_regions__psgc_code" UNIQUE ("psgc_code"),
+  CONSTRAINT "uq_philippine_regions__region_code" UNIQUE ("region_code"),
+  CONSTRAINT "ck_philippine_regions__psgc_code" CHECK ((psgc_code)::text ~ '^[0-9]{10}$'::text),
+  CONSTRAINT "ck_philippine_regions__region_code" CHECK (btrim((region_code)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_regions__official_name" CHECK (btrim((official_name)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_regions__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_regions__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_philippine_regions__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_philippine_regions__status.sql
+-- ============================================================================
+-- Create index "ix_philippine_regions__status"
+CREATE INDEX "ix_philippine_regions__status" ON "sites"."philippine_regions" ("region_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.philippine_regions.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."philippine_regions" IS 'Canonical Philippine region reference data for jurisdiction and statutory parking policy coverage. NCR is a region and is not modeled as a province.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."psgc_code" IS 'Official 10-digit Philippine Standard Geographic Code for the region.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."correspondence_code" IS 'PSGC correspondence or legacy code where used by existing integrations; null means no controlled value has been assigned.';;
+COMMENT ON COLUMN "sites"."philippine_regions"."region_code" IS 'Stable controlled ExitPass region code.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.philippine_provinces.sql
+-- ============================================================================
+-- Create "philippine_provinces" table
+CREATE TABLE "sites"."philippine_provinces" (
+  "philippine_province_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "philippine_region_id" uuid NOT NULL,
+  "psgc_code" character varying(10) NOT NULL,
+  "correspondence_code" character varying(16) NULL,
+  "province_code" character varying(32) NOT NULL,
+  "official_name" character varying(160) NOT NULL,
+  "province_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_philippine_provinces" PRIMARY KEY ("philippine_province_id"),
+  CONSTRAINT "uq_philippine_provinces__psgc_code" UNIQUE ("psgc_code"),
+  CONSTRAINT "uq_philippine_provinces__province_code" UNIQUE ("province_code"),
+  CONSTRAINT "fk_philippine_provinces__region" FOREIGN KEY ("philippine_region_id") REFERENCES "sites"."philippine_regions" ("philippine_region_id"),
+  CONSTRAINT "ck_philippine_provinces__psgc_code" CHECK ((psgc_code)::text ~ '^[0-9]{10}$'::text),
+  CONSTRAINT "ck_philippine_provinces__province_code" CHECK (btrim((province_code)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_provinces__official_name" CHECK (btrim((official_name)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_provinces__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_philippine_provinces__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_philippine_provinces__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_philippine_provinces__region.sql
+-- ============================================================================
+-- Create index "ix_philippine_provinces__region"
+CREATE INDEX "ix_philippine_provinces__region" ON "sites"."philippine_provinces" ("philippine_region_id", "province_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.philippine_provinces.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."philippine_provinces" IS 'Canonical Philippine province reference data. Metro Manila/NCR local governments intentionally have no province row.';;
+COMMENT ON COLUMN "sites"."philippine_provinces"."psgc_code" IS 'Official 10-digit PSGC province code.';;
+COMMENT ON COLUMN "sites"."philippine_provinces"."province_code" IS 'Stable controlled ExitPass province code.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/tables/sites.jurisdictions.sql
+-- ============================================================================
+-- Create "jurisdictions" table
+CREATE TABLE "sites"."jurisdictions" (
+  "jurisdiction_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "jurisdiction_code" character varying(64) NOT NULL,
+  "jurisdiction_type" "sites"."jurisdiction_type_enum" NOT NULL,
+  "philippine_region_id" uuid NULL,
+  "philippine_province_id" uuid NULL,
+  "correspondence_code" character varying(16) NULL,
+  "short_display_name" character varying(160) NULL,
+  "city_classification" "sites"."city_classification_enum" NULL,
+  "display_name" character varying(160) NOT NULL,
+  "province_name" character varying(128) NULL,
+  "region_name" character varying(128) NULL,
+  "country_code" character(2) NOT NULL DEFAULT 'PH',
+  "psgc_code" character varying(16) NULL,
+  "jurisdiction_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NULL,
+  "effective_to" timestamptz NULL,
+  "replaced_by_jurisdiction_id" uuid NULL,
+  "source_reference" character varying(256) NULL,
+  "source_provenance" text NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_jurisdictions" PRIMARY KEY ("jurisdiction_id"),
+  CONSTRAINT "uq_jurisdictions__code" UNIQUE ("jurisdiction_code"),
+  CONSTRAINT "uq_jurisdictions__psgc_code" UNIQUE ("psgc_code"),
+  CONSTRAINT "fk_jurisdictions__replaced_by" FOREIGN KEY ("replaced_by_jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "fk_jurisdictions__philippine_region" FOREIGN KEY ("philippine_region_id") REFERENCES "sites"."philippine_regions" ("philippine_region_id"),
+  CONSTRAINT "fk_jurisdictions__philippine_province" FOREIGN KEY ("philippine_province_id") REFERENCES "sites"."philippine_provinces" ("philippine_province_id"),
+  CONSTRAINT "ck_jurisdictions__code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
+  CONSTRAINT "ck_jurisdictions__display_name" CHECK (btrim((display_name)::text) <> ''::text),
+  CONSTRAINT "ck_jurisdictions__country_code" CHECK (country_code = upper(country_code)),
+  CONSTRAINT "ck_jurisdictions__psgc_code_format" CHECK ((psgc_code IS NULL) OR ((psgc_code)::text ~ '^[0-9]{10}$'::text)),
+  CONSTRAINT "ck_jurisdictions__short_display_name" CHECK ((short_display_name IS NULL) OR (btrim((short_display_name)::text) <> ''::text)),
+  CONSTRAINT "ck_jurisdictions__city_classification" CHECK ((jurisdiction_type = 'CITY'::sites.jurisdiction_type_enum) OR (city_classification IS NULL)),
+  CONSTRAINT "ck_jurisdictions__effective_window" CHECK ((effective_to IS NULL) OR (effective_from IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_jurisdictions__no_self_replacement" CHECK ((replaced_by_jurisdiction_id IS NULL) OR (replaced_by_jurisdiction_id <> jurisdiction_id)),
+  CONSTRAINT "ck_jurisdictions__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_jurisdictions__status.sql
+-- ============================================================================
+-- Create index "ix_jurisdictions__status"
+CREATE INDEX "ix_jurisdictions__status" ON "sites"."jurisdictions" ("jurisdiction_status", "jurisdiction_type");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.jurisdictions.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."jurisdictions" IS 'Canonical city or municipality jurisdiction authority for statutory parking policy resolution. Display names are descriptive only; jurisdiction_code and jurisdiction_id are the stable business references.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.jurisdictions.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_id" IS 'Stable canonical jurisdiction identifier for city or municipality policy authority.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_code" IS 'Canonical jurisdiction code. This is not a display name and may be mapped to PSGC when available.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_type" IS 'City or municipality classification for current parking-policy scope.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."psgc_code" IS 'Official PSGC or equivalent code when available; null means not yet assigned, not that no jurisdiction exists.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."replaced_by_jurisdiction_id" IS 'Historical correction or replacement pointer. Runtime must not rewrite past transaction authority when this value changes.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."philippine_region_id" IS 'Canonical Philippine region parent for city or municipality LGUs; nullable only for legacy unresolved rows.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."philippine_province_id" IS 'Canonical Philippine province parent when official PSGC hierarchy has one; null for NCR LGUs and administratively independent highly urbanized cities.';;
+COMMENT ON COLUMN "sites"."jurisdictions"."city_classification" IS 'Controlled classification for city LGUs, preserving HUC and independent-component semantics where known.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/sites/tables/sites.sites.sql
 -- ============================================================================
 -- Create "sites" table
@@ -18212,6 +18420,7 @@ CREATE TABLE "sites"."sites" (
   "province" character varying(128) NULL,
   "country_code" character(2) NOT NULL,
   "lgu_code" character varying(32) NULL,
+  "local_government_unit_id" uuid NULL,
   "site_status" "sites"."site_status_enum" NOT NULL,
   "public_lookup_enabled" boolean NOT NULL DEFAULT false,
   "payment_enabled" boolean NOT NULL DEFAULT false,
@@ -18225,7 +18434,8 @@ CREATE TABLE "sites"."sites" (
   "updated_by_service_identity_id" uuid NULL,
   "row_version" bigint NOT NULL DEFAULT 1,
   CONSTRAINT "pk_sites" PRIMARY KEY ("site_id"),
-  CONSTRAINT "uq_sites__site_group_site_code" UNIQUE ("site_group_id", "site_code")
+  CONSTRAINT "uq_sites__site_group_site_code" UNIQUE ("site_group_id", "site_code"),
+  CONSTRAINT "fk_sites__local_government_unit" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id")
 );;
 
 
@@ -18244,6 +18454,13 @@ CREATE INDEX "ix_sites__site_status" ON "sites"."sites" ("site_status");;
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_sites__local_government_unit_id.sql
+-- ============================================================================
+-- Create index "ix_sites__local_government_unit_id"
+CREATE INDEX "ix_sites__local_government_unit_id" ON "sites"."sites" ("local_government_unit_id");;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/sites/comments/sites.sites.comments.sql
 -- ============================================================================
 -- Set comment to table: "sites"
@@ -18255,6 +18472,8 @@ COMMENT ON TABLE "sites"."sites" IS 'ExitPass v1.2 table generated from Section 
 -- ============================================================================
 -- Set comment to column: "site_id" on table: "sites"
 COMMENT ON COLUMN "sites"."sites"."site_id" IS 'Canonical identifier of the site.';;
+
+COMMENT ON COLUMN "sites"."sites"."local_government_unit_id" IS 'Authoritative city or municipality LGU reference for jurisdiction-based statutory parking policy resolution. Legacy city/province/lgu_code remain compatibility fields.';;
 
 
 -- ============================================================================
@@ -18426,24 +18645,18 @@ COMMENT ON COLUMN "sites"."sites"."row_version" IS 'Optimistic concurrency versi
 
 
 -- ============================================================================
--- Source object: objects/schemas/sites/tables/sites.jurisdictions.sql
+-- Source object: objects/schemas/sites/tables/sites.metropolitan_areas.sql
 -- ============================================================================
--- Create "jurisdictions" table
-CREATE TABLE "sites"."jurisdictions" (
-  "jurisdiction_id" uuid NOT NULL DEFAULT gen_random_uuid(),
-  "jurisdiction_code" character varying(64) NOT NULL,
-  "jurisdiction_type" "sites"."jurisdiction_type_enum" NOT NULL,
-  "display_name" character varying(160) NOT NULL,
-  "province_name" character varying(128) NULL,
-  "region_name" character varying(128) NULL,
-  "country_code" character(2) NOT NULL DEFAULT 'PH',
-  "psgc_code" character varying(16) NULL,
-  "jurisdiction_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
-  "effective_from" timestamptz NULL,
+-- Create "metropolitan_areas" table
+CREATE TABLE "sites"."metropolitan_areas" (
+  "metropolitan_area_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "metropolitan_area_code" character varying(64) NOT NULL,
+  "metropolitan_area_name" character varying(160) NOT NULL,
+  "description" text NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "metropolitan_area_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
   "effective_to" timestamptz NULL,
-  "replaced_by_jurisdiction_id" uuid NULL,
-  "source_reference" character varying(256) NULL,
-  "source_provenance" text NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "created_by_user_id" uuid NULL,
   "created_by_service_identity_id" uuid NULL,
@@ -18451,40 +18664,77 @@ CREATE TABLE "sites"."jurisdictions" (
   "updated_by_user_id" uuid NULL,
   "updated_by_service_identity_id" uuid NULL,
   "row_version" bigint NOT NULL DEFAULT 1,
-  CONSTRAINT "pk_jurisdictions" PRIMARY KEY ("jurisdiction_id"),
-  CONSTRAINT "uq_jurisdictions__code" UNIQUE ("jurisdiction_code"),
-  CONSTRAINT "uq_jurisdictions__psgc_code" UNIQUE ("psgc_code"),
-  CONSTRAINT "fk_jurisdictions__replaced_by" FOREIGN KEY ("replaced_by_jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
-  CONSTRAINT "ck_jurisdictions__code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
-  CONSTRAINT "ck_jurisdictions__display_name" CHECK (btrim((display_name)::text) <> ''::text),
-  CONSTRAINT "ck_jurisdictions__country_code" CHECK (country_code = upper(country_code)),
-  CONSTRAINT "ck_jurisdictions__effective_window" CHECK ((effective_to IS NULL) OR (effective_from IS NULL) OR (effective_to > effective_from)),
-  CONSTRAINT "ck_jurisdictions__no_self_replacement" CHECK ((replaced_by_jurisdiction_id IS NULL) OR (replaced_by_jurisdiction_id <> jurisdiction_id)),
-  CONSTRAINT "ck_jurisdictions__row_version_positive" CHECK (row_version > 0)
+  CONSTRAINT "pk_metropolitan_areas" PRIMARY KEY ("metropolitan_area_id"),
+  CONSTRAINT "uq_metropolitan_areas__code" UNIQUE ("metropolitan_area_code"),
+  CONSTRAINT "ck_metropolitan_areas__code" CHECK (((metropolitan_area_code)::text = upper((metropolitan_area_code)::text) AND ((metropolitan_area_code)::text ~ '^[A-Z0-9][A-Z0-9_]{2,63}$'::text))),
+  CONSTRAINT "ck_metropolitan_areas__name" CHECK (btrim((metropolitan_area_name)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_areas__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_areas__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_metropolitan_areas__row_version_positive" CHECK (row_version > 0)
 );;
 
 
 -- ============================================================================
--- Source object: objects/schemas/sites/indexes/sites.ix_jurisdictions__status.sql
+-- Source object: objects/schemas/sites/indexes/sites.ix_metropolitan_areas__status.sql
 -- ============================================================================
--- Create index "ix_jurisdictions__status"
-CREATE INDEX "ix_jurisdictions__status" ON "sites"."jurisdictions" ("jurisdiction_status", "jurisdiction_type");;
+-- Create index "ix_metropolitan_areas__status"
+CREATE INDEX "ix_metropolitan_areas__status" ON "sites"."metropolitan_areas" ("metropolitan_area_status");;
 
 
 -- ============================================================================
--- Source object: objects/schemas/sites/comments/sites.jurisdictions.comments.sql
+-- Source object: objects/schemas/sites/comments/sites.metropolitan_areas.comments.sql
 -- ============================================================================
-COMMENT ON TABLE "sites"."jurisdictions" IS 'Canonical city or municipality jurisdiction authority for statutory parking policy resolution. Display names are descriptive only; jurisdiction_code and jurisdiction_id are the stable business references.';;
+COMMENT ON TABLE "sites"."metropolitan_areas" IS 'Controlled metropolitan-area reference data used for reporting and sample coverage. It is not a legal source of statutory parking authority.';;
 
 
 -- ============================================================================
--- Source object: objects/schemas/sites/comments/sites.jurisdictions.column-comments.sql
+-- Source object: objects/schemas/sites/tables/sites.metropolitan_area_jurisdictions.sql
 -- ============================================================================
-COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_id" IS 'Stable canonical jurisdiction identifier for city or municipality policy authority.';;
-COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_code" IS 'Canonical jurisdiction code. This is not a display name and may be mapped to PSGC when available.';;
-COMMENT ON COLUMN "sites"."jurisdictions"."jurisdiction_type" IS 'City or municipality classification for current parking-policy scope.';;
-COMMENT ON COLUMN "sites"."jurisdictions"."psgc_code" IS 'Official PSGC or equivalent code when available; null means not yet assigned, not that no jurisdiction exists.';;
-COMMENT ON COLUMN "sites"."jurisdictions"."replaced_by_jurisdiction_id" IS 'Historical correction or replacement pointer. Runtime must not rewrite past transaction authority when this value changes.';;
+-- Create "metropolitan_area_jurisdictions" table
+CREATE TABLE "sites"."metropolitan_area_jurisdictions" (
+  "metropolitan_area_jurisdiction_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "metropolitan_area_id" uuid NOT NULL,
+  "jurisdiction_id" uuid NOT NULL,
+  "membership_classification" character varying(64) NOT NULL,
+  "source_reference" character varying(256) NOT NULL,
+  "membership_status" "sites"."jurisdiction_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_metropolitan_area_jurisdictions" PRIMARY KEY ("metropolitan_area_jurisdiction_id"),
+  CONSTRAINT "fk_metropolitan_area_jurisdictions__area" FOREIGN KEY ("metropolitan_area_id") REFERENCES "sites"."metropolitan_areas" ("metropolitan_area_id"),
+  CONSTRAINT "fk_metropolitan_area_jurisdictions__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__classification" CHECK (btrim((membership_classification)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__source_reference" CHECK (btrim((source_reference)::text) <> ''::text),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__effective_window" CHECK ((effective_to IS NULL) OR (effective_to > effective_from)),
+  CONSTRAINT "ck_metropolitan_area_jurisdictions__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ux_metropolitan_area_jurisdictions__active.sql
+-- ============================================================================
+-- Create unique index "ux_metropolitan_area_jurisdictions__active"
+CREATE UNIQUE INDEX "ux_metropolitan_area_jurisdictions__active" ON "sites"."metropolitan_area_jurisdictions" ("metropolitan_area_id", "jurisdiction_id") WHERE ((membership_status = 'ACTIVE'::sites.jurisdiction_status_enum) AND (effective_to IS NULL));;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/indexes/sites.ix_metropolitan_area_jurisdictions__jurisdiction.sql
+-- ============================================================================
+-- Create index "ix_metropolitan_area_jurisdictions__jurisdiction"
+CREATE INDEX "ix_metropolitan_area_jurisdictions__jurisdiction" ON "sites"."metropolitan_area_jurisdictions" ("jurisdiction_id", "membership_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.metropolitan_area_jurisdictions.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "sites"."metropolitan_area_jurisdictions" IS 'Many-to-many membership between controlled metropolitan areas and city/municipality LGUs. Duplicate active membership is prohibited.';;
 
 
 -- ============================================================================
@@ -18547,6 +18797,48 @@ COMMENT ON COLUMN "sites"."site_jurisdiction_assignments"."source_reference" IS 
 
 
 -- ============================================================================
+-- Source object: objects/schemas/sites/views/sites.site_group_lgu_scopes.sql
+-- ============================================================================
+-- Create view "site_group_lgu_scopes"
+CREATE VIEW "sites"."site_group_lgu_scopes" AS
+SELECT
+  sg.site_group_id,
+  sg.site_group_code,
+  sg.site_group_name,
+  j.jurisdiction_id AS local_government_unit_id,
+  j.jurisdiction_code AS local_government_unit_code,
+  j.psgc_code,
+  j.display_name AS local_government_unit_name,
+  ma.metropolitan_area_id,
+  ma.metropolitan_area_code,
+  ma.metropolitan_area_name,
+  count(DISTINCT s.site_id) AS site_count
+FROM sites.site_groups sg
+JOIN sites.sites s ON s.site_group_id = sg.site_group_id
+JOIN sites.jurisdictions j ON j.jurisdiction_id = s.local_government_unit_id
+LEFT JOIN sites.metropolitan_area_jurisdictions maj
+  ON maj.jurisdiction_id = j.jurisdiction_id
+ AND maj.membership_status = 'ACTIVE'::sites.jurisdiction_status_enum
+ AND maj.effective_from <= now()
+ AND (maj.effective_to IS NULL OR maj.effective_to > now())
+LEFT JOIN sites.metropolitan_areas ma ON ma.metropolitan_area_id = maj.metropolitan_area_id
+GROUP BY sg.site_group_id, sg.site_group_code, sg.site_group_name, j.jurisdiction_id, j.jurisdiction_code, j.psgc_code, j.display_name, ma.metropolitan_area_id, ma.metropolitan_area_code, ma.metropolitan_area_name;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sites/comments/sites.site_group_lgu_scopes.comments.sql
+-- ============================================================================
+COMMENT ON VIEW "sites"."site_group_lgu_scopes" IS 'Read-only derived Site Group jurisdiction coverage from Sites and their authoritative local_government_unit_id. Site Group is not the legal ordinance authority.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/constraints/discounts.fk_sd_policy_registry__local_government_unit.sql
+-- ============================================================================
+-- Add foreign key "fk_sd_policy_registry__local_government_unit"
+ALTER TABLE "discounts"."statutory_discount_policy_registry" ADD CONSTRAINT "fk_sd_policy_registry__local_government_unit" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id");;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_policy_versions.sql
 -- ============================================================================
 -- Create "statutory_discount_policy_versions" table
@@ -18558,6 +18850,7 @@ CREATE TABLE "discounts"."statutory_discount_policy_versions" (
   "policy_version_label" character varying(160) NULL,
   "entitlement_type" "discounts"."statutory_entitlement_type_enum" NOT NULL,
   "jurisdiction_id" uuid NOT NULL,
+  "local_government_unit_id" uuid NULL,
   "jurisdiction_code" character varying(64) NOT NULL,
   "jurisdiction_display_name" character varying(160) NOT NULL,
   "policy_scope_type" "discounts"."policy_scope_type_enum" NOT NULL,
@@ -18636,12 +18929,14 @@ CREATE TABLE "discounts"."statutory_discount_policy_versions" (
   CONSTRAINT "uq_sd_policy_versions__code_version" UNIQUE ("policy_code", "policy_version"),
   CONSTRAINT "fk_sd_policy_versions__registry" FOREIGN KEY ("statutory_discount_policy_registry_id") REFERENCES "discounts"."statutory_discount_policy_registry" ("statutory_discount_policy_registry_id"),
   CONSTRAINT "fk_sd_policy_versions__jurisdiction" FOREIGN KEY ("jurisdiction_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "fk_sd_policy_versions__local_government_unit" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
   CONSTRAINT "fk_sd_policy_versions__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
   CONSTRAINT "fk_sd_policy_versions__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
   CONSTRAINT "fk_sd_policy_versions__supersedes" FOREIGN KEY ("supersedes_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
   CONSTRAINT "fk_sd_policy_versions__superseded_by" FOREIGN KEY ("superseded_by_policy_version_id") REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id"),
   CONSTRAINT "ck_sd_policy_versions__policy_code_format" CHECK (((policy_code)::text = upper((policy_code)::text) AND ((policy_code)::text ~ '^[A-Z0-9][A-Z0-9_]{2,127}$'::text))),
   CONSTRAINT "ck_sd_policy_versions__jurisdiction_code_format" CHECK (((jurisdiction_code)::text = upper((jurisdiction_code)::text) AND ((jurisdiction_code)::text ~ '^[A-Z]{2}[-_A-Z0-9]{2,63}$'::text))),
+  CONSTRAINT "ck_sd_policy_versions__lgu_consistency" CHECK ((local_government_unit_id IS NULL) OR (local_government_unit_id = jurisdiction_id)),
   CONSTRAINT "ck_sd_policy_versions__source_reference_required" CHECK (btrim(source_reference) <> ''::text),
   CONSTRAINT "ck_sd_policy_versions__hash" CHECK ((policy_semantic_hash)::text ~ '^sha256:[0-9a-f]{64}$'::text),
   CONSTRAINT "ck_sd_policy_versions__hash_version" CHECK ((policy_semantic_hash_source_version)::text = 'statutory-parking-policy-authority:sha256:v1'::text),
@@ -18681,6 +18976,13 @@ CREATE INDEX "ix_sd_policy_versions__active_lookup" ON "discounts"."statutory_di
 -- ============================================================================
 -- Create index "ix_sd_policy_versions__jurisdiction"
 CREATE INDEX "ix_sd_policy_versions__jurisdiction" ON "discounts"."statutory_discount_policy_versions" ("jurisdiction_id", "jurisdiction_code");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_versions__local_government_unit.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_versions__local_government_unit"
+CREATE INDEX "ix_sd_policy_versions__local_government_unit" ON "discounts"."statutory_discount_policy_versions" ("local_government_unit_id", "entitlement_type", "transaction_publication_status", "transaction_use_effective_from", "transaction_use_effective_to");;
 
 
 -- ============================================================================
@@ -18726,6 +19028,131 @@ COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_nu
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."unresolved_policy_facts" IS 'Safe notes for unknown legal facts; never raw ID evidence, images, credentials, or unpublished legal notes.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."transaction_use_effective_from" IS 'Controlled publication effective instant for transaction use. This is distinct from unknown legal enactment dates.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."policy_semantic_hash" IS 'Privacy-safe semantic hash over legally material policy authority facts for replay and drift detection.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."local_government_unit_id" IS 'Semantic alias for jurisdiction_id when the jurisdiction is a city or municipality LGU. Runtime compatibility keeps jurisdiction_id as the durable existing reference.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_policy_registry_lgu_scopes.sql
+-- ============================================================================
+-- Create "statutory_discount_policy_registry_lgu_scopes" table
+CREATE TABLE "discounts"."statutory_discount_policy_registry_lgu_scopes" (
+  "statutory_discount_policy_registry_lgu_scope_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_policy_registry_id" uuid NOT NULL,
+  "local_government_unit_id" uuid NOT NULL,
+  "coverage_available" boolean NOT NULL DEFAULT false,
+  "auto_application_allowed" boolean NOT NULL DEFAULT false,
+  "source_scan_date" date NOT NULL,
+  "source_reference" text NOT NULL,
+  "scope_status" "discounts"."discount_policy_status_enum" NOT NULL DEFAULT 'DRAFT',
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_sd_policy_registry_lgu_scopes" PRIMARY KEY ("statutory_discount_policy_registry_lgu_scope_id"),
+  CONSTRAINT "fk_sd_policy_registry_lgu_scopes__registry" FOREIGN KEY ("statutory_discount_policy_registry_id") REFERENCES "discounts"."statutory_discount_policy_registry" ("statutory_discount_policy_registry_id"),
+  CONSTRAINT "fk_sd_policy_registry_lgu_scopes__lgu" FOREIGN KEY ("local_government_unit_id") REFERENCES "sites"."jurisdictions" ("jurisdiction_id"),
+  CONSTRAINT "uq_sd_policy_registry_lgu_scopes__registry_lgu" UNIQUE ("statutory_discount_policy_registry_id", "local_government_unit_id"),
+  CONSTRAINT "ck_sd_policy_registry_lgu_scopes__source_reference" CHECK (btrim(source_reference) <> ''::text),
+  CONSTRAINT "ck_sd_policy_registry_lgu_scopes__auto_requires_active" CHECK ((auto_application_allowed = false) OR ((coverage_available = true) AND (scope_status = 'ACTIVE'::discounts.discount_policy_status_enum))),
+  CONSTRAINT "ck_sd_policy_registry_lgu_scopes__row_version_positive" CHECK (row_version > 0)
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ix_sd_policy_registry_lgu_scopes__lgu.sql
+-- ============================================================================
+-- Create index "ix_sd_policy_registry_lgu_scopes__lgu"
+CREATE INDEX "ix_sd_policy_registry_lgu_scopes__lgu" ON "discounts"."statutory_discount_policy_registry_lgu_scopes" ("local_government_unit_id", "coverage_available", "auto_application_allowed", "scope_status");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/indexes/discounts.ux_sd_policy_registry_lgu_scopes__active_entitlement.sql
+-- ============================================================================
+-- Create unique index "ux_sd_policy_registry_lgu_scopes__active_entitlement"
+CREATE UNIQUE INDEX "ux_sd_policy_registry_lgu_scopes__active_entitlement" ON "discounts"."statutory_discount_policy_registry_lgu_scopes" ("local_government_unit_id", "statutory_discount_policy_registry_id") WHERE (scope_status = 'ACTIVE'::discounts.discount_policy_status_enum);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_discount_policy_registry_lgu_scopes.comments.sql
+-- ============================================================================
+COMMENT ON TABLE "discounts"."statutory_discount_policy_registry_lgu_scopes" IS 'Canonical LGU scope bridge for statutory parking policy research rows. This enables LGU-level inheritance without duplicating ordinances per Site.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_registry_lgu_scopes"."auto_application_allowed" IS 'Controlled production automation flag. I-006 research-derived seed rows keep this false even when coverage is known.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/views/discounts.statutory_parking_lgu_policy_coverage.sql
+-- ============================================================================
+-- Create view "statutory_parking_lgu_policy_coverage"
+CREATE VIEW "discounts"."statutory_parking_lgu_policy_coverage" AS
+SELECT
+  s.local_government_unit_id,
+  j.jurisdiction_code AS local_government_unit_code,
+  j.psgc_code,
+  j.display_name AS local_government_unit_name,
+  r.statutory_discount_policy_registry_id,
+  r.policy_code,
+  r.policy_name,
+  r.entitlement_type,
+  r.verification_status,
+  r.policy_status,
+  r.benefit_type,
+  r.beneficiary_residency_scope,
+  r.ordinance_reference,
+  r.source_reference,
+  r.coverage_available,
+  r.auto_application_allowed,
+  r.source_scan_date,
+  r.effective_from,
+  r.effective_to,
+  CASE
+    WHEN r.auto_application_allowed = true AND r.coverage_available = true AND r.policy_status = 'ACTIVE'::discounts.discount_policy_status_enum THEN 'AUTO_APPLICATION_ALLOWED'
+    WHEN r.coverage_available = true THEN 'RESEARCH_COVERAGE_IDENTIFIED'
+    ELSE 'NO_ACTIVE_LOCAL_COVERAGE'
+  END AS coverage_resolution_status
+FROM discounts.statutory_discount_policy_registry r
+JOIN discounts.statutory_discount_policy_registry_lgu_scopes s ON s.statutory_discount_policy_registry_id = r.statutory_discount_policy_registry_id
+JOIN sites.jurisdictions j ON j.jurisdiction_id = s.local_government_unit_id;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/views/discounts.statutory_parking_site_policy_coverage.sql
+-- ============================================================================
+-- Create view "statutory_parking_site_policy_coverage"
+CREATE VIEW "discounts"."statutory_parking_site_policy_coverage" AS
+SELECT
+  site.site_id,
+  site.site_code,
+  site.site_group_id,
+  coverage.local_government_unit_id,
+  coverage.local_government_unit_code,
+  coverage.psgc_code,
+  coverage.local_government_unit_name,
+  coverage.entitlement_type,
+  coverage.statutory_discount_policy_registry_id,
+  coverage.policy_code,
+  coverage.policy_name,
+  coverage.verification_status,
+  coverage.policy_status,
+  coverage.benefit_type,
+  coverage.beneficiary_residency_scope,
+  coverage.coverage_available,
+  coverage.auto_application_allowed,
+  coverage.source_scan_date,
+  coverage.effective_from,
+  coverage.effective_to,
+  coverage.coverage_resolution_status
+FROM sites.sites site
+JOIN discounts.statutory_parking_lgu_policy_coverage coverage ON coverage.local_government_unit_id = site.local_government_unit_id;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/comments/discounts.statutory_parking_policy_coverage.views.comments.sql
+-- ============================================================================
+COMMENT ON VIEW "discounts"."statutory_parking_lgu_policy_coverage" IS 'Read model for LGU-level statutory parking policy research coverage and production auto-application posture.';;
+COMMENT ON VIEW "discounts"."statutory_parking_site_policy_coverage" IS 'Read model proving Site-level inheritance from authoritative Site LGU assignment without Site-level policy duplication.';;
 
 
 -- ============================================================================
@@ -19692,6 +20119,397 @@ BEGIN
 END $$;
 
 COMMIT;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/sites.philippine-regions-provinces.seed.sql
+-- ============================================================================
+-- I-006 canonical Philippine region and province seed.
+WITH seed(seed_key, psgc_code, correspondence_code, region_code, official_name, short_name) AS (
+  VALUES
+  ('NCR','1300000000',NULL,'NCR','National Capital Region','NCR'),
+  ('REGION_III','0300000000',NULL,'REGION_III','Region III (Central Luzon)','Central Luzon'),
+  ('REGION_IV_A','0400000000',NULL,'REGION_IV_A','Region IV-A (CALABARZON)','CALABARZON'),
+  ('REGION_VII','0700000000',NULL,'REGION_VII','Region VII (Central Visayas)','Central Visayas'),
+  ('REGION_XI','1100000000',NULL,'REGION_XI','Region XI (Davao Region)','Davao Region')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:region:' || seed_key),1,8)||'-'||substr(md5('exitpass:i006:region:' || seed_key),9,4)||'-'||substr(md5('exitpass:i006:region:' || seed_key),13,4)||'-'||substr(md5('exitpass:i006:region:' || seed_key),17,4)||'-'||substr(md5('exitpass:i006:region:' || seed_key),21,12))::uuid AS philippine_region_id,
+         psgc_code, correspondence_code, region_code, official_name, short_name
+  FROM seed
+)
+INSERT INTO sites.philippine_regions (philippine_region_id, psgc_code, correspondence_code, region_code, official_name, short_name, region_status, effective_from, source_reference, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT philippine_region_id, psgc_code, correspondence_code, region_code, official_name, short_name, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, 'I-006 controlled PSGC reference seed; validate against current PSA PSGC before production use.', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_philippine_regions__psgc_code DO UPDATE SET
+  correspondence_code = EXCLUDED.correspondence_code,
+  region_code = EXCLUDED.region_code,
+  official_name = EXCLUDED.official_name,
+  short_name = EXCLUDED.short_name,
+  source_reference = EXCLUDED.source_reference,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+WITH seed(seed_key, region_code, psgc_code, correspondence_code, province_code, official_name) AS (
+  VALUES
+  ('BULACAN','REGION_III','0314000000',NULL,'BULACAN','Bulacan'),
+  ('RIZAL','REGION_IV_A','0458000000',NULL,'RIZAL','Rizal'),
+  ('LAGUNA','REGION_IV_A','0434000000',NULL,'LAGUNA','Laguna'),
+  ('CEBU','REGION_VII','0722000000',NULL,'CEBU','Cebu'),
+  ('DAVAO_DEL_NORTE','REGION_XI','1123000000',NULL,'DAVAO_DEL_NORTE','Davao del Norte'),
+  ('DAVAO_DEL_SUR','REGION_XI','1124000000',NULL,'DAVAO_DEL_SUR','Davao del Sur'),
+  ('DAVAO_ORIENTAL','REGION_XI','1125000000',NULL,'DAVAO_ORIENTAL','Davao Oriental'),
+  ('DAVAO_DE_ORO','REGION_XI','1182000000',NULL,'DAVAO_DE_ORO','Davao de Oro'),
+  ('DAVAO_OCCIDENTAL','REGION_XI','1186000000',NULL,'DAVAO_OCCIDENTAL','Davao Occidental')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:province:' || seed_key),1,8)||'-'||substr(md5('exitpass:i006:province:' || seed_key),9,4)||'-'||substr(md5('exitpass:i006:province:' || seed_key),13,4)||'-'||substr(md5('exitpass:i006:province:' || seed_key),17,4)||'-'||substr(md5('exitpass:i006:province:' || seed_key),21,12))::uuid AS philippine_province_id,
+         r.philippine_region_id, s.psgc_code, s.correspondence_code, s.province_code, s.official_name
+  FROM seed s
+  JOIN sites.philippine_regions r ON r.region_code = s.region_code
+)
+INSERT INTO sites.philippine_provinces (philippine_province_id, philippine_region_id, psgc_code, correspondence_code, province_code, official_name, province_status, effective_from, source_reference, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT philippine_province_id, philippine_region_id, psgc_code, correspondence_code, province_code, official_name, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, 'I-006 controlled PSGC reference seed; Metro Manila is intentionally not a province.', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_philippine_provinces__psgc_code DO UPDATE SET
+  philippine_region_id = EXCLUDED.philippine_region_id,
+  correspondence_code = EXCLUDED.correspondence_code,
+  province_code = EXCLUDED.province_code,
+  official_name = EXCLUDED.official_name,
+  source_reference = EXCLUDED.source_reference,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/sites.philippine-lgus.seed.sql
+-- ============================================================================
+-- I-006 canonical Philippine city and municipality LGU seed.
+WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, official_name, short_display_name, jurisdiction_type, city_classification) AS (
+  VALUES
+  ('CALOOCAN','NCR',NULL,'1380100000','PH-PSGC-1380100000','City of Caloocan','Caloocan','CITY','HIGHLY_URBANIZED'),
+  ('LAS_PINAS','NCR',NULL,'1380200000','PH-PSGC-1380200000','City of Las PiÃ±as','Las PiÃ±as','CITY','HIGHLY_URBANIZED'),
+  ('MAKATI','NCR',NULL,'1380300000','PH-PSGC-1380300000','City of Makati','Makati','CITY','HIGHLY_URBANIZED'),
+  ('MALABON','NCR',NULL,'1380400000','PH-PSGC-1380400000','City of Malabon','Malabon','CITY','HIGHLY_URBANIZED'),
+  ('MANDALUYONG','NCR',NULL,'1380500000','PH-PSGC-1380500000','City of Mandaluyong','Mandaluyong','CITY','HIGHLY_URBANIZED'),
+  ('MANILA','NCR',NULL,'1380600000','PH-PSGC-1380600000','City of Manila','Manila','CITY','HIGHLY_URBANIZED'),
+  ('MARIKINA','NCR',NULL,'1380700000','PH-PSGC-1380700000','City of Marikina','Marikina','CITY','HIGHLY_URBANIZED'),
+  ('MUNTINLUPA','NCR',NULL,'1380800000','PH-PSGC-1380800000','City of Muntinlupa','Muntinlupa','CITY','HIGHLY_URBANIZED'),
+  ('NAVOTAS','NCR',NULL,'1380900000','PH-PSGC-1380900000','City of Navotas','Navotas','CITY','HIGHLY_URBANIZED'),
+  ('PARANAQUE','NCR',NULL,'1381000000','PH-PSGC-1381000000','City of ParaÃ±aque','ParaÃ±aque','CITY','HIGHLY_URBANIZED'),
+  ('PASAY','NCR',NULL,'1381100000','PH-PSGC-1381100000','Pasay City','Pasay','CITY','HIGHLY_URBANIZED'),
+  ('PASIG','NCR',NULL,'1381200000','PH-PSGC-1381200000','City of Pasig','Pasig','CITY','HIGHLY_URBANIZED'),
+  ('QUEZON_CITY','NCR',NULL,'1381300000','PH-PSGC-1381300000','Quezon City','Quezon City','CITY','HIGHLY_URBANIZED'),
+  ('SAN_JUAN','NCR',NULL,'1381400000','PH-PSGC-1381400000','City of San Juan','San Juan','CITY','HIGHLY_URBANIZED'),
+  ('TAGUIG','NCR',NULL,'1381500000','PH-PSGC-1381500000','City of Taguig','Taguig','CITY','HIGHLY_URBANIZED'),
+  ('VALENZUELA','NCR',NULL,'1381600000','PH-PSGC-1381600000','City of Valenzuela','Valenzuela','CITY','HIGHLY_URBANIZED'),
+  ('PATEROS','NCR',NULL,'1381700000','PH-PSGC-1381700000','Municipality of Pateros','Pateros','MUNICIPALITY',NULL),
+  ('CARCAR','REGION_VII','CEBU','0722140000','PH-PSGC-0722140000','City of Carcar','Carcar','CITY','COMPONENT'),
+  ('CEBU_CITY','REGION_VII',NULL,'0730600000','PH-PSGC-0730600000','City of Cebu','Cebu City','CITY','HIGHLY_URBANIZED'),
+  ('DANAO','REGION_VII','CEBU','0722170000','PH-PSGC-0722170000','City of Danao','Danao','CITY','COMPONENT'),
+  ('LAPU_LAPU','REGION_VII',NULL,'0730110000','PH-PSGC-0730110000','City of Lapu-Lapu','Lapu-Lapu','CITY','HIGHLY_URBANIZED'),
+  ('MANDAUE','REGION_VII',NULL,'0730220000','PH-PSGC-0730220000','City of Mandaue','Mandaue','CITY','HIGHLY_URBANIZED'),
+  ('NAGA_CEBU','REGION_VII','CEBU','0722340000','PH-PSGC-0722340000','City of Naga','Naga','CITY','COMPONENT'),
+  ('TALISAY_CEBU','REGION_VII','CEBU','0722500000','PH-PSGC-0722500000','City of Talisay','Talisay','CITY','COMPONENT'),
+  ('COMPOSTELA_CEBU','REGION_VII','CEBU','0722180000','PH-PSGC-0722180000','Municipality of Compostela','Compostela','MUNICIPALITY',NULL),
+  ('CONSOLACION','REGION_VII','CEBU','0722190000','PH-PSGC-0722190000','Municipality of Consolacion','Consolacion','MUNICIPALITY',NULL),
+  ('CORDOVA','REGION_VII','CEBU','0722220000','PH-PSGC-0722220000','Municipality of Cordova','Cordova','MUNICIPALITY',NULL),
+  ('LILOAN','REGION_VII','CEBU','0722270000','PH-PSGC-0722270000','Municipality of Liloan','Liloan','MUNICIPALITY',NULL),
+  ('MINGLANILLA','REGION_VII','CEBU','0722310000','PH-PSGC-0722310000','Municipality of Minglanilla','Minglanilla','MUNICIPALITY',NULL),
+  ('SAN_FERNANDO_CEBU','REGION_VII','CEBU','0722410000','PH-PSGC-0722410000','Municipality of San Fernando','San Fernando','MUNICIPALITY',NULL),
+  ('DAVAO_CITY','REGION_XI',NULL,'1130700000','PH-PSGC-1130700000','Davao City','Davao City','CITY','HIGHLY_URBANIZED'),
+  ('PANABO','REGION_XI','DAVAO_DEL_NORTE','1123150000','PH-PSGC-1123150000','City of Panabo','Panabo','CITY','COMPONENT'),
+  ('TAGUM','REGION_XI','DAVAO_DEL_NORTE','1123190000','PH-PSGC-1123190000','City of Tagum','Tagum','CITY','COMPONENT'),
+  ('SAMAL','REGION_XI','DAVAO_DEL_NORTE','1123170000','PH-PSGC-1123170000','Island Garden City of Samal','Samal','CITY','COMPONENT'),
+  ('DIGOS','REGION_XI','DAVAO_DEL_SUR','1124030000','PH-PSGC-1124030000','City of Digos','Digos','CITY','COMPONENT'),
+  ('MATI','REGION_XI','DAVAO_ORIENTAL','1125090000','PH-PSGC-1125090000','City of Mati','Mati','CITY','COMPONENT'),
+  ('SANTA_CRUZ_DAVAO_SUR','REGION_XI','DAVAO_DEL_SUR','1124110000','PH-PSGC-1124110000','Municipality of Santa Cruz','Santa Cruz','MUNICIPALITY',NULL),
+  ('HAGONOY_DAVAO_SUR','REGION_XI','DAVAO_DEL_SUR','1124040000','PH-PSGC-1124040000','Municipality of Hagonoy','Hagonoy','MUNICIPALITY',NULL),
+  ('PADADA','REGION_XI','DAVAO_DEL_SUR','1124070000','PH-PSGC-1124070000','Municipality of Padada','Padada','MUNICIPALITY',NULL),
+  ('MALALAG','REGION_XI','DAVAO_DEL_SUR','1124060000','PH-PSGC-1124060000','Municipality of Malalag','Malalag','MUNICIPALITY',NULL),
+  ('SULOP','REGION_XI','DAVAO_DEL_SUR','1124140000','PH-PSGC-1124140000','Municipality of Sulop','Sulop','MUNICIPALITY',NULL),
+  ('CARMEN_DAVAO_NORTE','REGION_XI','DAVAO_DEL_NORTE','1123030000','PH-PSGC-1123030000','Municipality of Carmen','Carmen','MUNICIPALITY',NULL),
+  ('MACO','REGION_XI','DAVAO_DE_ORO','1182040000','PH-PSGC-1182040000','Municipality of Maco','Maco','MUNICIPALITY',NULL),
+  ('MALITA','REGION_XI','DAVAO_OCCIDENTAL','1186030000','PH-PSGC-1186030000','Municipality of Malita','Malita','MUNICIPALITY',NULL),
+  ('SANTA_MARIA_DAVAO_OCC','REGION_XI','DAVAO_OCCIDENTAL','1186040000','PH-PSGC-1186040000','Municipality of Santa Maria','Santa Maria','MUNICIPALITY',NULL),
+  ('ANTIPOLO','REGION_IV_A','RIZAL','0458020000','PH-PSGC-0458020000','City of Antipolo','Antipolo','CITY','COMPONENT'),
+  ('TAYTAY_RIZAL','REGION_IV_A','RIZAL','0458130000','PH-PSGC-0458130000','Municipality of Taytay','Taytay','MUNICIPALITY',NULL),
+  ('MALOLOS','REGION_III','BULACAN','0314100000','PH-PSGC-0314100000','City of Malolos','Malolos','CITY','COMPONENT'),
+  ('MARILAO','REGION_III','BULACAN','0314120000','PH-PSGC-0314120000','Municipality of Marilao','Marilao','MUNICIPALITY',NULL),
+  ('SANTA_ROSA_LAGUNA','REGION_IV_A','LAGUNA','0434280000','PH-PSGC-0434280000','City of Santa Rosa','Santa Rosa','CITY','COMPONENT')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:lgu:' || seed_key),1,8)||'-'||substr(md5('exitpass:i006:lgu:' || seed_key),9,4)||'-'||substr(md5('exitpass:i006:lgu:' || seed_key),13,4)||'-'||substr(md5('exitpass:i006:lgu:' || seed_key),17,4)||'-'||substr(md5('exitpass:i006:lgu:' || seed_key),21,12))::uuid AS jurisdiction_id,
+         r.philippine_region_id,
+         p.philippine_province_id,
+         seed.psgc_code,
+         seed.jurisdiction_code,
+         seed.official_name,
+         seed.short_display_name,
+         seed.jurisdiction_type::sites.jurisdiction_type_enum AS jurisdiction_type,
+         seed.city_classification::sites.city_classification_enum AS city_classification,
+         r.official_name AS region_name,
+         p.official_name AS province_name
+  FROM seed
+  JOIN sites.philippine_regions r ON r.region_code = seed.region_code
+  LEFT JOIN sites.philippine_provinces p ON p.province_code = seed.province_code
+)
+INSERT INTO sites.jurisdictions (jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, display_name, province_name, region_name, country_code, psgc_code, jurisdiction_status, effective_from, source_reference, source_provenance, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, official_name, province_name, region_name, 'PH', psgc_code, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, 'I-006 controlled PSGC LGU seed; validate against current PSA PSGC before production use.', 'Canonical LGU seed for statutory parking jurisdiction coverage. NCR and independent HUCs have null province_id.', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_jurisdictions__code DO UPDATE SET
+  jurisdiction_type = EXCLUDED.jurisdiction_type,
+  philippine_region_id = EXCLUDED.philippine_region_id,
+  philippine_province_id = EXCLUDED.philippine_province_id,
+  short_display_name = EXCLUDED.short_display_name,
+  city_classification = EXCLUDED.city_classification,
+  display_name = EXCLUDED.display_name,
+  province_name = EXCLUDED.province_name,
+  region_name = EXCLUDED.region_name,
+  psgc_code = EXCLUDED.psgc_code,
+  source_reference = EXCLUDED.source_reference,
+  source_provenance = EXCLUDED.source_provenance,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/sites.metropolitan-areas-membership.seed.sql
+-- ============================================================================
+-- I-006 metropolitan-area and LGU membership seed.
+WITH seed(seed_key, area_code, area_name, description, source_reference) AS (
+  VALUES
+  ('METRO_MANILA','METRO_MANILA','Metro Manila','National Capital Region metropolitan area containing the 16 cities and Municipality of Pateros.','I-006 controlled metropolitan reference seed; NCR LGUs from PSGC.'),
+  ('METRO_CEBU','METRO_CEBU','Expanded Metro Cebu','Controlled Expanded Metro Cebu membership for statutory coverage sample scope.','I-006 controlled metropolitan reference seed.'),
+  ('METRO_DAVAO','METRO_DAVAO','Metropolitan Davao','Metropolitan Davao membership under Republic Act No. 11708.','Republic Act No. 11708; I-006 controlled seed.')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:metro:' || seed_key),1,8)||'-'||substr(md5('exitpass:i006:metro:' || seed_key),9,4)||'-'||substr(md5('exitpass:i006:metro:' || seed_key),13,4)||'-'||substr(md5('exitpass:i006:metro:' || seed_key),17,4)||'-'||substr(md5('exitpass:i006:metro:' || seed_key),21,12))::uuid AS metropolitan_area_id,
+         area_code, area_name, description, source_reference
+  FROM seed
+)
+INSERT INTO sites.metropolitan_areas (metropolitan_area_id, metropolitan_area_code, metropolitan_area_name, description, source_reference, metropolitan_area_status, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT metropolitan_area_id, area_code, area_name, description, source_reference, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_metropolitan_areas__code DO UPDATE SET
+  metropolitan_area_name = EXCLUDED.metropolitan_area_name,
+  description = EXCLUDED.description,
+  source_reference = EXCLUDED.source_reference,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+WITH seed(area_code, jurisdiction_code, membership_classification) AS (
+  VALUES
+  ('METRO_MANILA','PH-PSGC-1380100000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380200000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380300000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380400000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380500000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380600000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380700000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380800000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380900000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381000000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381100000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381200000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381300000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381400000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381500000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381600000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381700000','NCR_LGU'),
+  ('METRO_CEBU','PH-PSGC-0722140000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730600000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722170000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730110000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730220000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722340000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722500000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722180000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722190000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722220000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722270000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722310000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722410000','EXPANDED_METRO_CEBU_LGU'),
+  ('METRO_DAVAO','PH-PSGC-1130700000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123150000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123190000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123170000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124030000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1125090000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124110000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124040000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124070000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124060000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124140000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123030000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1182040000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1186030000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1186040000','RA_11708_LGU')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),1,8)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),9,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),13,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),17,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),21,12))::uuid AS metropolitan_area_jurisdiction_id,
+         ma.metropolitan_area_id, j.jurisdiction_id, seed.membership_classification
+  FROM seed
+  JOIN sites.metropolitan_areas ma ON ma.metropolitan_area_code = seed.area_code
+  JOIN sites.jurisdictions j ON j.jurisdiction_code = seed.jurisdiction_code
+)
+INSERT INTO sites.metropolitan_area_jurisdictions (metropolitan_area_jurisdiction_id, metropolitan_area_id, jurisdiction_id, membership_classification, source_reference, membership_status, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT metropolitan_area_jurisdiction_id, metropolitan_area_id, jurisdiction_id, membership_classification, 'I-006 controlled metropolitan membership seed.', 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/discounts.statutory-parking-policy-research-mappings.seed.sql
+-- ============================================================================
+-- I-006 statutory parking research mapping seed.
+-- Research-derived rows do not authorize production automation.
+WITH lgu AS (
+  SELECT jurisdiction_id, jurisdiction_code, psgc_code, display_name
+  FROM sites.jurisdictions
+  WHERE source_reference LIKE 'I-006 controlled PSGC LGU seed%'
+), ent(entitlement_type, evidence_type, entitlement_label, suffix) AS (
+  VALUES ('SENIOR_CITIZEN'::discounts.statutory_entitlement_type_enum, 'SENIOR_CITIZEN_ID'::discounts.discount_evidence_type_enum, 'Senior Citizen', 'SC'),
+         ('PWD'::discounts.statutory_entitlement_type_enum, 'PWD_ID'::discounts.discount_evidence_type_enum, 'PWD', 'PWD')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),1,8)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),9,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),13,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),17,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),21,12))::uuid AS registry_id,
+         ('I006_' || replace(lgu.psgc_code, '-', '_') || '_' || ent.suffix) AS policy_code,
+         lgu.display_name || ' ' || ent.entitlement_label || ' statutory parking research mapping' AS policy_name,
+         'No local parking rule found in current controlled research scan; not an absolute legal declaration.' AS policy_description,
+         ent.entitlement_type, ent.evidence_type, lgu.jurisdiction_id, lgu.jurisdiction_code, lgu.display_name
+  FROM lgu CROSS JOIN ent
+)
+INSERT INTO discounts.statutory_discount_policy_registry (
+  statutory_discount_policy_registry_id, policy_code, policy_name, policy_description, entitlement_type, policy_status, verification_status,
+  policy_level, policy_type, policy_resolution_basis, benefit_type, discount_base_scope, jurisdiction_id, local_government_unit_id,
+  jurisdiction_code, jurisdiction_name, beneficiary_residency_scope, requires_evidence, required_evidence_type, requires_operator_validation,
+  source_reference, source_scan_date, source_document_available, coverage_available, auto_application_allowed, effective_from,
+  created_by_service_identity_id, updated_by_service_identity_id)
+SELECT registry_id, policy_code, policy_name, policy_description, entitlement_type, 'DRAFT', 'NO_LOCAL_RULE_FOUND',
+       'LOCAL_ORDINANCE', 'LOCAL_ORDINANCE', 'LOCAL_ORDINANCE_APPLIED', 'MANUAL_REVIEW', 'NOT_APPLICABLE', jurisdiction_id, jurisdiction_id,
+       jurisdiction_code, display_name, 'NOT_APPLICABLE', false, NULL, false,
+       'I-006 controlled research scan dated 2026-07-28. No local statutory parking measure identified in this scan.', '2026-07-28', NULL, false, false, '2026-07-28T00:00:00+08'::timestamptz,
+       '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_sd_policy_registry__policy_code DO UPDATE SET
+  policy_name = EXCLUDED.policy_name,
+  policy_description = EXCLUDED.policy_description,
+  policy_status = EXCLUDED.policy_status,
+  verification_status = EXCLUDED.verification_status,
+  jurisdiction_id = EXCLUDED.jurisdiction_id,
+  local_government_unit_id = EXCLUDED.local_government_unit_id,
+  jurisdiction_code = EXCLUDED.jurisdiction_code,
+  jurisdiction_name = EXCLUDED.jurisdiction_name,
+  beneficiary_residency_scope = EXCLUDED.beneficiary_residency_scope,
+  requires_evidence = EXCLUDED.requires_evidence,
+  required_evidence_type = EXCLUDED.required_evidence_type,
+  source_reference = EXCLUDED.source_reference,
+  source_scan_date = EXCLUDED.source_scan_date,
+  source_document_available = EXCLUDED.source_document_available,
+  coverage_available = EXCLUDED.coverage_available,
+  auto_application_allowed = EXCLUDED.auto_application_allowed,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+WITH override(psgc_code, entitlement_type, verification_status, coverage_available, ordinance_reference, benefit_type, residency_scope, free_duration_minutes, initial_rate_exempt, full_fee_exempt, overnight_excluded, valet_excluded, standalone_excluded, driver_passenger_required, source_document_available, policy_description, source_reference) AS (
+  VALUES
+  ('1381300000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'SP-2472, S-2015 or related senior parking ordinance','LOCAL_RULE','UNVERIFIED',NULL,false,false,false,false,false,false,NULL,'Coverage identified; resident scope pending source review.','I-006 research scan 2026-07-28: Quezon City senior parking ordinance secondary reference.'),
+  ('1381300000','PWD','VERIFIED_SECONDARY',true,'SP-3234, S-2023','LOCAL_RULE','RESIDENT_ONLY',NULL,false,false,false,false,false,false,NULL,'Coverage identified; city-government-owned parking scope appears limited.','I-006 research scan 2026-07-28: Quezon City PWD parking ordinance secondary reference.'),
+  ('1380600000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'Ordinance No. 8559, S-2019','INITIAL_RATE_EXEMPTION','NON_RESIDENT_ALLOWED',NULL,true,false,NULL,NULL,NULL,NULL,NULL,'Free initial parking rate; residency not clearly limited to residents.','I-006 research scan 2026-07-28: Manila Ordinance No. 8559 secondary reference.'),
+  ('1380600000','PWD','VERIFIED_SECONDARY',true,'Ordinance No. 8559, S-2019','INITIAL_RATE_EXEMPTION','NON_RESIDENT_ALLOWED',NULL,true,false,NULL,NULL,NULL,NULL,NULL,'Free initial parking rate; overnight and driver/passenger conditions require source review.','I-006 research scan 2026-07-28: Manila Ordinance No. 8559 secondary reference.'),
+  ('1380500000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'Ordinance No. 726, S-2019 and Ordinance No. 738, S-2019','LOCAL_RULE','MIXED_OR_CONFLICTING',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Coverage identified; mixed residency interpretation requires source review.','I-006 research scan 2026-07-28: Mandaluyong senior parking secondary reference.'),
+  ('1380200000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'City Ordinance No. 1623-19, S-2019','FREE_DURATION','RESIDENT_ONLY',180,false,false,NULL,NULL,NULL,NULL,NULL,'Likely resident-only; commonly reported first three hours free.','I-006 research scan 2026-07-28: Las PiÃ±as Ordinance No. 1623-19 secondary reference.'),
+  ('1380200000','PWD','VERIFIED_SECONDARY',true,'City Ordinance No. 1623-19, S-2019','FREE_DURATION','RESIDENT_ONLY',180,false,false,NULL,NULL,NULL,NULL,NULL,'Likely resident-only; commonly reported first three hours free.','I-006 research scan 2026-07-28: Las PiÃ±as Ordinance No. 1623-19 secondary reference.'),
+  ('1380800000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'Ordinance No. 17-050; amended by Ordinance Nos. 2022-022 and 2023-129','LOCAL_RULE','NON_RESIDENT_ALLOWED',NULL,false,false,true,NULL,NULL,true,NULL,'Valid IDs from any government agency appear accepted; exclusions require source review.','I-006 research scan 2026-07-28: Muntinlupa ordinance secondary reference.'),
+  ('1380800000','PWD','VERIFIED_SECONDARY',true,'Ordinance No. 17-050; amended by Ordinance Nos. 2022-022 and 2023-129','LOCAL_RULE','NON_RESIDENT_ALLOWED',NULL,false,false,true,NULL,NULL,true,NULL,'Valid IDs from any government agency appear accepted; exclusions require source review.','I-006 research scan 2026-07-28: Muntinlupa ordinance secondary reference.'),
+  ('1381000000','SENIOR_CITIZEN','VERIFIED_ACTIVE_OPERATIONAL',true,NULL,'FULL_FEE_EXEMPTION','RESIDENT_ONLY',NULL,false,true,NULL,NULL,NULL,NULL,false,'Coverage exists and is active in practice; ordinance number and official online text unavailable.','I-006 research scan 2026-07-28: ParaÃ±aque Senior Citizen verified active operational parking benefit.'),
+  ('1381000000','PWD','VERIFIED_ACTIVE_OPERATIONAL',true,'City Ordinance No. 48','FULL_FEE_EXEMPTION','RESIDENT_ONLY',NULL,false,true,NULL,NULL,NULL,NULL,NULL,'Coverage verified and active; detailed facility scope still requires authoritative review.','I-006 research scan 2026-07-28: ParaÃ±aque PWD verified active operational parking benefit.'),
+  ('1380700000','SENIOR_CITIZEN','LEAD_UNVERIFIED',true,'City Ordinance No. 028, S-2026','FREE_DURATION','RESIDENT_ONLY',120,false,false,NULL,NULL,NULL,NULL,NULL,'Reported two-hour free parking; lead remains unverified.','I-006 research scan 2026-07-28: Marikina senior parking lead.'),
+  ('0730600000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'City Ordinance No. 2326; City Ordinance No. 2711','FREE_DURATION','MIXED_OR_CONFLICTING',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Mixed residency and entitlement scope; commonly reported initial free-parking period.','I-006 research scan 2026-07-28: Cebu City ordinances secondary reference.'),
+  ('0730600000','PWD','VERIFIED_SECONDARY',true,'City Ordinance No. 2326; City Ordinance No. 2711','FREE_DURATION','MIXED_OR_CONFLICTING',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Mixed residency and entitlement scope; commonly reported initial free-parking period.','I-006 research scan 2026-07-28: Cebu City ordinances secondary reference.'),
+  ('0730220000','PWD','PROPOSED',false,'2025 proposed free-parking ordinance','FULL_FEE_EXEMPTION','UNVERIFIED',NULL,false,true,NULL,NULL,NULL,NULL,NULL,'Proposed PWD free-parking ordinance reported in 2025; not transaction-active.','I-006 research scan 2026-07-28: Mandaue PWD proposed measure.'),
+  ('1123190000','SENIOR_CITIZEN','LEAD_UNVERIFIED',true,'City Ordinance No. 736, S-2016','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Exact parking scope requires official source review.','I-006 research scan 2026-07-28: Tagum ordinance lead.'),
+  ('1123190000','PWD','LEAD_UNVERIFIED',true,'City Ordinance No. 736, S-2016','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Exact parking scope requires official source review.','I-006 research scan 2026-07-28: Tagum ordinance lead.'),
+  ('0458020000','SENIOR_CITIZEN','LEAD_UNVERIFIED',true,'City Ordinance 2019-917 or City Ordinance No. 2023-1089','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Local measure reported; ordinance mapping requires official review.','I-006 research scan 2026-07-28: Antipolo lead.'),
+  ('0458020000','PWD','LEAD_UNVERIFIED',true,'City Ordinance 2019-917 or City Ordinance No. 2023-1089','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Local measure reported; ordinance mapping requires official review.','I-006 research scan 2026-07-28: Antipolo lead.'),
+  ('0458130000','SENIOR_CITIZEN','LEAD_UNVERIFIED',true,NULL,'FULL_FEE_EXEMPTION','UNVERIFIED',NULL,false,true,NULL,NULL,NULL,NULL,NULL,'Local free-parking measure reported; ordinance number not verified.','I-006 research scan 2026-07-28: Taytay lead.'),
+  ('0458130000','PWD','LEAD_UNVERIFIED',true,NULL,'FULL_FEE_EXEMPTION','UNVERIFIED',NULL,false,true,NULL,NULL,NULL,NULL,NULL,'Local free-parking measure reported; ordinance number not verified.','I-006 research scan 2026-07-28: Taytay lead.'),
+  ('0314120000','SENIOR_CITIZEN','LEAD_UNVERIFIED',true,'Municipal Ordinance No. 1085-2026','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Source text requires review.','I-006 research scan 2026-07-28: Marilao lead.'),
+  ('0314120000','PWD','LEAD_UNVERIFIED',true,'Municipal Ordinance No. 1085-2026','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Source text requires review.','I-006 research scan 2026-07-28: Marilao lead.'),
+  ('0314100000','SENIOR_CITIZEN','LEAD_UNVERIFIED',false,'Robinsons Place Malolos related measure','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Facility-limited scope; not seeded as citywide coverage.','I-006 research scan 2026-07-28: Malolos limited-scope lead.'),
+  ('0314100000','PWD','LEAD_UNVERIFIED',false,'Robinsons Place Malolos related measure','LOCAL_RULE','UNVERIFIED',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Facility-limited scope; not seeded as citywide coverage.','I-006 research scan 2026-07-28: Malolos limited-scope lead.'),
+  ('0434280000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'City Ordinance No. 2202, S-2023','LOCAL_RULE','NON_RESIDENT_ALLOWED',NULL,false,false,true,true,true,NULL,NULL,'Reported to include non-residents and visitors; exclusions require official review.','I-006 research scan 2026-07-28: Santa Rosa ordinance secondary reference.'),
+  ('0434280000','PWD','VERIFIED_SECONDARY',true,'City Ordinance No. 2202, S-2023','LOCAL_RULE','NON_RESIDENT_ALLOWED',NULL,false,false,true,true,true,NULL,NULL,'Reported to include non-residents and visitors; exclusions require official review.','I-006 research scan 2026-07-28: Santa Rosa ordinance secondary reference.')
+), keyed AS (
+  SELECT 'I006_' || o.psgc_code || '_' || CASE WHEN o.entitlement_type = 'SENIOR_CITIZEN' THEN 'SC' ELSE 'PWD' END AS policy_code, o.*
+  FROM override o
+)
+UPDATE discounts.statutory_discount_policy_registry r
+SET policy_description = keyed.policy_description,
+    verification_status = keyed.verification_status::discounts.policy_verification_status_enum,
+    coverage_available = keyed.coverage_available,
+    ordinance_reference = keyed.ordinance_reference,
+    legal_basis_reference = keyed.ordinance_reference,
+    benefit_type = keyed.benefit_type::discounts.parking_benefit_type_enum,
+    beneficiary_residency_scope = keyed.residency_scope::discounts.beneficiary_residency_scope_enum,
+    free_duration_minutes = keyed.free_duration_minutes,
+    initial_rate_exempt = keyed.initial_rate_exempt,
+    full_fee_exempt = keyed.full_fee_exempt,
+    overnight_excluded = COALESCE(keyed.overnight_excluded, false),
+    valet_excluded = COALESCE(keyed.valet_excluded, false),
+    standalone_parking_excluded = COALESCE(keyed.standalone_excluded, false),
+    driver_or_passenger_required = COALESCE(keyed.driver_passenger_required, false),
+    requires_evidence = keyed.coverage_available,
+    required_evidence_type = CASE WHEN keyed.coverage_available AND keyed.entitlement_type = 'SENIOR_CITIZEN' THEN 'SENIOR_CITIZEN_ID'::discounts.discount_evidence_type_enum WHEN keyed.coverage_available THEN 'PWD_ID'::discounts.discount_evidence_type_enum ELSE NULL END,
+    requires_operator_validation = keyed.coverage_available,
+    source_reference = keyed.source_reference,
+    source_document_available = keyed.source_document_available,
+    reviewed_by = 'I-006 controlled research scan',
+    reviewed_at = '2026-07-28T00:00:00+08'::timestamptz,
+    updated_at = now(),
+    updated_by_service_identity_id = '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM keyed
+WHERE r.policy_code = keyed.policy_code;
+
+INSERT INTO discounts.statutory_discount_policy_registry_lgu_scopes (statutory_discount_policy_registry_lgu_scope_id, statutory_discount_policy_registry_id, local_government_unit_id, coverage_available, auto_application_allowed, source_scan_date, source_reference, scope_status, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT (substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),1,8)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),9,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),13,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),17,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),21,12))::uuid,
+       r.statutory_discount_policy_registry_id, r.local_government_unit_id, r.coverage_available, false, '2026-07-28', r.source_reference, 'DRAFT', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM discounts.statutory_discount_policy_registry r
+WHERE r.policy_code LIKE 'I006_%' AND r.local_government_unit_id IS NOT NULL
+ON CONFLICT ON CONSTRAINT uq_sd_policy_registry_lgu_scopes__registry_lgu DO UPDATE SET
+  coverage_available = EXCLUDED.coverage_available,
+  auto_application_allowed = false,
+  source_scan_date = EXCLUDED.source_scan_date,
+  source_reference = EXCLUDED.source_reference,
+  scope_status = 'DRAFT',
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/sites.synthetic-metropolitan-site-groups-sites.seed.sql
+-- ============================================================================
+-- I-006 disabled synthetic metropolitan sample Site Groups and Sites.
+WITH seed(seed_key, site_group_code, site_group_name, description) AS (
+  VALUES
+  ('METRO_MANILA','SAMPLE-METRO-MANILA','Synthetic Sample Metro Manila Site Group','Disabled synthetic Site Group spanning Metro Manila LGUs for jurisdiction coverage proof only.'),
+  ('METRO_CEBU','SAMPLE-METRO-CEBU','Synthetic Sample Metro Cebu Site Group','Disabled synthetic Site Group spanning Metro Cebu LGUs for jurisdiction coverage proof only.'),
+  ('METRO_DAVAO','SAMPLE-METRO-DAVAO','Synthetic Sample Metropolitan Davao Site Group','Disabled synthetic Site Group spanning Metropolitan Davao LGUs for jurisdiction coverage proof only.')
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:sample-site-group:' || seed_key),1,8)||'-'||substr(md5('exitpass:i006:sample-site-group:' || seed_key),9,4)||'-'||substr(md5('exitpass:i006:sample-site-group:' || seed_key),13,4)||'-'||substr(md5('exitpass:i006:sample-site-group:' || seed_key),17,4)||'-'||substr(md5('exitpass:i006:sample-site-group:' || seed_key),21,12))::uuid AS site_group_id,
+         site_group_code, site_group_name, description
+  FROM seed
+)
+INSERT INTO sites.site_groups (site_group_id, site_group_code, site_group_name, business_label, description, operator_entity_name, timezone_name, default_currency_code, site_group_status, public_lookup_enabled, default_payment_enabled, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT site_group_id, site_group_code, site_group_name, 'Synthetic sample', description, 'Synthetic non-production reference', 'Asia/Manila', 'PHP', 'INACTIVE', false, false, '2026-07-28T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_site_groups__site_group_code DO UPDATE SET
+  site_group_name = EXCLUDED.site_group_name,
+  business_label = EXCLUDED.business_label,
+  description = EXCLUDED.description,
+  operator_entity_name = EXCLUDED.operator_entity_name,
+  site_group_status = 'INACTIVE',
+  public_lookup_enabled = false,
+  default_payment_enabled = false,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+WITH members AS (
+  SELECT ma.metropolitan_area_code, ma.metropolitan_area_name, sg.site_group_id, j.jurisdiction_id, j.psgc_code, j.display_name, j.short_display_name, j.province_name
+  FROM sites.metropolitan_areas ma
+  JOIN sites.metropolitan_area_jurisdictions maj ON maj.metropolitan_area_id = ma.metropolitan_area_id AND maj.membership_status = 'ACTIVE'
+  JOIN sites.jurisdictions j ON j.jurisdiction_id = maj.jurisdiction_id
+  JOIN sites.site_groups sg ON sg.site_group_code = 'SAMPLE-' || replace(ma.metropolitan_area_code, '_', '-')
+  WHERE ma.metropolitan_area_code IN ('METRO_MANILA','METRO_CEBU','METRO_DAVAO')
+), samples AS (
+  SELECT members.*, sample_no,
+         'SAMPLE-' || replace(metropolitan_area_code, '_', '-') || '-' || psgc_code || '-' || lpad(sample_no::text, 2, '0') AS site_code
+  FROM members CROSS JOIN (VALUES (1),(2)) AS n(sample_no)
+), prepared AS (
+  SELECT (substr(md5('exitpass:i006:sample-site:' || site_code),1,8)||'-'||substr(md5('exitpass:i006:sample-site:' || site_code),9,4)||'-'||substr(md5('exitpass:i006:sample-site:' || site_code),13,4)||'-'||substr(md5('exitpass:i006:sample-site:' || site_code),17,4)||'-'||substr(md5('exitpass:i006:sample-site:' || site_code),21,12))::uuid AS site_id,
+         site_group_id, jurisdiction_id, psgc_code, display_name, short_display_name, province_name, site_code, sample_no
+  FROM samples
+)
+INSERT INTO sites.sites (site_id, site_group_id, site_code, site_name, site_description, site_type, timezone_name, address_line1, city, province, country_code, lgu_code, local_government_unit_id, site_status, public_lookup_enabled, payment_enabled, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT site_id, site_group_id, site_code, 'Synthetic ' || short_display_name || ' Sample Site ' || sample_no, 'Disabled synthetic Site for I-006 jurisdiction coverage proof only. No real operator, address, POS, payment, fiscal, lane, or device configuration.', 'OPEN_LOT', 'Asia/Manila', 'Synthetic sample only - no real address', display_name, province_name, 'PH', psgc_code, jurisdiction_id, 'INACTIVE', false, false, '2026-07-28T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM prepared
+ON CONFLICT ON CONSTRAINT uq_sites__site_group_site_code DO UPDATE SET
+  site_name = EXCLUDED.site_name,
+  site_description = EXCLUDED.site_description,
+  site_type = EXCLUDED.site_type,
+  timezone_name = EXCLUDED.timezone_name,
+  address_line1 = EXCLUDED.address_line1,
+  city = EXCLUDED.city,
+  province = EXCLUDED.province,
+  country_code = EXCLUDED.country_code,
+  lgu_code = EXCLUDED.lgu_code,
+  local_government_unit_id = EXCLUDED.local_government_unit_id,
+  site_status = 'INACTIVE',
+  public_lookup_enabled = false,
+  payment_enabled = false,
+  updated_at = now(),
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+INSERT INTO sites.site_jurisdiction_assignments (site_jurisdiction_assignment_id, site_id, jurisdiction_id, assignment_status, effective_from, source_reference, approval_reference, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT (substr(md5('exitpass:i006:sample-site-jurisdiction:' || s.site_code),1,8)||'-'||substr(md5('exitpass:i006:sample-site-jurisdiction:' || s.site_code),9,4)||'-'||substr(md5('exitpass:i006:sample-site-jurisdiction:' || s.site_code),13,4)||'-'||substr(md5('exitpass:i006:sample-site-jurisdiction:' || s.site_code),17,4)||'-'||substr(md5('exitpass:i006:sample-site-jurisdiction:' || s.site_code),21,12))::uuid,
+       s.site_id, s.local_government_unit_id, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, 'I-006 synthetic sample Site LGU assignment.', 'I-006 synthetic sample seed', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM sites.sites s
+JOIN sites.site_groups sg ON sg.site_group_id = s.site_group_id
+WHERE sg.site_group_code IN ('SAMPLE-METRO-MANILA','SAMPLE-METRO-CEBU','SAMPLE-METRO-DAVAO') AND s.local_government_unit_id IS NOT NULL
+ON CONFLICT DO NOTHING;
 
 
 -- ============================================================================

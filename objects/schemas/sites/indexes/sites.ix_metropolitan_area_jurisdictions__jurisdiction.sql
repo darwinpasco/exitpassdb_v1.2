@@ -1,0 +1,2 @@
+-- Create index "ix_metropolitan_area_jurisdictions__jurisdiction"
+CREATE INDEX "ix_metropolitan_area_jurisdictions__jurisdiction" ON "sites"."metropolitan_area_jurisdictions" ("jurisdiction_id", "membership_status");;

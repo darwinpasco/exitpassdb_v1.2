@@ -1,0 +1,2 @@
+COMMENT ON VIEW "discounts"."statutory_parking_lgu_policy_coverage" IS 'Read model for LGU-level statutory parking policy research coverage and production auto-application posture.';;
+COMMENT ON VIEW "discounts"."statutory_parking_site_policy_coverage" IS 'Read model proving Site-level inheritance from authoritative Site LGU assignment without Site-level policy duplication.';;

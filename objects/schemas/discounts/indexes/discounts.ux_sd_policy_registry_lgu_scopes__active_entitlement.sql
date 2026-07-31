@@ -1,0 +1,2 @@
+-- Create unique index "ux_sd_policy_registry_lgu_scopes__active_entitlement"
+CREATE UNIQUE INDEX "ux_sd_policy_registry_lgu_scopes__active_entitlement" ON "discounts"."statutory_discount_policy_registry_lgu_scopes" ("local_government_unit_id", "statutory_discount_policy_registry_id") WHERE (scope_status = 'ACTIVE'::discounts.discount_policy_status_enum);;
