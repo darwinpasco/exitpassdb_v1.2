@@ -1,0 +1,47 @@
+CREATE TABLE "discounts"."statutory_evidence_sets" (
+  "statutory_evidence_set_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "evidence_set_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_decision_command_id" uuid NOT NULL,
+  "statutory_discount_validation_id" uuid NULL,
+  "parking_session_id" uuid NOT NULL,
+  "site_id" uuid NOT NULL,
+  "site_group_id" uuid NOT NULL,
+  "entitlement_type" "discounts"."statutory_entitlement_type_enum" NOT NULL,
+  "source_channel" character varying(64) NOT NULL,
+  "set_status" "discounts"."statutory_evidence_set_status_enum" NOT NULL DEFAULT 'OPEN',
+  "required_document_profile_code" character varying(64) NOT NULL,
+  "required_document_profile_version" character varying(64) NOT NULL,
+  "retention_class_code" character varying(64) NOT NULL,
+  "retention_policy_version" character varying(64) NOT NULL,
+  "retention_status" "discounts"."statutory_evidence_retention_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "deletion_status" "discounts"."statutory_evidence_deletion_status_enum" NOT NULL DEFAULT 'NOT_REQUESTED',
+  "hold_active" boolean NOT NULL DEFAULT false,
+  "hold_reason_code" character varying(64) NULL,
+  "hold_placed_at" timestamptz NULL,
+  "hold_released_at" timestamptz NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_sets" PRIMARY KEY ("statutory_evidence_set_id"),
+  CONSTRAINT "uq_statutory_evidence_sets__reference" UNIQUE ("evidence_set_reference"),
+  CONSTRAINT "fk_statutory_evidence_sets__decision_command" FOREIGN KEY ("statutory_discount_decision_command_id") REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__parking_session" FOREIGN KEY ("parking_session_id") REFERENCES "core"."parking_sessions" ("parking_session_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__retention_policy" FOREIGN KEY ("retention_class_code", "retention_policy_version") REFERENCES "discounts"."statutory_evidence_retention_policies" ("retention_class_code", "retention_policy_version"),
+  CONSTRAINT "ck_statutory_evidence_sets__source_channel" CHECK (source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL', 'OPERATOR_CONSOLE', 'CENTRAL_PMS')),
+  CONSTRAINT "ck_statutory_evidence_sets__row_version" CHECK (row_version > 0),
+  CONSTRAINT "ck_statutory_evidence_sets__hold_fields" CHECK ((hold_active = false AND hold_reason_code IS NULL) OR (hold_active = true AND hold_reason_code IS NOT NULL AND hold_placed_at IS NOT NULL)),
+  CONSTRAINT "ck_statutory_evidence_sets__deletion_hold" CHECK (hold_active = false OR deletion_status <> 'DELETED')
+);;
+
+CREATE UNIQUE INDEX "ux_statutory_evidence_sets__active_request" ON "discounts"."statutory_evidence_sets" ("statutory_discount_decision_command_id") WHERE (set_status <> 'TOMBSTONED');;
+CREATE INDEX "ix_statutory_evidence_sets__request_scope" ON "discounts"."statutory_evidence_sets" ("parking_session_id", "site_id", "site_group_id", "entitlement_type");;
+CREATE INDEX "ix_statutory_evidence_sets__retention" ON "discounts"."statutory_evidence_sets" ("retention_status", "deletion_status", "hold_active");;
+COMMENT ON TABLE "discounts"."statutory_evidence_sets" IS 'Governed statutory evidence set metadata. One active evidence set belongs to one statutory request and contains no evidence bytes.';;
