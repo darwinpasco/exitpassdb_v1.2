@@ -1,0 +1,45 @@
+CREATE TABLE "discounts"."statutory_evidence_items" (
+  "statutory_evidence_item_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "evidence_item_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_evidence_set_id" uuid NOT NULL,
+  "document_type" "discounts"."statutory_evidence_document_type_enum" NOT NULL,
+  "item_role" "discounts"."statutory_evidence_item_role_enum" NOT NULL,
+  "upload_status" "discounts"."statutory_evidence_upload_status_enum" NOT NULL DEFAULT 'NOT_AUTHORIZED',
+  "validation_status" "discounts"."statutory_evidence_validation_status_enum" NOT NULL DEFAULT 'NOT_STARTED',
+  "scan_status" "discounts"."statutory_evidence_scan_status_enum" NOT NULL DEFAULT 'NOT_STARTED',
+  "reviewability_status" "discounts"."statutory_evidence_reviewability_status_enum" NOT NULL DEFAULT 'NOT_REVIEWABLE',
+  "binding_status" "discounts"."statutory_evidence_binding_status_enum" NOT NULL DEFAULT 'UNBOUND',
+  "retention_status" "discounts"."statutory_evidence_retention_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "deletion_status" "discounts"."statutory_evidence_deletion_status_enum" NOT NULL DEFAULT 'NOT_REQUESTED',
+  "hold_active" boolean NOT NULL DEFAULT false,
+  "expected_media_class" "discounts"."statutory_evidence_media_class_enum" NOT NULL DEFAULT 'DOCUMENT_PROFILE_ONLY',
+  "declared_content_type" character varying(128) NULL,
+  "profile_code" character varying(64) NOT NULL,
+  "internal_storage_locator_ref" character varying(256) NULL,
+  "internal_checksum_sha256" character(64) NULL,
+  "validation_result_classification" character varying(64) NULL,
+  "scan_result_classification" character varying(64) NULL,
+  "uploaded_at" timestamptz NULL,
+  "reviewable_at" timestamptz NULL,
+  "deleted_at" timestamptz NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_items" PRIMARY KEY ("statutory_evidence_item_id"),
+  CONSTRAINT "uq_statutory_evidence_items__reference" UNIQUE ("evidence_item_reference"),
+  CONSTRAINT "fk_statutory_evidence_items__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
+  CONSTRAINT "ck_statutory_evidence_items__checksum" CHECK (internal_checksum_sha256 IS NULL OR internal_checksum_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_statutory_evidence_items__row_version" CHECK (row_version > 0),
+  CONSTRAINT "ck_statutory_evidence_items__reviewable" CHECK (reviewability_status <> 'REVIEWABLE' OR (upload_status = 'UPLOADED' AND validation_status = 'PASSED' AND scan_status = 'PASSED')),
+  CONSTRAINT "ck_statutory_evidence_items__deleted_terminal" CHECK (deletion_status <> 'DELETED' OR reviewability_status <> 'REVIEWABLE')
+);;
+
+CREATE UNIQUE INDEX "ux_statutory_evidence_items__active_role" ON "discounts"."statutory_evidence_items" ("statutory_evidence_set_id", "document_type", "item_role") WHERE (deletion_status <> 'DELETED');;
+CREATE INDEX "ix_statutory_evidence_items__set_status" ON "discounts"."statutory_evidence_items" ("statutory_evidence_set_id", "upload_status", "validation_status", "scan_status", "reviewability_status");;
+CREATE INDEX "ix_statutory_evidence_items__retention_deletion" ON "discounts"."statutory_evidence_items" ("retention_status", "deletion_status", "hold_active");;
+COMMENT ON TABLE "discounts"."statutory_evidence_items" IS 'Controlled statutory evidence item metadata. Internal storage and checksum fields are not public DTO fields.';;

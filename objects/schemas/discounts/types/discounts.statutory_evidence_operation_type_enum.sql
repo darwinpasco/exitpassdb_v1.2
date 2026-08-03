@@ -1,0 +1,14 @@
+CREATE TYPE "discounts"."statutory_evidence_operation_type_enum" AS ENUM (
+  'CREATE_SET',
+  'ADD_ITEM',
+  'MARK_UPLOADED',
+  'RECORD_VALIDATION',
+  'RECORD_SCAN',
+  'MARK_REVIEWABLE',
+  'LOCK_FOR_REVIEW',
+  'BIND_SET',
+  'PLACE_HOLD',
+  'RELEASE_HOLD',
+  'REQUEST_DELETION',
+  'RECORD_DELETION'
+);;

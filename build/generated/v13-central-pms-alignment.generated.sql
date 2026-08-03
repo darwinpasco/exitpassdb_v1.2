@@ -3009,6 +3009,205 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;;
 
 
 -- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_set_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_set_status_enum" AS ENUM (
+  'OPEN',
+  'LOCKED_FOR_REVIEW',
+  'BOUND',
+  'REVIEW_COMPLETED',
+  'TOMBSTONED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_document_type_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_document_type_enum" AS ENUM (
+  'SENIOR_CITIZEN_ID',
+  'PWD_ID',
+  'AUTHORIZATION_LETTER',
+  'SUPPORTING_DOCUMENT',
+  'OTHER'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_item_role_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_item_role_enum" AS ENUM (
+  'FRONT',
+  'BACK',
+  'SUPPLEMENTAL',
+  'SINGLE_DOCUMENT'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_upload_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_upload_status_enum" AS ENUM (
+  'NOT_AUTHORIZED',
+  'AUTHORIZED',
+  'UPLOADING',
+  'UPLOADED',
+  'FAILED',
+  'EXPIRED',
+  'CANCELLED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_validation_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_validation_status_enum" AS ENUM (
+  'NOT_STARTED',
+  'PENDING',
+  'PASSED',
+  'FAILED',
+  'UNSUPPORTED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_scan_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_scan_status_enum" AS ENUM (
+  'NOT_STARTED',
+  'PENDING',
+  'PASSED',
+  'FAILED',
+  'UNAVAILABLE',
+  'TIMEOUT'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_reviewability_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_reviewability_status_enum" AS ENUM (
+  'NOT_REVIEWABLE',
+  'REVIEWABLE',
+  'LOCKED_FOR_REVIEW',
+  'REVIEW_COMPLETED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_binding_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_binding_status_enum" AS ENUM (
+  'UNBOUND',
+  'BOUND',
+  'REJECTED',
+  'SUPERSEDED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_retention_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_retention_status_enum" AS ENUM (
+  'POLICY_REQUIRED',
+  'ACTIVE',
+  'ELIGIBLE_FOR_DELETION',
+  'HELD',
+  'EXPIRED',
+  'TOMBSTONED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_deletion_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_deletion_status_enum" AS ENUM (
+  'NOT_REQUESTED',
+  'REQUESTED',
+  'IN_PROGRESS',
+  'DELETED',
+  'FAILED',
+  'BLOCKED_BY_HOLD',
+  'OBJECT_MISSING'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_media_class_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_media_class_enum" AS ENUM (
+  'IMAGE_JPEG',
+  'IMAGE_PNG',
+  'DOCUMENT_PROFILE_ONLY'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_operation_type_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_operation_type_enum" AS ENUM (
+  'CREATE_SET',
+  'ADD_ITEM',
+  'MARK_UPLOADED',
+  'RECORD_VALIDATION',
+  'RECORD_SCAN',
+  'MARK_REVIEWABLE',
+  'LOCK_FOR_REVIEW',
+  'BIND_SET',
+  'PLACE_HOLD',
+  'RELEASE_HOLD',
+  'REQUEST_DELETION',
+  'RECORD_DELETION'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_operation_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_operation_status_enum" AS ENUM (
+  'ACCEPTED',
+  'IDEMPOTENT_REPLAY',
+  'SEMANTIC_CONFLICT',
+  'REJECTED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_event_type_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_event_type_enum" AS ENUM (
+  'EVIDENCE_SET_CREATED',
+  'EVIDENCE_ITEM_CREATED',
+  'IDEMPOTENT_REPLAY',
+  'SEMANTIC_CONFLICT',
+  'BINDING_ACCEPTED',
+  'BINDING_REJECTED',
+  'LIFECYCLE_TRANSITION',
+  'REVIEW_LOCKED',
+  'HOLD_PLACED',
+  'HOLD_RELEASED',
+  'DELETION_REQUESTED',
+  'ACCESS_ALLOWED',
+  'ACCESS_DENIED',
+  'MALFORMED_REFERENCE_LOOKUP',
+  'CROSS_SCOPE_ATTEMPT',
+  'INVALID_TRANSITION'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_event_result_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_event_result_enum" AS ENUM (
+  'ALLOWED',
+  'DENIED',
+  'ACCEPTED',
+  'REJECTED',
+  'FAILED',
+  'CONFLICT'
+);;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/tables/discounts.statutory_discount_payable_basis_applications.sql
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS discounts.statutory_discount_payable_basis_applications (
@@ -3282,6 +3481,250 @@ CREATE TABLE "discounts"."statutory_discount_decision_commands" (
   CONSTRAINT "ck_statutory_discount_decision_commands__result_classification" CHECK (result_classification IN ('ACCEPTED', 'IDEMPOTENT_REPLAY', 'AWAITING_REVIEW')),
   CONSTRAINT "ck_stat_disc_decision_cmds__recovery" CHECK (recovery_classification IN ('NONE', 'AWAITING_REVIEW', 'READ_CANONICAL_RESULT', 'RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'WAIT_THEN_RETRY_ORIGINAL_IDEMPOTENCY_KEY', 'CORRECT_REQUEST_REQUIRED', 'NOT_RECOVERABLE'))
 );;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_retention_policies.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_retention_policies" (
+  "retention_class_code" character varying(64) NOT NULL,
+  "retention_policy_version" character varying(64) NOT NULL,
+  "policy_status" character varying(32) NOT NULL,
+  "environment_scope" character varying(32) NOT NULL,
+  "purpose_code" character varying(64) NOT NULL,
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_retention_policies" PRIMARY KEY ("retention_class_code", "retention_policy_version"),
+  CONSTRAINT "ck_stat_ev_retention_policies__status" CHECK (policy_status IN ('DRAFT', 'APPROVED_ENABLED', 'APPROVED_DISABLED', 'RETIRED')),
+  CONSTRAINT "ck_stat_ev_retention_policies__environment" CHECK (environment_scope IN ('LOCAL_TEST', 'CONTROLLED_UAT', 'PRODUCTION')),
+  CONSTRAINT "ck_stat_ev_retention_policies__effective_window" CHECK (effective_to IS NULL OR effective_to > effective_from),
+  CONSTRAINT "ck_stat_ev_retention_policies__row_version" CHECK (row_version > 0)
+);;
+
+COMMENT ON TABLE "discounts"."statutory_evidence_retention_policies" IS 'Approved server-side retention policy metadata for statutory evidence. No default production duration is implied.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_principal_scope_grants.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_principal_scope_grants" (
+  "statutory_evidence_principal_scope_grant_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "actor_user_id" uuid NULL,
+  "actor_service_identity_id" uuid NULL,
+  "source_channel" character varying(64) NOT NULL,
+  "site_id" uuid NULL,
+  "site_group_id" uuid NULL,
+  "capture_allowed" boolean NOT NULL DEFAULT false,
+  "view_allowed" boolean NOT NULL DEFAULT false,
+  "review_lock_allowed" boolean NOT NULL DEFAULT false,
+  "hold_allowed" boolean NOT NULL DEFAULT false,
+  "deletion_request_allowed" boolean NOT NULL DEFAULT false,
+  "grant_status" character varying(32) NOT NULL DEFAULT 'ACTIVE',
+  "effective_from" timestamptz NOT NULL DEFAULT now(),
+  "effective_to" timestamptz NULL,
+  "reason_code" character varying(64) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_principal_scope_grants" PRIMARY KEY ("statutory_evidence_principal_scope_grant_id"),
+  CONSTRAINT "fk_stat_ev_scope_grants__actor_user" FOREIGN KEY ("actor_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_stat_ev_scope_grants__service_identity" FOREIGN KEY ("actor_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "fk_stat_ev_scope_grants__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_stat_ev_scope_grants__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "ck_stat_ev_scope_grants__one_actor" CHECK ((actor_user_id IS NOT NULL AND actor_service_identity_id IS NULL) OR (actor_user_id IS NULL AND actor_service_identity_id IS NOT NULL)),
+  CONSTRAINT "ck_stat_ev_scope_grants__scope" CHECK (site_id IS NOT NULL OR site_group_id IS NOT NULL),
+  CONSTRAINT "ck_stat_ev_scope_grants__source_channel" CHECK (source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL', 'OPERATOR_CONSOLE', 'CENTRAL_PMS')),
+  CONSTRAINT "ck_stat_ev_scope_grants__status" CHECK (grant_status IN ('ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED')),
+  CONSTRAINT "ck_stat_ev_scope_grants__permission" CHECK (capture_allowed OR view_allowed OR review_lock_allowed OR hold_allowed OR deletion_request_allowed),
+  CONSTRAINT "ck_stat_ev_scope_grants__effective_window" CHECK (effective_to IS NULL OR effective_to > effective_from),
+  CONSTRAINT "ck_stat_ev_scope_grants__row_version" CHECK (row_version > 0)
+);;
+
+CREATE INDEX "ix_stat_ev_scope_grants__actor_user" ON "discounts"."statutory_evidence_principal_scope_grants" ("actor_user_id", "source_channel", "grant_status");;
+CREATE INDEX "ix_stat_ev_scope_grants__service_identity" ON "discounts"."statutory_evidence_principal_scope_grants" ("actor_service_identity_id", "source_channel", "grant_status");;
+CREATE INDEX "ix_stat_ev_scope_grants__site_scope" ON "discounts"."statutory_evidence_principal_scope_grants" ("site_id", "site_group_id", "source_channel");;
+CREATE UNIQUE INDEX "ux_stat_ev_scope_grants__active_user_scope" ON "discounts"."statutory_evidence_principal_scope_grants" ("actor_user_id", "source_channel", COALESCE("site_id", '00000000-0000-0000-0000-000000000000'::uuid), COALESCE("site_group_id", '00000000-0000-0000-0000-000000000000'::uuid)) WHERE actor_user_id IS NOT NULL AND grant_status = 'ACTIVE' AND effective_to IS NULL;;
+CREATE UNIQUE INDEX "ux_stat_ev_scope_grants__active_service_scope" ON "discounts"."statutory_evidence_principal_scope_grants" ("actor_service_identity_id", "source_channel", COALESCE("site_id", '00000000-0000-0000-0000-000000000000'::uuid), COALESCE("site_group_id", '00000000-0000-0000-0000-000000000000'::uuid)) WHERE actor_service_identity_id IS NOT NULL AND grant_status = 'ACTIVE' AND effective_to IS NULL;;
+COMMENT ON TABLE "discounts"."statutory_evidence_principal_scope_grants" IS 'Server-owned statutory evidence metadata scope grants for capture, view, review lock, hold, and deletion-request authority. Possession of an opaque evidence reference is not authorization.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_sets.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_sets" (
+  "statutory_evidence_set_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "evidence_set_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_discount_decision_command_id" uuid NOT NULL,
+  "statutory_discount_validation_id" uuid NULL,
+  "parking_session_id" uuid NOT NULL,
+  "site_id" uuid NOT NULL,
+  "site_group_id" uuid NOT NULL,
+  "entitlement_type" "discounts"."statutory_entitlement_type_enum" NOT NULL,
+  "source_channel" character varying(64) NOT NULL,
+  "set_status" "discounts"."statutory_evidence_set_status_enum" NOT NULL DEFAULT 'OPEN',
+  "required_document_profile_code" character varying(64) NOT NULL,
+  "required_document_profile_version" character varying(64) NOT NULL,
+  "retention_class_code" character varying(64) NOT NULL,
+  "retention_policy_version" character varying(64) NOT NULL,
+  "retention_status" "discounts"."statutory_evidence_retention_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "deletion_status" "discounts"."statutory_evidence_deletion_status_enum" NOT NULL DEFAULT 'NOT_REQUESTED',
+  "hold_active" boolean NOT NULL DEFAULT false,
+  "hold_reason_code" character varying(64) NULL,
+  "hold_placed_at" timestamptz NULL,
+  "hold_released_at" timestamptz NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_sets" PRIMARY KEY ("statutory_evidence_set_id"),
+  CONSTRAINT "uq_statutory_evidence_sets__reference" UNIQUE ("evidence_set_reference"),
+  CONSTRAINT "fk_statutory_evidence_sets__decision_command" FOREIGN KEY ("statutory_discount_decision_command_id") REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__validation" FOREIGN KEY ("statutory_discount_validation_id") REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__parking_session" FOREIGN KEY ("parking_session_id") REFERENCES "core"."parking_sessions" ("parking_session_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "fk_statutory_evidence_sets__retention_policy" FOREIGN KEY ("retention_class_code", "retention_policy_version") REFERENCES "discounts"."statutory_evidence_retention_policies" ("retention_class_code", "retention_policy_version"),
+  CONSTRAINT "ck_statutory_evidence_sets__source_channel" CHECK (source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL', 'OPERATOR_CONSOLE', 'CENTRAL_PMS')),
+  CONSTRAINT "ck_statutory_evidence_sets__row_version" CHECK (row_version > 0),
+  CONSTRAINT "ck_statutory_evidence_sets__hold_fields" CHECK ((hold_active = false AND hold_reason_code IS NULL) OR (hold_active = true AND hold_reason_code IS NOT NULL AND hold_placed_at IS NOT NULL)),
+  CONSTRAINT "ck_statutory_evidence_sets__deletion_hold" CHECK (hold_active = false OR deletion_status <> 'DELETED')
+);;
+
+CREATE UNIQUE INDEX "ux_statutory_evidence_sets__active_request" ON "discounts"."statutory_evidence_sets" ("statutory_discount_decision_command_id") WHERE (set_status <> 'TOMBSTONED');;
+CREATE INDEX "ix_statutory_evidence_sets__request_scope" ON "discounts"."statutory_evidence_sets" ("parking_session_id", "site_id", "site_group_id", "entitlement_type");;
+CREATE INDEX "ix_statutory_evidence_sets__retention" ON "discounts"."statutory_evidence_sets" ("retention_status", "deletion_status", "hold_active");;
+COMMENT ON TABLE "discounts"."statutory_evidence_sets" IS 'Governed statutory evidence set metadata. One active evidence set belongs to one statutory request and contains no evidence bytes.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_items.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_items" (
+  "statutory_evidence_item_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "evidence_item_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_evidence_set_id" uuid NOT NULL,
+  "document_type" "discounts"."statutory_evidence_document_type_enum" NOT NULL,
+  "item_role" "discounts"."statutory_evidence_item_role_enum" NOT NULL,
+  "upload_status" "discounts"."statutory_evidence_upload_status_enum" NOT NULL DEFAULT 'NOT_AUTHORIZED',
+  "validation_status" "discounts"."statutory_evidence_validation_status_enum" NOT NULL DEFAULT 'NOT_STARTED',
+  "scan_status" "discounts"."statutory_evidence_scan_status_enum" NOT NULL DEFAULT 'NOT_STARTED',
+  "reviewability_status" "discounts"."statutory_evidence_reviewability_status_enum" NOT NULL DEFAULT 'NOT_REVIEWABLE',
+  "binding_status" "discounts"."statutory_evidence_binding_status_enum" NOT NULL DEFAULT 'UNBOUND',
+  "retention_status" "discounts"."statutory_evidence_retention_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "deletion_status" "discounts"."statutory_evidence_deletion_status_enum" NOT NULL DEFAULT 'NOT_REQUESTED',
+  "hold_active" boolean NOT NULL DEFAULT false,
+  "expected_media_class" "discounts"."statutory_evidence_media_class_enum" NOT NULL DEFAULT 'DOCUMENT_PROFILE_ONLY',
+  "declared_content_type" character varying(128) NULL,
+  "profile_code" character varying(64) NOT NULL,
+  "internal_storage_locator_ref" character varying(256) NULL,
+  "internal_checksum_sha256" character(64) NULL,
+  "validation_result_classification" character varying(64) NULL,
+  "scan_result_classification" character varying(64) NULL,
+  "uploaded_at" timestamptz NULL,
+  "reviewable_at" timestamptz NULL,
+  "deleted_at" timestamptz NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_items" PRIMARY KEY ("statutory_evidence_item_id"),
+  CONSTRAINT "uq_statutory_evidence_items__reference" UNIQUE ("evidence_item_reference"),
+  CONSTRAINT "fk_statutory_evidence_items__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
+  CONSTRAINT "ck_statutory_evidence_items__checksum" CHECK (internal_checksum_sha256 IS NULL OR internal_checksum_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_statutory_evidence_items__row_version" CHECK (row_version > 0),
+  CONSTRAINT "ck_statutory_evidence_items__reviewable" CHECK (reviewability_status <> 'REVIEWABLE' OR (upload_status = 'UPLOADED' AND validation_status = 'PASSED' AND scan_status = 'PASSED')),
+  CONSTRAINT "ck_statutory_evidence_items__deleted_terminal" CHECK (deletion_status <> 'DELETED' OR reviewability_status <> 'REVIEWABLE')
+);;
+
+CREATE UNIQUE INDEX "ux_statutory_evidence_items__active_role" ON "discounts"."statutory_evidence_items" ("statutory_evidence_set_id", "document_type", "item_role") WHERE (deletion_status <> 'DELETED');;
+CREATE INDEX "ix_statutory_evidence_items__set_status" ON "discounts"."statutory_evidence_items" ("statutory_evidence_set_id", "upload_status", "validation_status", "scan_status", "reviewability_status");;
+CREATE INDEX "ix_statutory_evidence_items__retention_deletion" ON "discounts"."statutory_evidence_items" ("retention_status", "deletion_status", "hold_active");;
+COMMENT ON TABLE "discounts"."statutory_evidence_items" IS 'Controlled statutory evidence item metadata. Internal storage and checksum fields are not public DTO fields.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_operations.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_operations" (
+  "statutory_evidence_operation_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "operation_type" "discounts"."statutory_evidence_operation_type_enum" NOT NULL,
+  "operation_status" "discounts"."statutory_evidence_operation_status_enum" NOT NULL,
+  "idempotency_scope" character varying(256) NOT NULL,
+  "idempotency_key" character varying(128) NOT NULL,
+  "semantic_request_hash" character varying(80) NOT NULL,
+  "semantic_hash_source_version" character varying(64) NOT NULL,
+  "statutory_evidence_set_id" uuid NULL,
+  "statutory_evidence_item_id" uuid NULL,
+  "safe_result_classification" character varying(64) NOT NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  CONSTRAINT "pk_statutory_evidence_operations" PRIMARY KEY ("statutory_evidence_operation_id"),
+  CONSTRAINT "uq_statutory_evidence_operations__idempotency" UNIQUE ("idempotency_scope", "idempotency_key"),
+  CONSTRAINT "fk_statutory_evidence_operations__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
+  CONSTRAINT "fk_statutory_evidence_operations__item" FOREIGN KEY ("statutory_evidence_item_id") REFERENCES "discounts"."statutory_evidence_items" ("statutory_evidence_item_id"),
+  CONSTRAINT "ck_statutory_evidence_operations__hash" CHECK (semantic_request_hash ~ '^sha256:[0-9a-f]{64}$'),
+  CONSTRAINT "ck_statutory_evidence_operations__version" CHECK (semantic_hash_source_version IN ('statutory-evidence-metadata:sha256:v1'))
+);;
+
+CREATE INDEX "ix_statutory_evidence_operations__set" ON "discounts"."statutory_evidence_operations" ("statutory_evidence_set_id", "operation_type", "created_at");;
+COMMENT ON TABLE "discounts"."statutory_evidence_operations" IS 'Idempotency ledger for statutory evidence metadata operations.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_events.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_events" (
+  "statutory_evidence_event_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "event_type" "discounts"."statutory_evidence_event_type_enum" NOT NULL,
+  "event_result" "discounts"."statutory_evidence_event_result_enum" NOT NULL,
+  "statutory_evidence_set_id" uuid NULL,
+  "statutory_evidence_item_id" uuid NULL,
+  "statutory_evidence_operation_id" uuid NULL,
+  "safe_reason_code" character varying(128) NULL,
+  "source_channel" character varying(64) NULL,
+  "site_id" uuid NULL,
+  "site_group_id" uuid NULL,
+  "parking_session_id" uuid NULL,
+  "actor_user_id" uuid NULL,
+  "actor_service_identity_id" uuid NULL,
+  "correlation_id" uuid NOT NULL,
+  "occurred_at" timestamptz NOT NULL DEFAULT now(),
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_statutory_evidence_events" PRIMARY KEY ("statutory_evidence_event_id"),
+  CONSTRAINT "fk_statutory_evidence_events__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
+  CONSTRAINT "fk_statutory_evidence_events__item" FOREIGN KEY ("statutory_evidence_item_id") REFERENCES "discounts"."statutory_evidence_items" ("statutory_evidence_item_id"),
+  CONSTRAINT "fk_statutory_evidence_events__operation" FOREIGN KEY ("statutory_evidence_operation_id") REFERENCES "discounts"."statutory_evidence_operations" ("statutory_evidence_operation_id"),
+  CONSTRAINT "fk_statutory_evidence_events__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_statutory_evidence_events__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "fk_statutory_evidence_events__parking_session" FOREIGN KEY ("parking_session_id") REFERENCES "core"."parking_sessions" ("parking_session_id"),
+  CONSTRAINT "ck_statutory_evidence_events__source_channel" CHECK (source_channel IS NULL OR source_channel IN ('WEBPAY', 'ASSISTED_PAYMENT_TERMINAL', 'OPERATOR_CONSOLE', 'CENTRAL_PMS'))
+);;
+
+CREATE INDEX "ix_statutory_evidence_events__set" ON "discounts"."statutory_evidence_events" ("statutory_evidence_set_id", "occurred_at");;
+CREATE INDEX "ix_statutory_evidence_events__correlation" ON "discounts"."statutory_evidence_events" ("correlation_id");;
+CREATE INDEX "ix_statutory_evidence_events__site_scope" ON "discounts"."statutory_evidence_events" ("site_id", "site_group_id", "event_type");;
+COMMENT ON TABLE "discounts"."statutory_evidence_events" IS 'Append-only privacy-safe statutory evidence lifecycle, access, denial, and security events. It stores no evidence bytes, signed URLs, object keys, raw request bodies, or checksums.';;
 
 
 -- ============================================================================
