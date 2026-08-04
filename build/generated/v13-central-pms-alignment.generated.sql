@@ -3147,7 +3147,10 @@ CREATE TYPE "discounts"."statutory_evidence_media_class_enum" AS ENUM (
 CREATE TYPE "discounts"."statutory_evidence_operation_type_enum" AS ENUM (
   'CREATE_SET',
   'ADD_ITEM',
+  'AUTHORIZE_UPLOAD',
   'MARK_UPLOADED',
+  'FINALIZE_UPLOAD',
+  'RECORD_UPLOAD_VERIFICATION_FAILURE',
   'RECORD_VALIDATION',
   'RECORD_SCAN',
   'MARK_REVIEWABLE',
@@ -3177,6 +3180,14 @@ CREATE TYPE "discounts"."statutory_evidence_operation_status_enum" AS ENUM (
 CREATE TYPE "discounts"."statutory_evidence_event_type_enum" AS ENUM (
   'EVIDENCE_SET_CREATED',
   'EVIDENCE_ITEM_CREATED',
+  'UPLOAD_AUTHORIZATION_ISSUED',
+  'UPLOAD_AUTHORIZATION_REPLAYED',
+  'UPLOAD_AUTHORIZATION_EXPIRED',
+  'UPLOAD_VERIFICATION_STARTED',
+  'UPLOAD_VERIFIED',
+  'UPLOAD_VERIFICATION_FAILED',
+  'UPLOAD_FINALIZED',
+  'PROVIDER_UNAVAILABLE',
   'IDEMPOTENT_REPLAY',
   'SEMANTIC_CONFLICT',
   'BINDING_ACCEPTED',
@@ -3689,6 +3700,66 @@ CREATE TABLE "discounts"."statutory_evidence_operations" (
 
 CREATE INDEX "ix_statutory_evidence_operations__set" ON "discounts"."statutory_evidence_operations" ("statutory_evidence_set_id", "operation_type", "created_at");;
 COMMENT ON TABLE "discounts"."statutory_evidence_operations" IS 'Idempotency ledger for statutory evidence metadata operations.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_upload_authorizations.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_upload_authorizations" (
+  "statutory_evidence_upload_authorization_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "upload_authorization_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "statutory_evidence_set_id" uuid NOT NULL,
+  "statutory_evidence_item_id" uuid NOT NULL,
+  "statutory_evidence_operation_id" uuid NOT NULL,
+  "provider_type" character varying(64) NOT NULL,
+  "bucket_reference" character varying(128) NOT NULL,
+  "internal_object_key" character varying(512) NOT NULL,
+  "upload_method" character varying(16) NOT NULL,
+  "expected_content_type" character varying(128) NOT NULL,
+  "expected_content_length" bigint NOT NULL,
+  "checksum_algorithm" character varying(32) NOT NULL,
+  "expected_checksum_sha256" character(64) NOT NULL,
+  "authorization_status" character varying(32) NOT NULL DEFAULT 'ISSUED',
+  "issued_at" timestamptz NOT NULL DEFAULT now(),
+  "expires_at" timestamptz NOT NULL,
+  "consumed_at" timestamptz NULL,
+  "verified_content_type" character varying(128) NULL,
+  "verified_content_length" bigint NULL,
+  "verified_checksum_sha256" character(64) NULL,
+  "provider_object_version" character varying(256) NULL,
+  "provider_encryption_classification" character varying(64) NULL,
+  "failure_classification" character varying(128) NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_upload_authorizations" PRIMARY KEY ("statutory_evidence_upload_authorization_id"),
+  CONSTRAINT "uq_stat_evidence_upload_auth__reference" UNIQUE ("upload_authorization_reference"),
+  CONSTRAINT "fk_stat_evidence_upload_auth__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
+  CONSTRAINT "fk_stat_evidence_upload_auth__item" FOREIGN KEY ("statutory_evidence_item_id") REFERENCES "discounts"."statutory_evidence_items" ("statutory_evidence_item_id"),
+  CONSTRAINT "fk_stat_evidence_upload_auth__operation" FOREIGN KEY ("statutory_evidence_operation_id") REFERENCES "discounts"."statutory_evidence_operations" ("statutory_evidence_operation_id"),
+  CONSTRAINT "ck_stat_evidence_upload_auth__method" CHECK (upload_method IN ('PUT')),
+  CONSTRAINT "ck_stat_evidence_upload_auth__status" CHECK (authorization_status IN ('ISSUED', 'CONSUMED', 'EXPIRED', 'CANCELLED', 'FAILED')),
+  CONSTRAINT "ck_stat_evidence_upload_auth__provider" CHECK (provider_type IN ('S3_COMPATIBLE')),
+  CONSTRAINT "ck_stat_evidence_upload_auth__content_length" CHECK (expected_content_length > 0 AND (verified_content_length IS NULL OR verified_content_length > 0)),
+  CONSTRAINT "ck_stat_evidence_upload_auth__checksum_algorithm" CHECK (checksum_algorithm = 'SHA256'),
+  CONSTRAINT "ck_stat_evidence_upload_auth__expected_checksum" CHECK (expected_checksum_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_stat_evidence_upload_auth__verified_checksum" CHECK (verified_checksum_sha256 IS NULL OR verified_checksum_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_stat_evidence_upload_auth__expiry" CHECK (expires_at > issued_at),
+  CONSTRAINT "ck_stat_evidence_upload_auth__consumed" CHECK ((authorization_status = 'CONSUMED') = (consumed_at IS NOT NULL)),
+  CONSTRAINT "ck_stat_evidence_upload_auth__row_version" CHECK (row_version > 0)
+);;
+
+CREATE UNIQUE INDEX "ux_stat_evidence_upload_auth__active_item" ON "discounts"."statutory_evidence_upload_authorizations" ("statutory_evidence_item_id") WHERE (authorization_status = 'ISSUED');;
+CREATE UNIQUE INDEX "ux_stat_evidence_upload_auth__operation" ON "discounts"."statutory_evidence_upload_authorizations" ("statutory_evidence_operation_id");;
+CREATE INDEX "ix_stat_evidence_upload_auth__item_status" ON "discounts"."statutory_evidence_upload_authorizations" ("statutory_evidence_item_id", "authorization_status", "expires_at");;
+CREATE INDEX "ix_stat_evidence_upload_auth__set" ON "discounts"."statutory_evidence_upload_authorizations" ("statutory_evidence_set_id", "issued_at");;
+CREATE INDEX "ix_stat_evidence_upload_auth__correlation" ON "discounts"."statutory_evidence_upload_authorizations" ("correlation_id");;
+COMMENT ON TABLE "discounts"."statutory_evidence_upload_authorizations" IS 'Internal statutory evidence direct-upload authorization ledger. Stores provider metadata, internal object key, and checksums only; public DTOs must expose only opaque authorization references and short-lived authorization material.';;
 
 
 -- ============================================================================

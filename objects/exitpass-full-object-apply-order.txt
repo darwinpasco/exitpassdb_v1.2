@@ -2603,6 +2603,7 @@ objects/schemas/discounts/tables/discounts.statutory_evidence_principal_scope_gr
 objects/schemas/discounts/tables/discounts.statutory_evidence_sets.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_items.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_operations.sql
+objects/schemas/discounts/tables/discounts.statutory_evidence_upload_authorizations.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_events.sql
 objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__idempotency.sql
 objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity.sql
