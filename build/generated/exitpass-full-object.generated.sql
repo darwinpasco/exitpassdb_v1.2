@@ -4685,9 +4685,13 @@ CREATE TYPE "discounts"."statutory_evidence_upload_status_enum" AS ENUM (
 CREATE TYPE "discounts"."statutory_evidence_validation_status_enum" AS ENUM (
   'NOT_STARTED',
   'PENDING',
+  'IN_PROGRESS',
   'PASSED',
   'FAILED',
-  'UNSUPPORTED'
+  'RETRY_PENDING',
+  'UNAVAILABLE',
+  'UNSUPPORTED',
+  'UNKNOWN'
 );;
 
 
@@ -4697,10 +4701,70 @@ CREATE TYPE "discounts"."statutory_evidence_validation_status_enum" AS ENUM (
 CREATE TYPE "discounts"."statutory_evidence_scan_status_enum" AS ENUM (
   'NOT_STARTED',
   'PENDING',
+  'IN_PROGRESS',
   'PASSED',
+  'CLEAN',
   'FAILED',
+  'MALICIOUS',
+  'SUSPICIOUS',
+  'ERROR_RETRYABLE',
+  'ERROR_TERMINAL',
   'UNAVAILABLE',
-  'TIMEOUT'
+  'TIMEOUT',
+  'UNKNOWN'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_scan_attempt_status_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_scan_attempt_status_enum" AS ENUM (
+  'PENDING',
+  'CLAIMED',
+  'IN_PROGRESS',
+  'RETRY_PENDING',
+  'COMPLETED',
+  'FAILED_TERMINAL',
+  'STALE_REJECTED',
+  'CANCELLED'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_validation_result_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_validation_result_enum" AS ENUM (
+  'NOT_RUN',
+  'PASSED',
+  'UNSUPPORTED_MEDIA',
+  'SIGNATURE_MISMATCH',
+  'MALFORMED_IMAGE',
+  'CONTENT_TOO_LARGE',
+  'DIMENSION_LIMIT_EXCEEDED',
+  'PIXEL_LIMIT_EXCEEDED',
+  'DECOMPRESSION_LIMIT_EXCEEDED',
+  'METADATA_MISMATCH',
+  'OBJECT_NOT_FOUND',
+  'STORAGE_UNAVAILABLE',
+  'STALE_OBJECT_VERSION',
+  'UNKNOWN'
+);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/types/discounts.statutory_evidence_malware_scan_result_enum.sql
+-- ============================================================================
+CREATE TYPE "discounts"."statutory_evidence_malware_scan_result_enum" AS ENUM (
+  'NOT_RUN',
+  'CLEAN',
+  'MALICIOUS',
+  'SUSPICIOUS',
+  'SCANNER_UNAVAILABLE',
+  'SCANNER_TIMEOUT',
+  'SCANNER_ERROR_RETRYABLE',
+  'SCANNER_ERROR_TERMINAL',
+  'MALFORMED_SCANNER_RESPONSE',
+  'UNKNOWN'
 );;
 
 
@@ -4809,6 +4873,21 @@ CREATE TYPE "discounts"."statutory_evidence_event_type_enum" AS ENUM (
   'UPLOAD_VERIFIED',
   'UPLOAD_VERIFICATION_FAILED',
   'UPLOAD_FINALIZED',
+  'VALIDATION_REQUESTED',
+  'VALIDATION_STARTED',
+  'VALIDATION_PASSED',
+  'VALIDATION_FAILED',
+  'SCAN_REQUESTED',
+  'SCAN_STARTED',
+  'SCAN_CLEAN',
+  'MALWARE_DETECTED',
+  'SUSPICIOUS_RESULT',
+  'SCAN_RETRY_SCHEDULED',
+  'SCAN_RETRY_EXHAUSTED',
+  'SCAN_PROVIDER_UNAVAILABLE',
+  'STORAGE_UNAVAILABLE',
+  'LEASE_RECOVERED',
+  'STALE_OBJECT_ATTEMPT_REJECTED',
   'PROVIDER_UNAVAILABLE',
   'IDEMPOTENT_REPLAY',
   'SEMANTIC_CONFLICT',
@@ -24691,7 +24770,7 @@ CREATE TABLE "discounts"."statutory_evidence_items" (
   CONSTRAINT "fk_statutory_evidence_items__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
   CONSTRAINT "ck_statutory_evidence_items__checksum" CHECK (internal_checksum_sha256 IS NULL OR internal_checksum_sha256 ~ '^[0-9a-f]{64}$'),
   CONSTRAINT "ck_statutory_evidence_items__row_version" CHECK (row_version > 0),
-  CONSTRAINT "ck_statutory_evidence_items__reviewable" CHECK (reviewability_status <> 'REVIEWABLE' OR (upload_status = 'UPLOADED' AND validation_status = 'PASSED' AND scan_status = 'PASSED')),
+  CONSTRAINT "ck_statutory_evidence_items__reviewable" CHECK (reviewability_status <> 'REVIEWABLE' OR (upload_status = 'UPLOADED' AND validation_status = 'PASSED' AND scan_status IN ('PASSED', 'CLEAN'))),
   CONSTRAINT "ck_statutory_evidence_items__deleted_terminal" CHECK (deletion_status <> 'DELETED' OR reviewability_status <> 'REVIEWABLE')
 );;
 
@@ -24789,6 +24868,70 @@ CREATE INDEX "ix_stat_evidence_upload_auth__item_status" ON "discounts"."statuto
 CREATE INDEX "ix_stat_evidence_upload_auth__set" ON "discounts"."statutory_evidence_upload_authorizations" ("statutory_evidence_set_id", "issued_at");;
 CREATE INDEX "ix_stat_evidence_upload_auth__correlation" ON "discounts"."statutory_evidence_upload_authorizations" ("correlation_id");;
 COMMENT ON TABLE "discounts"."statutory_evidence_upload_authorizations" IS 'Internal statutory evidence direct-upload authorization ledger. Stores provider metadata, internal object key, and checksums only; public DTOs must expose only opaque authorization references and short-lived authorization material.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/discounts/tables/discounts.statutory_evidence_scan_attempts.sql
+-- ============================================================================
+CREATE TABLE "discounts"."statutory_evidence_scan_attempts" (
+  "statutory_evidence_scan_attempt_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "scan_attempt_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "scan_work_identity" uuid NOT NULL,
+  "statutory_evidence_set_id" uuid NOT NULL,
+  "statutory_evidence_item_id" uuid NOT NULL,
+  "statutory_evidence_upload_authorization_id" uuid NOT NULL,
+  "attempt_number" integer NOT NULL,
+  "attempt_status" "discounts"."statutory_evidence_scan_attempt_status_enum" NOT NULL DEFAULT 'PENDING',
+  "validation_status" "discounts"."statutory_evidence_validation_status_enum" NOT NULL DEFAULT 'PENDING',
+  "validation_result" "discounts"."statutory_evidence_validation_result_enum" NOT NULL DEFAULT 'NOT_RUN',
+  "malware_scan_status" "discounts"."statutory_evidence_scan_status_enum" NOT NULL DEFAULT 'PENDING',
+  "malware_scan_result" "discounts"."statutory_evidence_malware_scan_result_enum" NOT NULL DEFAULT 'NOT_RUN',
+  "safe_failure_classification" character varying(128) NULL,
+  "scanner_provider" character varying(64) NOT NULL,
+  "scanner_provider_version" character varying(64) NULL,
+  "expected_item_row_version" bigint NOT NULL,
+  "expected_upload_authorization_row_version" bigint NOT NULL,
+  "provider_object_version" character varying(256) NULL,
+  "claimed_by_worker_id" character varying(128) NULL,
+  "claimed_by_service_identity_id" uuid NULL,
+  "claimed_at" timestamptz NULL,
+  "lease_expires_at" timestamptz NULL,
+  "started_at" timestamptz NULL,
+  "completed_at" timestamptz NULL,
+  "next_retry_at" timestamptz NULL,
+  "retry_count" integer NOT NULL DEFAULT 0,
+  "max_attempts" integer NOT NULL,
+  "retryable" boolean NOT NULL DEFAULT false,
+  "terminal" boolean NOT NULL DEFAULT false,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_statutory_evidence_scan_attempts" PRIMARY KEY ("statutory_evidence_scan_attempt_id"),
+  CONSTRAINT "uq_stat_evidence_scan_attempts__reference" UNIQUE ("scan_attempt_reference"),
+  CONSTRAINT "uq_stat_evidence_scan_attempts__work_attempt" UNIQUE ("scan_work_identity", "attempt_number"),
+  CONSTRAINT "fk_stat_evidence_scan_attempts__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
+  CONSTRAINT "fk_stat_evidence_scan_attempts__item" FOREIGN KEY ("statutory_evidence_item_id") REFERENCES "discounts"."statutory_evidence_items" ("statutory_evidence_item_id"),
+  CONSTRAINT "fk_stat_evidence_scan_attempts__upload_auth" FOREIGN KEY ("statutory_evidence_upload_authorization_id") REFERENCES "discounts"."statutory_evidence_upload_authorizations" ("statutory_evidence_upload_authorization_id"),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__attempt_number" CHECK (attempt_number > 0),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__retry_count" CHECK (retry_count >= 0 AND retry_count <= max_attempts),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__max_attempts" CHECK (max_attempts > 0),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__row_version" CHECK (row_version > 0),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__expected_versions" CHECK (expected_item_row_version > 0 AND expected_upload_authorization_row_version > 0),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__lease" CHECK ((claimed_at IS NULL AND lease_expires_at IS NULL) OR (claimed_at IS NOT NULL AND lease_expires_at IS NOT NULL AND lease_expires_at > claimed_at)),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__started" CHECK (started_at IS NULL OR claimed_at IS NOT NULL),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__completed" CHECK ((completed_at IS NULL AND terminal = false) OR (completed_at IS NOT NULL AND attempt_status IN ('COMPLETED', 'FAILED_TERMINAL', 'STALE_REJECTED', 'CANCELLED'))),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__retry_schedule" CHECK ((attempt_status = 'RETRY_PENDING') = (next_retry_at IS NOT NULL)),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__scanner_provider" CHECK (scanner_provider IN ('CLAMAV_COMPATIBLE', 'NOOP_TEST_ONLY')),
+  CONSTRAINT "ck_stat_evidence_scan_attempts__no_success_failure" CHECK (safe_failure_classification IS NULL OR attempt_status <> 'COMPLETED')
+);;
+
+CREATE UNIQUE INDEX "ux_stat_evidence_scan_attempts__active_work" ON "discounts"."statutory_evidence_scan_attempts" ("statutory_evidence_item_id", "statutory_evidence_upload_authorization_id") WHERE (attempt_status IN ('PENDING', 'CLAIMED', 'IN_PROGRESS', 'RETRY_PENDING'));;
+CREATE INDEX "ix_stat_evidence_scan_attempts__claimable" ON "discounts"."statutory_evidence_scan_attempts" ("attempt_status", "next_retry_at", "lease_expires_at", "created_at");;
+CREATE INDEX "ix_stat_evidence_scan_attempts__item" ON "discounts"."statutory_evidence_scan_attempts" ("statutory_evidence_item_id", "attempt_number");;
+CREATE INDEX "ix_stat_evidence_scan_attempts__work" ON "discounts"."statutory_evidence_scan_attempts" ("scan_work_identity", "attempt_status", "attempt_number");;
+CREATE INDEX "ix_stat_evidence_scan_attempts__correlation" ON "discounts"."statutory_evidence_scan_attempts" ("correlation_id");;
+COMMENT ON TABLE "discounts"."statutory_evidence_scan_attempts" IS 'Durable statutory evidence structural-validation and malware-scan attempt ledger. Stores claim, lease, retry, and safe result classifications only; it stores no evidence bytes, Base64, object keys, checksums, signed URLs, raw scanner responses, or provider credentials.';;
 
 
 -- ============================================================================

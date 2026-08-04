@@ -208,6 +208,9 @@ objects/schemas/discounts/types/discounts.statutory_evidence_item_role_enum.sql
 objects/schemas/discounts/types/discounts.statutory_evidence_upload_status_enum.sql
 objects/schemas/discounts/types/discounts.statutory_evidence_validation_status_enum.sql
 objects/schemas/discounts/types/discounts.statutory_evidence_scan_status_enum.sql
+objects/schemas/discounts/types/discounts.statutory_evidence_scan_attempt_status_enum.sql
+objects/schemas/discounts/types/discounts.statutory_evidence_validation_result_enum.sql
+objects/schemas/discounts/types/discounts.statutory_evidence_malware_scan_result_enum.sql
 objects/schemas/discounts/types/discounts.statutory_evidence_reviewability_status_enum.sql
 objects/schemas/discounts/types/discounts.statutory_evidence_binding_status_enum.sql
 objects/schemas/discounts/types/discounts.statutory_evidence_retention_status_enum.sql
@@ -239,6 +242,7 @@ objects/schemas/discounts/tables/discounts.statutory_evidence_sets.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_items.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_operations.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_upload_authorizations.sql
+objects/schemas/discounts/tables/discounts.statutory_evidence_scan_attempts.sql
 objects/schemas/discounts/tables/discounts.statutory_evidence_events.sql
 objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__idempotency.sql
 objects/schemas/discounts/indexes/discounts.ux_statutory_discount_decision_commands__business_identity.sql

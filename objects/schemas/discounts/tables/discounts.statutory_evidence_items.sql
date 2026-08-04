@@ -35,7 +35,7 @@ CREATE TABLE "discounts"."statutory_evidence_items" (
   CONSTRAINT "fk_statutory_evidence_items__set" FOREIGN KEY ("statutory_evidence_set_id") REFERENCES "discounts"."statutory_evidence_sets" ("statutory_evidence_set_id"),
   CONSTRAINT "ck_statutory_evidence_items__checksum" CHECK (internal_checksum_sha256 IS NULL OR internal_checksum_sha256 ~ '^[0-9a-f]{64}$'),
   CONSTRAINT "ck_statutory_evidence_items__row_version" CHECK (row_version > 0),
-  CONSTRAINT "ck_statutory_evidence_items__reviewable" CHECK (reviewability_status <> 'REVIEWABLE' OR (upload_status = 'UPLOADED' AND validation_status = 'PASSED' AND scan_status = 'PASSED')),
+  CONSTRAINT "ck_statutory_evidence_items__reviewable" CHECK (reviewability_status <> 'REVIEWABLE' OR (upload_status = 'UPLOADED' AND validation_status = 'PASSED' AND scan_status IN ('PASSED', 'CLEAN'))),
   CONSTRAINT "ck_statutory_evidence_items__deleted_terminal" CHECK (deletion_status <> 'DELETED' OR reviewability_status <> 'REVIEWABLE')
 );;
 
