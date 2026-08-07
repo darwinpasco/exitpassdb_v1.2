@@ -9591,6 +9591,102 @@ COMMENT ON COLUMN "gates"."gate_heartbeats"."created_by_service_identity_id" IS 
 
 
 -- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.authentication_provider_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."authentication_provider_enum" AS ENUM ('LOCAL', 'OIDC');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.authentication_attempt_result_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."authentication_attempt_result_enum" AS ENUM ('SUCCESS', 'INVALID', 'THROTTLED', 'LOCKED', 'EXPIRED', 'REVOKED', 'UNAVAILABLE', 'UNKNOWN');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.authentication_attempt_type_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."authentication_attempt_type_enum" AS ENUM ('PASSWORD', 'TOTP', 'ACTIVATION_CHALLENGE', 'PASSWORD_RESET_CHALLENGE', 'CREDENTIAL_RECOVERY_CHALLENGE');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.authorization_scope_type_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."authorization_scope_type_enum" AS ENUM ('SITE', 'SITE_GROUP', 'GLOBAL');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.credential_challenge_purpose_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."credential_challenge_purpose_enum" AS ENUM ('ACCOUNT_ACTIVATION', 'PASSWORD_RESET', 'CREDENTIAL_RECOVERY');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.credential_challenge_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."credential_challenge_status_enum" AS ENUM ('ISSUED', 'CONSUMED', 'REVOKED', 'EXPIRED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.external_identity_binding_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."external_identity_binding_status_enum" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED', 'REVOKED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.external_identity_provider_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."external_identity_provider_status_enum" AS ENUM ('DISABLED', 'ACTIVE', 'SUSPENDED', 'RETIRED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.human_session_audience_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."human_session_audience_enum" AS ENUM ('MANAGEMENT_PLATFORM', 'OPERATOR_CONSOLE', 'APT');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.human_session_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."human_session_status_enum" AS ENUM ('ACTIVE', 'REVOKED', 'EXPIRED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.local_credential_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."local_credential_status_enum" AS ENUM ('PENDING_ACTIVATION', 'ACTIVE', 'CHANGE_REQUIRED', 'LOCKED', 'REVOKED', 'EXPIRED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.mfa_authenticator_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."mfa_authenticator_status_enum" AS ENUM ('PENDING_ENROLLMENT', 'ACTIVE', 'SUSPENDED', 'RESET_REQUIRED', 'REVOKED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.mfa_authenticator_type_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."mfa_authenticator_type_enum" AS ENUM ('TOTP');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.privileged_access_decision_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."privileged_access_decision_enum" AS ENUM ('APPROVE', 'REJECT');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.privileged_access_request_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."privileged_access_request_status_enum" AS ENUM ('DRAFT', 'PENDING_DECISION', 'APPROVED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'APPLIED');;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.user_role_scope_grant_status_enum.sql
+-- ============================================================================
+CREATE TYPE "identity"."user_role_scope_grant_status_enum" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED', 'REVOKED', 'EXPIRED');;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/identity/types/identity.permission_status_enum.sql
 -- ============================================================================
 -- Create enum type "permission_status_enum"
@@ -10633,6 +10729,7 @@ COMMENT ON COLUMN "identity"."user_roles"."row_version" IS 'Optimistic concurren
 CREATE TABLE "identity"."users" (
   "user_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "username" character varying(128) NOT NULL,
+  "username_normalized" character varying(128) GENERATED ALWAYS AS (lower(btrim("username"))) STORED,
   "email" character varying(256) NULL,
   "email_normalized" character varying(256) NULL,
   "display_name" character varying(128) NOT NULL,
@@ -10641,10 +10738,14 @@ CREATE TABLE "identity"."users" (
   "user_status" "identity"."user_status_enum" NOT NULL,
   "last_login_at" timestamptz NULL,
   "locked_at" timestamptz NULL,
+  "lockout_expires_at" timestamptz NULL,
+  "lockout_reason_code" character varying(64) NULL,
   "suspended_at" timestamptz NULL,
   "retired_at" timestamptz NULL,
   "effective_from" timestamptz NOT NULL,
   "effective_to" timestamptz NULL,
+  "credential_version" bigint NOT NULL DEFAULT 1,
+  "authorization_epoch" bigint NOT NULL DEFAULT 1,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "created_by_user_id" uuid NULL,
   "created_by_service_identity_id" uuid NULL,
@@ -10652,7 +10753,14 @@ CREATE TABLE "identity"."users" (
   "updated_by_user_id" uuid NULL,
   "updated_by_service_identity_id" uuid NULL,
   "row_version" bigint NOT NULL DEFAULT 1,
-  CONSTRAINT "pk_users" PRIMARY KEY ("user_id")
+  CONSTRAINT "pk_users" PRIMARY KEY ("user_id"),
+  CONSTRAINT "ck_users__username_not_blank" CHECK (btrim("username") <> ''),
+  CONSTRAINT "ck_users__username_normalized_not_blank" CHECK (btrim("username_normalized") <> ''),
+  CONSTRAINT "ck_users__effective_window" CHECK ("effective_to" IS NULL OR "effective_to" > "effective_from"),
+  CONSTRAINT "ck_users__lockout_window" CHECK ("lockout_expires_at" IS NULL OR "locked_at" IS NOT NULL),
+  CONSTRAINT "ck_users__credential_version" CHECK ("credential_version" > 0),
+  CONSTRAINT "ck_users__authorization_epoch" CHECK ("authorization_epoch" > 0),
+  CONSTRAINT "ck_users__row_version" CHECK ("row_version" > 0)
 );;
 
 
@@ -10829,6 +10937,339 @@ COMMENT ON COLUMN "identity"."users"."updated_by_service_identity_id" IS 'Servic
 -- ============================================================================
 -- Set comment to column: "row_version" on table: "users"
 COMMENT ON COLUMN "identity"."users"."row_version" IS 'Optimistic concurrency version.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/indexes/identity.ux_users__username_normalized.sql
+-- ============================================================================
+CREATE UNIQUE INDEX "ux_users__username_normalized" ON "identity"."users" ("username_normalized");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/comments/identity.users-human-auth.column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "identity"."users"."username_normalized" IS 'Database-derived normalized username used as the unique v1.3 local human login identifier. Username reuse is prohibited across all lifecycle states.';;
+COMMENT ON COLUMN "identity"."users"."lockout_expires_at" IS 'Optional end of a bounded local-authentication lockout. Runtime authorization still evaluates user status and security policy.';;
+COMMENT ON COLUMN "identity"."users"."lockout_reason_code" IS 'Controlled privacy-safe reason for the current lockout posture.';;
+COMMENT ON COLUMN "identity"."users"."credential_version" IS 'Monotonic version copied into human sessions and advanced when credential validity changes.';;
+COMMENT ON COLUMN "identity"."users"."authorization_epoch" IS 'Monotonic authorization version copied into human sessions and advanced when role or scope authority changes.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.local_credentials.sql
+-- ============================================================================
+CREATE TABLE "identity"."local_credentials" (
+  "local_credential_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL,
+  "credential_status" "identity"."local_credential_status_enum" NOT NULL DEFAULT 'PENDING_ACTIVATION',
+  "password_verifier" bytea NOT NULL,
+  "verifier_salt" bytea NOT NULL,
+  "verifier_algorithm_code" character varying(32) NOT NULL,
+  "verifier_algorithm_version" smallint NOT NULL,
+  "verifier_work_factor" integer NOT NULL,
+  "verifier_memory_kib" integer NULL,
+  "verifier_parallelism" smallint NULL,
+  "credential_version" bigint NOT NULL DEFAULT 1,
+  "activated_at" timestamptz NULL,
+  "last_changed_at" timestamptz NULL,
+  "revoked_at" timestamptz NULL,
+  "revoked_by_user_id" uuid NULL,
+  "revoked_by_service_identity_id" uuid NULL,
+  "status_reason_code" character varying(64) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_local_credentials" PRIMARY KEY ("local_credential_id"),
+  CONSTRAINT "fk_local_credentials__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_local_credentials__revoked_by_user" FOREIGN KEY ("revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_local_credentials__revoked_by_service" FOREIGN KEY ("revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_local_credentials__verifier" CHECK (octet_length("password_verifier") >= 32 AND octet_length("verifier_salt") >= 16),
+  CONSTRAINT "ck_local_credentials__algorithm" CHECK (btrim("verifier_algorithm_code") <> '' AND "verifier_algorithm_version" > 0),
+  CONSTRAINT "ck_local_credentials__work_parameters" CHECK ("verifier_work_factor" > 0 AND ("verifier_memory_kib" IS NULL OR "verifier_memory_kib" > 0) AND ("verifier_parallelism" IS NULL OR "verifier_parallelism" > 0)),
+  CONSTRAINT "ck_local_credentials__activation" CHECK ("credential_status" = 'PENDING_ACTIVATION' OR "activated_at" IS NOT NULL),
+  CONSTRAINT "ck_local_credentials__revocation" CHECK (("credential_status" = 'REVOKED') = ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_local_credentials__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_local_credentials__changed_at" CHECK ("last_changed_at" IS NULL OR "last_changed_at" >= "created_at"),
+  CONSTRAINT "ck_local_credentials__credential_version" CHECK ("credential_version" > 0),
+  CONSTRAINT "ck_local_credentials__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE UNIQUE INDEX "ux_local_credentials__current_user" ON "identity"."local_credentials" ("user_id") WHERE "credential_status" IN ('PENDING_ACTIVATION', 'ACTIVE', 'CHANGE_REQUIRED', 'LOCKED');;
+CREATE INDEX "ix_local_credentials__user_status" ON "identity"."local_credentials" ("user_id", "credential_status");;
+
+COMMENT ON TABLE "identity"."local_credentials" IS 'Restricted local human credential verifier authority. Stores one-way verifier material and upgrade parameters only; it stores no plaintext or recoverable password, hint, reset token, session secret, or provider password.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.external_identity_providers.sql
+-- ============================================================================
+CREATE TABLE "identity"."external_identity_providers" (
+  "external_identity_provider_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "provider_code" character varying(64) NOT NULL,
+  "provider_name" character varying(128) NOT NULL,
+  "issuer_identifier_hash" character(64) NOT NULL,
+  "provider_status" "identity"."external_identity_provider_status_enum" NOT NULL DEFAULT 'DISABLED',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_external_identity_providers" PRIMARY KEY ("external_identity_provider_id"),
+  CONSTRAINT "uq_external_identity_providers__code" UNIQUE ("provider_code"),
+  CONSTRAINT "uq_external_identity_providers__issuer_hash" UNIQUE ("issuer_identifier_hash"),
+  CONSTRAINT "ck_external_identity_providers__code" CHECK (btrim("provider_code") <> ''),
+  CONSTRAINT "ck_external_identity_providers__name" CHECK (btrim("provider_name") <> ''),
+  CONSTRAINT "ck_external_identity_providers__issuer_hash" CHECK ("issuer_identifier_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_external_identity_providers__effective_window" CHECK ("effective_to" IS NULL OR "effective_to" > "effective_from"),
+  CONSTRAINT "ck_external_identity_providers__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE INDEX "ix_external_identity_providers__status" ON "identity"."external_identity_providers" ("provider_status", "effective_from", "effective_to");;
+
+COMMENT ON TABLE "identity"."external_identity_providers" IS 'Optional external authentication provider identity. I-019 seeds no provider and stores no endpoint, client secret, token, assertion, or authorization mapping.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.external_identity_bindings.sql
+-- ============================================================================
+CREATE TABLE "identity"."external_identity_bindings" (
+  "external_identity_binding_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL,
+  "external_identity_provider_id" uuid NOT NULL,
+  "external_subject_hash" character(64) NOT NULL,
+  "binding_status" "identity"."external_identity_binding_status_enum" NOT NULL DEFAULT 'PENDING',
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "revoked_at" timestamptz NULL,
+  "revoked_by_user_id" uuid NULL,
+  "revoked_by_service_identity_id" uuid NULL,
+  "revocation_reason_code" character varying(64) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_external_identity_bindings" PRIMARY KEY ("external_identity_binding_id"),
+  CONSTRAINT "fk_external_identity_bindings__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_external_identity_bindings__provider" FOREIGN KEY ("external_identity_provider_id") REFERENCES "identity"."external_identity_providers" ("external_identity_provider_id"),
+  CONSTRAINT "fk_external_identity_bindings__revoked_by_user" FOREIGN KEY ("revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_external_identity_bindings__revoked_by_service" FOREIGN KEY ("revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_external_identity_bindings__subject_hash" CHECK ("external_subject_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_external_identity_bindings__effective_window" CHECK ("effective_to" IS NULL OR "effective_to" > "effective_from"),
+  CONSTRAINT "ck_external_identity_bindings__revocation" CHECK (("binding_status" = 'REVOKED') = ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_external_identity_bindings__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_external_identity_bindings__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE UNIQUE INDEX "ux_external_identity_bindings__current_subject" ON "identity"."external_identity_bindings" ("external_identity_provider_id", "external_subject_hash") WHERE "binding_status" IN ('PENDING', 'ACTIVE', 'SUSPENDED');;
+CREATE UNIQUE INDEX "ux_external_identity_bindings__current_user_provider" ON "identity"."external_identity_bindings" ("user_id", "external_identity_provider_id") WHERE "binding_status" IN ('PENDING', 'ACTIVE', 'SUSPENDED');;
+CREATE INDEX "ix_external_identity_bindings__user_status" ON "identity"."external_identity_bindings" ("user_id", "binding_status");;
+
+COMMENT ON TABLE "identity"."external_identity_bindings" IS 'Optional binding from an ExitPass human user to a configured provider and immutable external-subject hash. Email, provider groups, tokens, and assertions are not identity or authorization authority here.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.user_mfa_authenticators.sql
+-- ============================================================================
+CREATE TABLE "identity"."user_mfa_authenticators" (
+  "user_mfa_authenticator_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL,
+  "authenticator_type" "identity"."mfa_authenticator_type_enum" NOT NULL DEFAULT 'TOTP',
+  "authenticator_status" "identity"."mfa_authenticator_status_enum" NOT NULL DEFAULT 'PENDING_ENROLLMENT',
+  "protected_secret_envelope" bytea NOT NULL,
+  "protection_key_reference" character varying(256) NOT NULL,
+  "protection_key_version" character varying(64) NOT NULL,
+  "envelope_format_version" smallint NOT NULL,
+  "enrollment_started_at" timestamptz NOT NULL DEFAULT now(),
+  "activated_at" timestamptz NULL,
+  "last_successfully_used_at" timestamptz NULL,
+  "last_successfully_used_time_step" bigint NULL,
+  "reset_at" timestamptz NULL,
+  "revoked_at" timestamptz NULL,
+  "reset_or_revoked_by_user_id" uuid NULL,
+  "reset_or_revoked_by_service_identity_id" uuid NULL,
+  "status_reason_code" character varying(64) NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_user_mfa_authenticators" PRIMARY KEY ("user_mfa_authenticator_id"),
+  CONSTRAINT "fk_user_mfa_authenticators__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_user_mfa_authenticators__reset_user" FOREIGN KEY ("reset_or_revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_user_mfa_authenticators__reset_service" FOREIGN KEY ("reset_or_revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_user_mfa_authenticators__protected_envelope" CHECK (octet_length("protected_secret_envelope") >= 32),
+  CONSTRAINT "ck_user_mfa_authenticators__key_metadata" CHECK (btrim("protection_key_reference") <> '' AND btrim("protection_key_version") <> '' AND "envelope_format_version" > 0),
+  CONSTRAINT "ck_user_mfa_authenticators__activation" CHECK (("authenticator_status" = 'PENDING_ENROLLMENT' AND "activated_at" IS NULL) OR ("authenticator_status" <> 'PENDING_ENROLLMENT' AND "activated_at" IS NOT NULL)),
+  CONSTRAINT "ck_user_mfa_authenticators__last_use" CHECK (("last_successfully_used_at" IS NULL) = ("last_successfully_used_time_step" IS NULL) AND ("last_successfully_used_time_step" IS NULL OR "last_successfully_used_time_step" >= 0)),
+  CONSTRAINT "ck_user_mfa_authenticators__termination" CHECK (("authenticator_status" = 'REVOKED') = ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_user_mfa_authenticators__reset" CHECK (("authenticator_status" = 'RESET_REQUIRED' AND "reset_at" IS NOT NULL AND "revoked_at" IS NULL) OR ("authenticator_status" <> 'RESET_REQUIRED' AND "reset_at" IS NULL)),
+  CONSTRAINT "ck_user_mfa_authenticators__reset_actor" CHECK (("reset_at" IS NULL AND "revoked_at" IS NULL AND "reset_or_revoked_by_user_id" IS NULL AND "reset_or_revoked_by_service_identity_id" IS NULL) OR (("reset_at" IS NOT NULL OR "revoked_at" IS NOT NULL) AND num_nonnulls("reset_or_revoked_by_user_id", "reset_or_revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_user_mfa_authenticators__termination_reason" CHECK ("authenticator_status" NOT IN ('RESET_REQUIRED', 'REVOKED') OR ("status_reason_code" IS NOT NULL AND btrim("status_reason_code") <> '')),
+  CONSTRAINT "ck_user_mfa_authenticators__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE UNIQUE INDEX "ux_user_mfa_authenticators__current_type" ON "identity"."user_mfa_authenticators" ("user_id", "authenticator_type") WHERE "authenticator_status" IN ('PENDING_ENROLLMENT', 'ACTIVE', 'SUSPENDED', 'RESET_REQUIRED');;
+CREATE INDEX "ix_user_mfa_authenticators__user_status" ON "identity"."user_mfa_authenticators" ("user_id", "authenticator_status");;
+
+COMMENT ON TABLE "identity"."user_mfa_authenticators" IS 'Restricted TOTP authenticator authority. The protected_secret_envelope is application-encrypted opaque ciphertext; encryption keys remain outside ordinary database access. No plaintext seed, OTP code, provisioning URI, QR payload, app export, WebAuthn credential, passkey, or recovery-code plaintext is stored.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.human_sessions.sql
+-- ============================================================================
+CREATE TABLE "identity"."human_sessions" (
+  "human_session_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "session_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "session_secret_hash" character(64) NOT NULL,
+  "user_id" uuid NOT NULL,
+  "authentication_provider" "identity"."authentication_provider_enum" NOT NULL,
+  "local_credential_id" uuid NULL,
+  "external_identity_binding_id" uuid NULL,
+  "session_audience" "identity"."human_session_audience_enum" NOT NULL,
+  "device_service_identity_id" uuid NULL,
+  "session_status" "identity"."human_session_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "assurance_context_code" character varying(64) NOT NULL,
+  "mfa_requirement_satisfied" boolean NOT NULL DEFAULT false,
+  "mfa_authenticator_id" uuid NULL,
+  "mfa_verified_at" timestamptz NULL,
+  "authenticated_at" timestamptz NOT NULL,
+  "last_seen_at" timestamptz NOT NULL,
+  "idle_expires_at" timestamptz NOT NULL,
+  "absolute_expires_at" timestamptz NOT NULL,
+  "credential_version_snapshot" bigint NOT NULL,
+  "authorization_epoch_snapshot" bigint NOT NULL,
+  "revoked_at" timestamptz NULL,
+  "revoked_by_user_id" uuid NULL,
+  "revoked_by_service_identity_id" uuid NULL,
+  "revocation_reason_code" character varying(64) NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_human_sessions" PRIMARY KEY ("human_session_id"),
+  CONSTRAINT "uq_human_sessions__reference" UNIQUE ("session_reference"),
+  CONSTRAINT "uq_human_sessions__secret_hash" UNIQUE ("session_secret_hash"),
+  CONSTRAINT "fk_human_sessions__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_human_sessions__local_credential" FOREIGN KEY ("local_credential_id") REFERENCES "identity"."local_credentials" ("local_credential_id"),
+  CONSTRAINT "fk_human_sessions__external_binding" FOREIGN KEY ("external_identity_binding_id") REFERENCES "identity"."external_identity_bindings" ("external_identity_binding_id"),
+  CONSTRAINT "fk_human_sessions__device_service" FOREIGN KEY ("device_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "fk_human_sessions__mfa_authenticator" FOREIGN KEY ("mfa_authenticator_id") REFERENCES "identity"."user_mfa_authenticators" ("user_mfa_authenticator_id"),
+  CONSTRAINT "fk_human_sessions__revoked_by_user" FOREIGN KEY ("revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_human_sessions__revoked_by_service" FOREIGN KEY ("revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_human_sessions__secret_hash" CHECK ("session_secret_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_human_sessions__provider_binding" CHECK (("authentication_provider" = 'LOCAL' AND "local_credential_id" IS NOT NULL AND "external_identity_binding_id" IS NULL) OR ("authentication_provider" = 'OIDC' AND "local_credential_id" IS NULL AND "external_identity_binding_id" IS NOT NULL)),
+  CONSTRAINT "ck_human_sessions__assurance" CHECK (btrim("assurance_context_code") <> '' AND (("mfa_requirement_satisfied" AND "mfa_verified_at" IS NOT NULL) OR (NOT "mfa_requirement_satisfied" AND "mfa_verified_at" IS NULL AND "mfa_authenticator_id" IS NULL)) AND ("mfa_authenticator_id" IS NULL OR "mfa_requirement_satisfied")),
+  CONSTRAINT "ck_human_sessions__expiry" CHECK ("last_seen_at" >= "authenticated_at" AND "idle_expires_at" > "last_seen_at" AND "absolute_expires_at" > "authenticated_at" AND "idle_expires_at" <= "absolute_expires_at"),
+  CONSTRAINT "ck_human_sessions__revocation" CHECK (("session_status" = 'REVOKED') = ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_human_sessions__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_human_sessions__version_snapshots" CHECK ("credential_version_snapshot" > 0 AND "authorization_epoch_snapshot" > 0),
+  CONSTRAINT "ck_human_sessions__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE INDEX "ix_human_sessions__user_status_expiry" ON "identity"."human_sessions" ("user_id", "session_status", "absolute_expires_at");;
+CREATE INDEX "ix_human_sessions__audience_status_expiry" ON "identity"."human_sessions" ("session_audience", "session_status", "idle_expires_at");;
+CREATE INDEX "ix_human_sessions__device_status" ON "identity"."human_sessions" ("device_service_identity_id", "session_status") WHERE "device_service_identity_id" IS NOT NULL;;
+CREATE INDEX "ix_human_sessions__correlation" ON "identity"."human_sessions" ("correlation_id");;
+
+COMMENT ON TABLE "identity"."human_sessions" IS 'Opaque server-side human sessions for Management Platform, Operator Console, and APT. Stores only a session-secret hash and bounded assurance/version snapshots; it stores no raw session, bearer, refresh, OIDC access, or OIDC refresh token.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.authentication_attempts.sql
+-- ============================================================================
+CREATE TABLE "identity"."authentication_attempts" (
+  "authentication_attempt_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid NULL,
+  "login_identifier_hash" character(64) NULL,
+  "attempt_type" "identity"."authentication_attempt_type_enum" NOT NULL,
+  "attempt_result" "identity"."authentication_attempt_result_enum" NOT NULL,
+  "session_audience" "identity"."human_session_audience_enum" NOT NULL,
+  "source_ip_hash" character(64) NULL,
+  "user_agent_hash" character(64) NULL,
+  "request_fingerprint_hash" character(64) NULL,
+  "reason_code" character varying(64) NULL,
+  "observed_at" timestamptz NOT NULL,
+  "correlation_id" uuid NOT NULL,
+  "recorded_by_service_identity_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "pk_authentication_attempts" PRIMARY KEY ("authentication_attempt_id"),
+  CONSTRAINT "fk_authentication_attempts__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_authentication_attempts__recorded_by_service" FOREIGN KEY ("recorded_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_authentication_attempts__principal" CHECK ("user_id" IS NOT NULL OR "login_identifier_hash" IS NOT NULL),
+  CONSTRAINT "ck_authentication_attempts__login_hash" CHECK ("login_identifier_hash" IS NULL OR "login_identifier_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_authentication_attempts__source_hash" CHECK ("source_ip_hash" IS NULL OR "source_ip_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_authentication_attempts__agent_hash" CHECK ("user_agent_hash" IS NULL OR "user_agent_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_authentication_attempts__fingerprint_hash" CHECK ("request_fingerprint_hash" IS NULL OR "request_fingerprint_hash" ~ '^[0-9a-f]{64}$')
+);;
+
+CREATE INDEX "ix_authentication_attempts__user_time" ON "identity"."authentication_attempts" ("user_id", "attempt_type", "observed_at" DESC) WHERE "user_id" IS NOT NULL;;
+CREATE INDEX "ix_authentication_attempts__login_time" ON "identity"."authentication_attempts" ("login_identifier_hash", "attempt_type", "observed_at" DESC) WHERE "login_identifier_hash" IS NOT NULL;;
+CREATE INDEX "ix_authentication_attempts__source_time" ON "identity"."authentication_attempts" ("source_ip_hash", "observed_at" DESC) WHERE "source_ip_hash" IS NOT NULL;;
+CREATE INDEX "ix_authentication_attempts__correlation" ON "identity"."authentication_attempts" ("correlation_id");;
+
+COMMENT ON TABLE "identity"."authentication_attempts" IS 'Privacy-bounded immutable authentication attempt evidence for password, TOTP, activation, reset, and recovery throttling. It stores no password, verifier submission, OTP code, TOTP secret, raw network address, request body, or token.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.credential_challenges.sql
+-- ============================================================================
+CREATE TABLE "identity"."credential_challenges" (
+  "credential_challenge_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "challenge_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_id" uuid NOT NULL,
+  "challenge_purpose" "identity"."credential_challenge_purpose_enum" NOT NULL,
+  "challenge_status" "identity"."credential_challenge_status_enum" NOT NULL DEFAULT 'ISSUED',
+  "challenge_secret_hash" character(64) NOT NULL,
+  "issued_at" timestamptz NOT NULL,
+  "expires_at" timestamptz NOT NULL,
+  "consumed_at" timestamptz NULL,
+  "revoked_at" timestamptz NULL,
+  "requested_by_user_id" uuid NULL,
+  "requested_by_service_identity_id" uuid NULL,
+  "revoked_by_user_id" uuid NULL,
+  "revoked_by_service_identity_id" uuid NULL,
+  "reason_code" character varying(64) NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_credential_challenges" PRIMARY KEY ("credential_challenge_id"),
+  CONSTRAINT "uq_credential_challenges__reference" UNIQUE ("challenge_reference"),
+  CONSTRAINT "uq_credential_challenges__secret_hash" UNIQUE ("challenge_secret_hash"),
+  CONSTRAINT "fk_credential_challenges__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_credential_challenges__requested_user" FOREIGN KEY ("requested_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_credential_challenges__requested_service" FOREIGN KEY ("requested_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "fk_credential_challenges__revoked_user" FOREIGN KEY ("revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_credential_challenges__revoked_service" FOREIGN KEY ("revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_credential_challenges__secret_hash" CHECK ("challenge_secret_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_credential_challenges__request_actor" CHECK (num_nonnulls("requested_by_user_id", "requested_by_service_identity_id") = 1),
+  CONSTRAINT "ck_credential_challenges__expiry" CHECK ("expires_at" > "issued_at"),
+  CONSTRAINT "ck_credential_challenges__lifecycle" CHECK (("challenge_status" = 'ISSUED' AND "consumed_at" IS NULL AND "revoked_at" IS NULL) OR ("challenge_status" = 'CONSUMED' AND "consumed_at" IS NOT NULL AND "revoked_at" IS NULL) OR ("challenge_status" = 'REVOKED' AND "consumed_at" IS NULL AND "revoked_at" IS NOT NULL) OR ("challenge_status" = 'EXPIRED' AND "consumed_at" IS NULL AND "revoked_at" IS NULL)),
+  CONSTRAINT "ck_credential_challenges__consumed_at" CHECK ("consumed_at" IS NULL OR ("consumed_at" >= "issued_at" AND "consumed_at" <= "expires_at")),
+  CONSTRAINT "ck_credential_challenges__revoked_at" CHECK ("revoked_at" IS NULL OR "revoked_at" >= "issued_at"),
+  CONSTRAINT "ck_credential_challenges__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_credential_challenges__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE UNIQUE INDEX "ux_credential_challenges__issued_user_purpose" ON "identity"."credential_challenges" ("user_id", "challenge_purpose") WHERE "challenge_status" = 'ISSUED';;
+CREATE INDEX "ix_credential_challenges__user_status_expiry" ON "identity"."credential_challenges" ("user_id", "challenge_status", "expires_at");;
+CREATE INDEX "ix_credential_challenges__correlation" ON "identity"."credential_challenges" ("correlation_id");;
+
+COMMENT ON TABLE "identity"."credential_challenges" IS 'Purpose-bound one-time account activation, password reset, and recovery challenges. Only a challenge-secret hash is stored; delivery channel remains unresolved runtime policy and raw activation/reset values are prohibited.';;
 
 
 -- ============================================================================
@@ -19121,6 +19562,153 @@ COMMENT ON VIEW "sites"."site_group_lgu_scopes" IS 'Read-only derived Site Group
 
 
 -- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.user_role_scope_grants.sql
+-- ============================================================================
+CREATE TABLE "identity"."user_role_scope_grants" (
+  "user_role_scope_grant_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "user_role_id" uuid NOT NULL,
+  "scope_type" "identity"."authorization_scope_type_enum" NOT NULL,
+  "site_id" uuid NULL,
+  "site_group_id" uuid NULL,
+  "grant_status" "identity"."user_role_scope_grant_status_enum" NOT NULL DEFAULT 'PENDING',
+  "grant_reason_code" character varying(64) NOT NULL,
+  "effective_from" timestamptz NOT NULL,
+  "effective_to" timestamptz NULL,
+  "granted_at" timestamptz NOT NULL DEFAULT now(),
+  "granted_by_user_id" uuid NULL,
+  "granted_by_service_identity_id" uuid NULL,
+  "revoked_at" timestamptz NULL,
+  "revoked_by_user_id" uuid NULL,
+  "revoked_by_service_identity_id" uuid NULL,
+  "revocation_reason_code" character varying(64) NULL,
+  "last_reviewed_at" timestamptz NULL,
+  "last_reviewed_by_user_id" uuid NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_user_role_scope_grants" PRIMARY KEY ("user_role_scope_grant_id"),
+  CONSTRAINT "fk_user_role_scope_grants__user_role" FOREIGN KEY ("user_role_id") REFERENCES "identity"."user_roles" ("user_role_id"),
+  CONSTRAINT "fk_user_role_scope_grants__site" FOREIGN KEY ("site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_user_role_scope_grants__site_group" FOREIGN KEY ("site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "fk_user_role_scope_grants__granted_user" FOREIGN KEY ("granted_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_user_role_scope_grants__granted_service" FOREIGN KEY ("granted_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "fk_user_role_scope_grants__revoked_user" FOREIGN KEY ("revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_user_role_scope_grants__revoked_service" FOREIGN KEY ("revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "fk_user_role_scope_grants__reviewed_user" FOREIGN KEY ("last_reviewed_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "ck_user_role_scope_grants__scope_shape" CHECK (("scope_type" = 'SITE' AND "site_id" IS NOT NULL AND "site_group_id" IS NULL) OR ("scope_type" = 'SITE_GROUP' AND "site_id" IS NULL AND "site_group_id" IS NOT NULL) OR ("scope_type" = 'GLOBAL' AND "site_id" IS NULL AND "site_group_id" IS NULL)),
+  CONSTRAINT "ck_user_role_scope_grants__grant_actor" CHECK (num_nonnulls("granted_by_user_id", "granted_by_service_identity_id") = 1),
+  CONSTRAINT "ck_user_role_scope_grants__effective_window" CHECK ("effective_to" IS NULL OR "effective_to" > "effective_from"),
+  CONSTRAINT "ck_user_role_scope_grants__revocation" CHECK (("grant_status" = 'REVOKED') = ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_user_role_scope_grants__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_user_role_scope_grants__review" CHECK (("last_reviewed_at" IS NULL) = ("last_reviewed_by_user_id" IS NULL)),
+  CONSTRAINT "ck_user_role_scope_grants__reason" CHECK (btrim("grant_reason_code") <> ''),
+  CONSTRAINT "ck_user_role_scope_grants__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE UNIQUE INDEX "ux_user_role_scope_grants__current_exact" ON "identity"."user_role_scope_grants" ("user_role_id", "scope_type", COALESCE("site_id", '00000000-0000-0000-0000-000000000000'::uuid), COALESCE("site_group_id", '00000000-0000-0000-0000-000000000000'::uuid)) WHERE "grant_status" IN ('PENDING', 'ACTIVE', 'SUSPENDED');;
+CREATE INDEX "ix_user_role_scope_grants__role_effective" ON "identity"."user_role_scope_grants" ("user_role_id", "grant_status", "effective_from", "effective_to");;
+CREATE INDEX "ix_user_role_scope_grants__site" ON "identity"."user_role_scope_grants" ("site_id", "grant_status", "effective_from", "effective_to") WHERE "site_id" IS NOT NULL;;
+CREATE INDEX "ix_user_role_scope_grants__site_group" ON "identity"."user_role_scope_grants" ("site_group_id", "grant_status", "effective_from", "effective_to") WHERE "site_group_id" IS NOT NULL;;
+CREATE INDEX "ix_user_role_scope_grants__global" ON "identity"."user_role_scope_grants" ("grant_status", "effective_from", "effective_to") WHERE "scope_type" = 'GLOBAL';;
+
+COMMENT ON TABLE "identity"."user_role_scope_grants" IS 'Server-owned Site, Site Group, or explicit GLOBAL authority attached to one user-role assignment. Missing Site fields never imply global access, no GLOBAL grant is seeded, and runtime authorization must also validate the parent assignment status/effectivity.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.privileged_access_requests.sql
+-- ============================================================================
+CREATE TABLE "identity"."privileged_access_requests" (
+  "privileged_access_request_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "request_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "target_user_id" uuid NOT NULL,
+  "requested_role_id" uuid NOT NULL,
+  "requested_scope_type" "identity"."authorization_scope_type_enum" NULL,
+  "requested_site_id" uuid NULL,
+  "requested_site_group_id" uuid NULL,
+  "request_status" "identity"."privileged_access_request_status_enum" NOT NULL DEFAULT 'DRAFT',
+  "request_reason_code" character varying(64) NOT NULL,
+  "requested_effective_from" timestamptz NOT NULL,
+  "requested_effective_to" timestamptz NULL,
+  "approval_policy_code" character varying(64) NULL,
+  "requested_at" timestamptz NOT NULL,
+  "requested_by_user_id" uuid NOT NULL,
+  "expires_at" timestamptz NULL,
+  "closed_at" timestamptz NULL,
+  "activated_user_role_id" uuid NULL,
+  "activated_scope_grant_id" uuid NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_user_id" uuid NULL,
+  "created_by_service_identity_id" uuid NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_privileged_access_requests" PRIMARY KEY ("privileged_access_request_id"),
+  CONSTRAINT "uq_privileged_access_requests__reference" UNIQUE ("request_reference"),
+  CONSTRAINT "fk_privileged_access_requests__target_user" FOREIGN KEY ("target_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_privileged_access_requests__role" FOREIGN KEY ("requested_role_id") REFERENCES "identity"."roles" ("role_id"),
+  CONSTRAINT "fk_privileged_access_requests__site" FOREIGN KEY ("requested_site_id") REFERENCES "sites"."sites" ("site_id"),
+  CONSTRAINT "fk_privileged_access_requests__site_group" FOREIGN KEY ("requested_site_group_id") REFERENCES "sites"."site_groups" ("site_group_id"),
+  CONSTRAINT "fk_privileged_access_requests__requester" FOREIGN KEY ("requested_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_privileged_access_requests__activated_role" FOREIGN KEY ("activated_user_role_id") REFERENCES "identity"."user_roles" ("user_role_id"),
+  CONSTRAINT "fk_privileged_access_requests__activated_scope" FOREIGN KEY ("activated_scope_grant_id") REFERENCES "identity"."user_role_scope_grants" ("user_role_scope_grant_id"),
+  CONSTRAINT "ck_privileged_access_requests__scope_shape" CHECK (("requested_scope_type" IS NULL AND "requested_site_id" IS NULL AND "requested_site_group_id" IS NULL) OR ("requested_scope_type" = 'SITE' AND "requested_site_id" IS NOT NULL AND "requested_site_group_id" IS NULL) OR ("requested_scope_type" = 'SITE_GROUP' AND "requested_site_id" IS NULL AND "requested_site_group_id" IS NOT NULL) OR ("requested_scope_type" = 'GLOBAL' AND "requested_site_id" IS NULL AND "requested_site_group_id" IS NULL)),
+  CONSTRAINT "ck_privileged_access_requests__effective_window" CHECK ("requested_effective_to" IS NULL OR "requested_effective_to" > "requested_effective_from"),
+  CONSTRAINT "ck_privileged_access_requests__expiry" CHECK ("expires_at" IS NULL OR "expires_at" > "requested_at"),
+  CONSTRAINT "ck_privileged_access_requests__closure" CHECK (("request_status" IN ('REJECTED', 'CANCELLED', 'EXPIRED', 'APPLIED')) = ("closed_at" IS NOT NULL)),
+  CONSTRAINT "ck_privileged_access_requests__activation" CHECK (("request_status" = 'APPLIED' AND "activated_user_role_id" IS NOT NULL AND (("requested_scope_type" IS NULL AND "activated_scope_grant_id" IS NULL) OR ("requested_scope_type" IS NOT NULL AND "activated_scope_grant_id" IS NOT NULL))) OR ("request_status" <> 'APPLIED' AND "activated_user_role_id" IS NULL AND "activated_scope_grant_id" IS NULL)),
+  CONSTRAINT "ck_privileged_access_requests__reason" CHECK (btrim("request_reason_code") <> ''),
+  CONSTRAINT "ck_privileged_access_requests__policy" CHECK ("approval_policy_code" IS NULL OR btrim("approval_policy_code") <> ''),
+  CONSTRAINT "ck_privileged_access_requests__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE INDEX "ix_privileged_access_requests__queue" ON "identity"."privileged_access_requests" ("request_status", "requested_at", "expires_at");;
+CREATE INDEX "ix_privileged_access_requests__target" ON "identity"."privileged_access_requests" ("target_user_id", "request_status", "requested_at" DESC);;
+CREATE INDEX "ix_privileged_access_requests__requester" ON "identity"."privileged_access_requests" ("requested_by_user_id", "requested_at" DESC);;
+CREATE INDEX "ix_privileged_access_requests__correlation" ON "identity"."privileged_access_requests" ("correlation_id");;
+
+COMMENT ON TABLE "identity"."privileged_access_requests" IS 'Durable privileged role/scope proposal and activation linkage. DRAFT/PENDING are never approval; no approver count, global eligibility, or automatic activation policy is hard-coded by I-019.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.privileged_access_decisions.sql
+-- ============================================================================
+CREATE TABLE "identity"."privileged_access_decisions" (
+  "privileged_access_decision_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "privileged_access_request_id" uuid NOT NULL,
+  "decision_sequence" integer NOT NULL,
+  "decision" "identity"."privileged_access_decision_enum" NOT NULL,
+  "decision_reason_code" character varying(64) NOT NULL,
+  "decided_at" timestamptz NOT NULL,
+  "decided_by_user_id" uuid NOT NULL,
+  "decider_human_session_id" uuid NOT NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_service_identity_id" uuid NULL,
+  CONSTRAINT "pk_privileged_access_decisions" PRIMARY KEY ("privileged_access_decision_id"),
+  CONSTRAINT "uq_privileged_access_decisions__sequence" UNIQUE ("privileged_access_request_id", "decision_sequence"),
+  CONSTRAINT "uq_privileged_access_decisions__decider" UNIQUE ("privileged_access_request_id", "decided_by_user_id"),
+  CONSTRAINT "fk_privileged_access_decisions__request" FOREIGN KEY ("privileged_access_request_id") REFERENCES "identity"."privileged_access_requests" ("privileged_access_request_id"),
+  CONSTRAINT "fk_privileged_access_decisions__decider" FOREIGN KEY ("decided_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_privileged_access_decisions__session" FOREIGN KEY ("decider_human_session_id") REFERENCES "identity"."human_sessions" ("human_session_id"),
+  CONSTRAINT "fk_privileged_access_decisions__created_service" FOREIGN KEY ("created_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_privileged_access_decisions__sequence" CHECK ("decision_sequence" > 0),
+  CONSTRAINT "ck_privileged_access_decisions__reason" CHECK (btrim("decision_reason_code") <> '')
+);;
+
+CREATE INDEX "ix_privileged_access_decisions__request_time" ON "identity"."privileged_access_decisions" ("privileged_access_request_id", "decided_at");;
+CREATE INDEX "ix_privileged_access_decisions__decider_time" ON "identity"."privileged_access_decisions" ("decided_by_user_id", "decided_at" DESC);;
+CREATE INDEX "ix_privileged_access_decisions__correlation" ON "identity"."privileged_access_decisions" ("correlation_id");;
+
+COMMENT ON TABLE "identity"."privileged_access_decisions" IS 'Immutable independent decision evidence for a privileged access request, bound to the deciding human session. Runtime policy determines required approver count and independence; absence of an approved decision never grants authority.';;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/discounts/constraints/discounts.fk_sd_policy_registry__local_government_unit.sql
 -- ============================================================================
 -- Add foreign key "fk_sd_policy_registry__local_government_unit"
@@ -26664,4 +27252,144 @@ WHERE NOT EXISTS (
 
 
 COMMIT;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/identity.human-authentication-permissions.seed.sql
+-- ============================================================================
+BEGIN;
+
+CREATE OR REPLACE FUNCTION pg_temp.exitpass_i019_uuid(input text)
+RETURNS uuid
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT (
+        substr(md5(input), 1, 8) || '-' ||
+        substr(md5(input), 9, 4) || '-' ||
+        substr(md5(input), 13, 4) || '-' ||
+        substr(md5(input), 17, 4) || '-' ||
+        substr(md5(input), 21, 12)
+    )::uuid
+$$;
+
+CREATE TEMP TABLE i019_permissions (
+    permission_code varchar(96) PRIMARY KEY,
+    permission_name varchar(128) NOT NULL,
+    permission_description text NOT NULL,
+    permission_domain varchar(64) NOT NULL,
+    permission_action varchar(64) NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO i019_permissions VALUES
+('human-authentication.session.self.view', 'View own human sessions', 'Read privacy-safe current and concurrent human session status for the authenticated user.', 'human-authentication', 'view-self-session'),
+('human-authentication.session.self.revoke', 'Revoke own human sessions', 'Revoke another session belonging to the authenticated user.', 'human-authentication', 'revoke-self-session'),
+('human-authentication.session.admin.view', 'View governed human sessions', 'Read privacy-safe human session administration inventory.', 'human-authentication', 'view-sessions'),
+('human-authentication.session.admin.revoke', 'Revoke governed human sessions', 'Revoke another user human session under governed authority.', 'human-authentication', 'revoke-session'),
+('human-authentication.credential.reset', 'Reset local human credential', 'Issue a governed local credential activation or reset challenge without selecting or reading the password.', 'human-authentication', 'reset-credential'),
+('human-authentication.mfa.status.view', 'View MFA status', 'Read privacy-safe MFA requirement and authenticator lifecycle status without secret material.', 'human-authentication', 'view-mfa-status'),
+('human-authentication.mfa.reset', 'Reset MFA authenticator', 'Invalidate a governed MFA authenticator and require new enrollment without reading its protected secret.', 'human-authentication', 'reset-mfa'),
+('human-authentication.mfa.remove', 'Remove MFA authenticator', 'Remove a governed MFA authenticator subject to privileged-account safety policy.', 'human-authentication', 'remove-mfa'),
+('identity.role-assignment.manage', 'Manage role assignments', 'Create, revoke, and review governed human user-role assignments.', 'identity', 'manage-role-assignment'),
+('identity.scope-assignment.manage', 'Manage role scope assignments', 'Create, revoke, and review governed Site, Site Group, and approved explicit GLOBAL role scopes.', 'identity', 'manage-scope-assignment'),
+('identity.privileged-access.decide', 'Decide privileged access', 'Record an authorized independent decision for a privileged role or scope request.', 'identity', 'decide-privileged-access'),
+('identity.access-review.manage', 'Manage access reviews', 'Record governed role and scope access-review outcomes.', 'identity', 'manage-access-review');
+
+INSERT INTO identity.permissions (
+    permission_id,
+    permission_code,
+    permission_name,
+    permission_description,
+    permission_domain,
+    permission_action,
+    permission_status,
+    is_sensitive,
+    requires_audit
+)
+SELECT
+    pg_temp.exitpass_i019_uuid('i019:permission:' || permission_code),
+    permission_code,
+    permission_name,
+    permission_description,
+    permission_domain,
+    permission_action,
+    'ACTIVE',
+    true,
+    true
+FROM i019_permissions
+ON CONFLICT ON CONSTRAINT uq_permissions__permission_code DO UPDATE
+SET permission_name = EXCLUDED.permission_name,
+    permission_description = EXCLUDED.permission_description,
+    permission_domain = EXCLUDED.permission_domain,
+    permission_action = EXCLUDED.permission_action,
+    permission_status = EXCLUDED.permission_status,
+    is_sensitive = EXCLUDED.is_sensitive,
+    requires_audit = EXCLUDED.requires_audit,
+    updated_at = now(),
+    row_version = identity.permissions.row_version + 1;
+
+COMMIT;;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/identity.human-authentication-event-codes.seed.sql
+-- ============================================================================
+INSERT INTO config.controlled_code_sets (
+    code_set_name,
+    code_value,
+    code_label,
+    code_description,
+    code_domain,
+    code_status,
+    sort_order,
+    requires_comment,
+    requires_approval,
+    is_sensitive,
+    effective_from
+)
+VALUES
+('HUMAN_IDENTITY_EVENT_TYPE', 'LOGIN_SUCCEEDED', 'Login Succeeded', 'Human authentication succeeded.', 'IDENTITY', 'ACTIVE', 10, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'LOGIN_FAILED', 'Login Failed', 'Human authentication failed without exposing whether an account exists.', 'IDENTITY', 'ACTIVE', 20, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'ACCOUNT_LOCKED', 'Account Locked', 'Local human authentication was locked under policy.', 'IDENTITY', 'ACTIVE', 30, true, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'ACCOUNT_UNLOCKED', 'Account Unlocked', 'A governed account lock was removed.', 'IDENTITY', 'ACTIVE', 40, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'LOGOUT_COMPLETED', 'Logout Completed', 'A human session logout completed.', 'IDENTITY', 'ACTIVE', 50, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SESSION_EXPIRED', 'Session Expired', 'A human session reached a server-owned expiry.', 'IDENTITY', 'ACTIVE', 60, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SESSION_REVOKED', 'Session Revoked', 'A human session was revoked.', 'IDENTITY', 'ACTIVE', 70, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'CREDENTIAL_CHANGED', 'Credential Changed', 'A local human credential changed.', 'IDENTITY', 'ACTIVE', 80, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'CREDENTIAL_RESET', 'Credential Reset', 'A governed local credential reset completed.', 'IDENTITY', 'ACTIVE', 90, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'ACTIVATION_CHALLENGE_ISSUED', 'Activation Challenge Issued', 'A purpose-bound activation challenge was issued.', 'IDENTITY', 'ACTIVE', 100, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'ACTIVATION_CHALLENGE_CONSUMED', 'Activation Challenge Consumed', 'A purpose-bound activation challenge was consumed.', 'IDENTITY', 'ACTIVE', 110, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'EXTERNAL_IDENTITY_BOUND', 'External Identity Bound', 'An external subject was bound to an ExitPass user.', 'IDENTITY', 'ACTIVE', 120, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'EXTERNAL_IDENTITY_REVOKED', 'External Identity Revoked', 'An external identity binding was revoked.', 'IDENTITY', 'ACTIVE', 130, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_ENROLLMENT_STARTED', 'TOTP Enrollment Started', 'A governed TOTP enrollment ceremony started without recording provisioning material.', 'IDENTITY', 'ACTIVE', 140, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_CONFIRMED', 'TOTP Confirmed', 'A TOTP authenticator enrollment was confirmed.', 'IDENTITY', 'ACTIVE', 150, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_VERIFICATION_SUCCEEDED', 'TOTP Verification Succeeded', 'A TOTP verification succeeded without recording the code.', 'IDENTITY', 'ACTIVE', 160, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_VERIFICATION_FAILED', 'TOTP Verification Failed', 'A TOTP verification failed without recording the code.', 'IDENTITY', 'ACTIVE', 170, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_THROTTLED', 'TOTP Throttled', 'TOTP verification was throttled under policy.', 'IDENTITY', 'ACTIVE', 180, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_RESET', 'TOTP Reset', 'A governed TOTP authenticator reset invalidated prior enrollment.', 'IDENTITY', 'ACTIVE', 190, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'TOTP_REMOVED', 'TOTP Removed', 'A governed TOTP authenticator was removed.', 'IDENTITY', 'ACTIVE', 200, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'ROLE_ASSIGNED', 'Role Assigned', 'A human user-role assignment was activated.', 'IDENTITY', 'ACTIVE', 210, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'ROLE_REVOKED', 'Role Revoked', 'A human user-role assignment was revoked.', 'IDENTITY', 'ACTIVE', 220, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SITE_SCOPE_GRANTED', 'Site Scope Granted', 'A Site scope was granted to a user-role assignment.', 'IDENTITY', 'ACTIVE', 230, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SITE_SCOPE_REVOKED', 'Site Scope Revoked', 'A Site scope was revoked from a user-role assignment.', 'IDENTITY', 'ACTIVE', 240, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SITE_GROUP_SCOPE_GRANTED', 'Site Group Scope Granted', 'A Site Group scope was granted to a user-role assignment.', 'IDENTITY', 'ACTIVE', 250, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SITE_GROUP_SCOPE_REVOKED', 'Site Group Scope Revoked', 'A Site Group scope was revoked from a user-role assignment.', 'IDENTITY', 'ACTIVE', 260, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'GLOBAL_SCOPE_REQUESTED', 'Global Scope Requested', 'An explicit GLOBAL scope was requested; this event does not grant access.', 'IDENTITY', 'ACTIVE', 270, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'GLOBAL_SCOPE_GRANTED', 'Global Scope Granted', 'An explicit GLOBAL scope was granted under approved policy.', 'IDENTITY', 'ACTIVE', 280, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'GLOBAL_SCOPE_REVOKED', 'Global Scope Revoked', 'An explicit GLOBAL scope was revoked.', 'IDENTITY', 'ACTIVE', 290, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'PRIVILEGED_ACCESS_REQUESTED', 'Privileged Access Requested', 'A privileged role or scope request was submitted.', 'IDENTITY', 'ACTIVE', 300, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'PRIVILEGED_ACCESS_DECIDED', 'Privileged Access Decided', 'An authorized decision was recorded for a privileged access request.', 'IDENTITY', 'ACTIVE', 310, true, true, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'AUTHORIZATION_DENIED', 'Authorization Denied', 'A server-side human authorization or scope evaluation denied an operation.', 'IDENTITY', 'ACTIVE', 320, false, false, true, '2026-01-01T00:00:00Z'),
+('HUMAN_IDENTITY_EVENT_TYPE', 'SUSPICIOUS_AUTHENTICATION', 'Suspicious Authentication', 'Authentication activity met a controlled suspicious-activity classification.', 'IDENTITY', 'ACTIVE', 330, true, false, true, '2026-01-01T00:00:00Z')
+ON CONFLICT ON CONSTRAINT uq_controlled_code_sets__set_value_domain
+DO UPDATE SET
+    code_label = EXCLUDED.code_label,
+    code_description = EXCLUDED.code_description,
+    code_status = EXCLUDED.code_status,
+    sort_order = EXCLUDED.sort_order,
+    requires_comment = EXCLUDED.requires_comment,
+    requires_approval = EXCLUDED.requires_approval,
+    is_sensitive = EXCLUDED.is_sensitive,
+    updated_at = now(),
+    row_version = config.controlled_code_sets.row_version + 1;;
 

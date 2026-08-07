@@ -8,7 +8,8 @@ param(
     [string]$DbUser = 'exitpass',
     [string]$DbPassword,
     [string]$AdminDatabase = 'postgres',
-    [string]$ValidationDatabase
+    [string]$ValidationDatabase,
+    [string]$DockerContainer = 'exitpass-postgres'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,7 @@ if ($SkipDbApply -and $RunDbApply) {
 $coverageArgs = @{ RepoRoot = $RepoRoot }
 if ($RunDbApply) {
     $coverageArgs.RunDbApply = $true
+    if (-not [string]::IsNullOrWhiteSpace($DockerContainer)) { $coverageArgs.DockerContainer = $DockerContainer }
     if (-not [string]::IsNullOrWhiteSpace($DbHost)) { $coverageArgs.DbHost = $DbHost }
     if ($PSBoundParameters.ContainsKey('DbPort')) { $coverageArgs.DbPort = $DbPort }
     if (-not [string]::IsNullOrWhiteSpace($DbUser)) { $coverageArgs.DbUser = $DbUser }

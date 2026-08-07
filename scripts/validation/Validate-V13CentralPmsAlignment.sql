@@ -34,6 +34,17 @@ BEGIN
     IF to_regclass('operator_console.production_policy_import_review_findings') IS NULL THEN missing := array_append(missing, 'operator_console.production_policy_import_review_findings'); END IF;
 
     IF to_regclass('discounts.statutory_entitlement_fingerprints') IS NULL THEN missing := array_append(missing, 'discounts.statutory_entitlement_fingerprints'); END IF;
+    IF to_regclass('identity.local_credentials') IS NULL THEN missing := array_append(missing, 'identity.local_credentials'); END IF;
+    IF to_regclass('identity.external_identity_providers') IS NULL THEN missing := array_append(missing, 'identity.external_identity_providers'); END IF;
+    IF to_regclass('identity.external_identity_bindings') IS NULL THEN missing := array_append(missing, 'identity.external_identity_bindings'); END IF;
+    IF to_regclass('identity.user_mfa_authenticators') IS NULL THEN missing := array_append(missing, 'identity.user_mfa_authenticators'); END IF;
+    IF to_regclass('identity.human_sessions') IS NULL THEN missing := array_append(missing, 'identity.human_sessions'); END IF;
+    IF to_regclass('identity.authentication_attempts') IS NULL THEN missing := array_append(missing, 'identity.authentication_attempts'); END IF;
+    IF to_regclass('identity.credential_challenges') IS NULL THEN missing := array_append(missing, 'identity.credential_challenges'); END IF;
+    IF to_regclass('identity.user_role_scope_grants') IS NULL THEN missing := array_append(missing, 'identity.user_role_scope_grants'); END IF;
+    IF to_regclass('identity.privileged_access_requests') IS NULL THEN missing := array_append(missing, 'identity.privileged_access_requests'); END IF;
+    IF to_regclass('identity.privileged_access_decisions') IS NULL THEN missing := array_append(missing, 'identity.privileged_access_decisions'); END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'identity' AND table_name = 'users' AND column_name = 'username_normalized' AND is_generated = 'ALWAYS') THEN missing := array_append(missing, 'identity.users.username_normalized generated authority'); END IF;
     IF to_regclass('discounts.statutory_discount_payable_basis_applications') IS NULL THEN missing := array_append(missing, 'discounts.statutory_discount_payable_basis_applications'); END IF;
     IF to_regprocedure('discounts.apply_statutory_discount_payable_basis(uuid,uuid,uuid)') IS NULL THEN missing := array_append(missing, 'discounts.apply_statutory_discount_payable_basis(uuid,uuid,uuid)'); END IF;
 
