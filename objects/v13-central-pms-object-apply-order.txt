@@ -2,6 +2,35 @@
 # Object files are source-control decomposition for the v1.3 alignment objects only.
 # Migrations remain deployment history artifacts; legacy v1.2 generated schema remains intact.
 
+objects/schemas/identity/types/identity.authentication_provider_enum.sql
+objects/schemas/identity/types/identity.authentication_attempt_result_enum.sql
+objects/schemas/identity/types/identity.authentication_attempt_type_enum.sql
+objects/schemas/identity/types/identity.authorization_scope_type_enum.sql
+objects/schemas/identity/types/identity.credential_challenge_purpose_enum.sql
+objects/schemas/identity/types/identity.credential_challenge_status_enum.sql
+objects/schemas/identity/types/identity.external_identity_binding_status_enum.sql
+objects/schemas/identity/types/identity.external_identity_provider_status_enum.sql
+objects/schemas/identity/types/identity.human_session_audience_enum.sql
+objects/schemas/identity/types/identity.human_session_status_enum.sql
+objects/schemas/identity/types/identity.local_credential_status_enum.sql
+objects/schemas/identity/types/identity.mfa_authenticator_status_enum.sql
+objects/schemas/identity/types/identity.mfa_authenticator_type_enum.sql
+objects/schemas/identity/types/identity.privileged_access_decision_enum.sql
+objects/schemas/identity/types/identity.privileged_access_request_status_enum.sql
+objects/schemas/identity/types/identity.user_role_scope_grant_status_enum.sql
+objects/schemas/identity/tables/identity.users.sql
+objects/schemas/identity/indexes/identity.ux_users__username_normalized.sql
+objects/schemas/identity/comments/identity.users-human-auth.column-comments.sql
+objects/schemas/identity/tables/identity.local_credentials.sql
+objects/schemas/identity/tables/identity.external_identity_providers.sql
+objects/schemas/identity/tables/identity.external_identity_bindings.sql
+objects/schemas/identity/tables/identity.user_mfa_authenticators.sql
+objects/schemas/identity/tables/identity.human_sessions.sql
+objects/schemas/identity/tables/identity.authentication_attempts.sql
+objects/schemas/identity/tables/identity.credential_challenges.sql
+objects/schemas/identity/tables/identity.user_role_scope_grants.sql
+objects/schemas/identity/tables/identity.privileged_access_requests.sql
+objects/schemas/identity/tables/identity.privileged_access_decisions.sql
 objects/schemas/core/tables/core.fiscal_issuance_references.sql
 objects/schemas/core/constraints/core.fiscal_issuance_references.semantic_request_hash_status.sql
 objects/schemas/core/constraints/core.fiscal_issuance_references.semantic_request_hash_value.sql
@@ -304,3 +333,5 @@ objects/schemas/operator_console/comments/operator_console.statutory_discount_se
 objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.sql
 objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.1.sql
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
+objects/reference-data/identity.human-authentication-permissions.seed.sql
+objects/reference-data/identity.human-authentication-event-codes.seed.sql

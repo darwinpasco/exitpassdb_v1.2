@@ -220,6 +220,17 @@ $requiredMarkers = @(
     'reconciliation.reconciliation_runs',
     'sites.site_groups',
     'identity.users',
+    'username_normalized',
+    'identity.local_credentials',
+    'identity.external_identity_providers',
+    'identity.external_identity_bindings',
+    'identity.user_mfa_authenticators',
+    'identity.human_sessions',
+    'identity.authentication_attempts',
+    'identity.credential_challenges',
+    'identity.user_role_scope_grants',
+    'identity.privileged_access_requests',
+    'identity.privileged_access_decisions',
     'audit.audit_events',
     'integration.vendor_systems',
     'config.controlled_code_sets',
@@ -229,7 +240,9 @@ $requiredMarkers = @(
     'discounts.apply_statutory_discount_payable_basis',
     'operator_console.operator_device_bindings',
     'operator_console.operator_shifts',
-    'management-platform.identity-rbac.inventory.read'
+    'management-platform.identity-rbac.inventory.read',
+    'human-authentication.session.self.view',
+    'HUMAN_IDENTITY_EVENT_TYPE'
 )
 $presence = @()
 foreach ($marker in $requiredMarkers) {
@@ -255,6 +268,9 @@ if ($RunDbApply) {
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/exitpass-full-object.generated.sql
             & docker cp $alignmentScript "$DockerContainer`:/tmp/Validate-V13CentralPmsAlignment.sql"
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-V13CentralPmsAlignment.sql
+            $humanAuthValidation = Join-Path $RepoRoot 'scripts\validation\Validate-HumanAuthenticationFoundation.sql'
+            & docker cp $humanAuthValidation "$DockerContainer`:/tmp/Validate-HumanAuthenticationFoundation.sql"
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-HumanAuthenticationFoundation.sql
         } else {
             $psql = Get-Command psql -ErrorAction Stop
             $previousPassword = $env:PGPASSWORD
@@ -264,6 +280,7 @@ if ($RunDbApply) {
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $AdminDatabase -v ON_ERROR_STOP=1 -c "CREATE DATABASE $ValidationDatabase;"
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f $fullGenerated
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f $alignmentScript
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-HumanAuthenticationFoundation.sql')
             } finally {
                 $env:PGPASSWORD = $previousPassword
             }

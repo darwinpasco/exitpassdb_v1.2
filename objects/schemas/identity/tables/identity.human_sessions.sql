@@ -1,0 +1,57 @@
+CREATE TABLE "identity"."human_sessions" (
+  "human_session_id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "session_reference" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "session_secret_hash" character(64) NOT NULL,
+  "user_id" uuid NOT NULL,
+  "authentication_provider" "identity"."authentication_provider_enum" NOT NULL,
+  "local_credential_id" uuid NULL,
+  "external_identity_binding_id" uuid NULL,
+  "session_audience" "identity"."human_session_audience_enum" NOT NULL,
+  "device_service_identity_id" uuid NULL,
+  "session_status" "identity"."human_session_status_enum" NOT NULL DEFAULT 'ACTIVE',
+  "assurance_context_code" character varying(64) NOT NULL,
+  "mfa_requirement_satisfied" boolean NOT NULL DEFAULT false,
+  "mfa_authenticator_id" uuid NULL,
+  "mfa_verified_at" timestamptz NULL,
+  "authenticated_at" timestamptz NOT NULL,
+  "last_seen_at" timestamptz NOT NULL,
+  "idle_expires_at" timestamptz NOT NULL,
+  "absolute_expires_at" timestamptz NOT NULL,
+  "credential_version_snapshot" bigint NOT NULL,
+  "authorization_epoch_snapshot" bigint NOT NULL,
+  "revoked_at" timestamptz NULL,
+  "revoked_by_user_id" uuid NULL,
+  "revoked_by_service_identity_id" uuid NULL,
+  "revocation_reason_code" character varying(64) NULL,
+  "correlation_id" uuid NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_by_user_id" uuid NULL,
+  "updated_by_service_identity_id" uuid NULL,
+  "row_version" bigint NOT NULL DEFAULT 1,
+  CONSTRAINT "pk_human_sessions" PRIMARY KEY ("human_session_id"),
+  CONSTRAINT "uq_human_sessions__reference" UNIQUE ("session_reference"),
+  CONSTRAINT "uq_human_sessions__secret_hash" UNIQUE ("session_secret_hash"),
+  CONSTRAINT "fk_human_sessions__user" FOREIGN KEY ("user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_human_sessions__local_credential" FOREIGN KEY ("local_credential_id") REFERENCES "identity"."local_credentials" ("local_credential_id"),
+  CONSTRAINT "fk_human_sessions__external_binding" FOREIGN KEY ("external_identity_binding_id") REFERENCES "identity"."external_identity_bindings" ("external_identity_binding_id"),
+  CONSTRAINT "fk_human_sessions__device_service" FOREIGN KEY ("device_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "fk_human_sessions__mfa_authenticator" FOREIGN KEY ("mfa_authenticator_id") REFERENCES "identity"."user_mfa_authenticators" ("user_mfa_authenticator_id"),
+  CONSTRAINT "fk_human_sessions__revoked_by_user" FOREIGN KEY ("revoked_by_user_id") REFERENCES "identity"."users" ("user_id"),
+  CONSTRAINT "fk_human_sessions__revoked_by_service" FOREIGN KEY ("revoked_by_service_identity_id") REFERENCES "identity"."service_identities" ("service_identity_id"),
+  CONSTRAINT "ck_human_sessions__secret_hash" CHECK ("session_secret_hash" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "ck_human_sessions__provider_binding" CHECK (("authentication_provider" = 'LOCAL' AND "local_credential_id" IS NOT NULL AND "external_identity_binding_id" IS NULL) OR ("authentication_provider" = 'OIDC' AND "local_credential_id" IS NULL AND "external_identity_binding_id" IS NOT NULL)),
+  CONSTRAINT "ck_human_sessions__assurance" CHECK (btrim("assurance_context_code") <> '' AND (("mfa_requirement_satisfied" AND "mfa_verified_at" IS NOT NULL) OR (NOT "mfa_requirement_satisfied" AND "mfa_verified_at" IS NULL AND "mfa_authenticator_id" IS NULL)) AND ("mfa_authenticator_id" IS NULL OR "mfa_requirement_satisfied")),
+  CONSTRAINT "ck_human_sessions__expiry" CHECK ("last_seen_at" >= "authenticated_at" AND "idle_expires_at" > "last_seen_at" AND "absolute_expires_at" > "authenticated_at" AND "idle_expires_at" <= "absolute_expires_at"),
+  CONSTRAINT "ck_human_sessions__revocation" CHECK (("session_status" = 'REVOKED') = ("revoked_at" IS NOT NULL)),
+  CONSTRAINT "ck_human_sessions__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
+  CONSTRAINT "ck_human_sessions__version_snapshots" CHECK ("credential_version_snapshot" > 0 AND "authorization_epoch_snapshot" > 0),
+  CONSTRAINT "ck_human_sessions__row_version" CHECK ("row_version" > 0)
+);;
+
+CREATE INDEX "ix_human_sessions__user_status_expiry" ON "identity"."human_sessions" ("user_id", "session_status", "absolute_expires_at");;
+CREATE INDEX "ix_human_sessions__audience_status_expiry" ON "identity"."human_sessions" ("session_audience", "session_status", "idle_expires_at");;
+CREATE INDEX "ix_human_sessions__device_status" ON "identity"."human_sessions" ("device_service_identity_id", "session_status") WHERE "device_service_identity_id" IS NOT NULL;;
+CREATE INDEX "ix_human_sessions__correlation" ON "identity"."human_sessions" ("correlation_id");;
+
+COMMENT ON TABLE "identity"."human_sessions" IS 'Opaque server-side human sessions for Management Platform, Operator Console, and APT. Stores only a session-secret hash and bounded assurance/version snapshots; it stores no raw session, bearer, refresh, OIDC access, or OIDC refresh token.';;

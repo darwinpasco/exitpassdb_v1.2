@@ -2,6 +2,7 @@
 CREATE TABLE "identity"."users" (
   "user_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "username" character varying(128) NOT NULL,
+  "username_normalized" character varying(128) GENERATED ALWAYS AS (lower(btrim("username"))) STORED,
   "email" character varying(256) NULL,
   "email_normalized" character varying(256) NULL,
   "display_name" character varying(128) NOT NULL,
@@ -10,10 +11,14 @@ CREATE TABLE "identity"."users" (
   "user_status" "identity"."user_status_enum" NOT NULL,
   "last_login_at" timestamptz NULL,
   "locked_at" timestamptz NULL,
+  "lockout_expires_at" timestamptz NULL,
+  "lockout_reason_code" character varying(64) NULL,
   "suspended_at" timestamptz NULL,
   "retired_at" timestamptz NULL,
   "effective_from" timestamptz NOT NULL,
   "effective_to" timestamptz NULL,
+  "credential_version" bigint NOT NULL DEFAULT 1,
+  "authorization_epoch" bigint NOT NULL DEFAULT 1,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "created_by_user_id" uuid NULL,
   "created_by_service_identity_id" uuid NULL,
@@ -21,6 +26,13 @@ CREATE TABLE "identity"."users" (
   "updated_by_user_id" uuid NULL,
   "updated_by_service_identity_id" uuid NULL,
   "row_version" bigint NOT NULL DEFAULT 1,
-  CONSTRAINT "pk_users" PRIMARY KEY ("user_id")
+  CONSTRAINT "pk_users" PRIMARY KEY ("user_id"),
+  CONSTRAINT "ck_users__username_not_blank" CHECK (btrim("username") <> ''),
+  CONSTRAINT "ck_users__username_normalized_not_blank" CHECK (btrim("username_normalized") <> ''),
+  CONSTRAINT "ck_users__effective_window" CHECK ("effective_to" IS NULL OR "effective_to" > "effective_from"),
+  CONSTRAINT "ck_users__lockout_window" CHECK ("lockout_expires_at" IS NULL OR "locked_at" IS NOT NULL),
+  CONSTRAINT "ck_users__credential_version" CHECK ("credential_version" > 0),
+  CONSTRAINT "ck_users__authorization_epoch" CHECK ("authorization_epoch" > 0),
+  CONSTRAINT "ck_users__row_version" CHECK ("row_version" > 0)
 );;
 

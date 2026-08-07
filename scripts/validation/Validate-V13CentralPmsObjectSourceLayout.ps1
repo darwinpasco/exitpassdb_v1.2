@@ -49,7 +49,20 @@ $required = @(
     'operator_console.operator_device_bindings',
     'discounts.statutory_discount_payable_basis_applications',
     'discounts.apply_statutory_discount_payable_basis',
-    'management-platform.identity-rbac.inventory.read'
+    'management-platform.identity-rbac.inventory.read',
+    'username_normalized',
+    'identity.local_credentials',
+    'identity.external_identity_providers',
+    'identity.external_identity_bindings',
+    'identity.user_mfa_authenticators',
+    'identity.human_sessions',
+    'identity.authentication_attempts',
+    'identity.credential_challenges',
+    'identity.user_role_scope_grants',
+    'identity.privileged_access_requests',
+    'identity.privileged_access_decisions',
+    'human-authentication.mfa.reset',
+    'HUMAN_IDENTITY_EVENT_TYPE'
 )
 
 foreach ($needle in $required) {
