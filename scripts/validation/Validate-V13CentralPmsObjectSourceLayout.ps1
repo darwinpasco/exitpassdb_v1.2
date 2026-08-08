@@ -62,6 +62,10 @@ $required = @(
     'identity.privileged_access_requests',
     'identity.privileged_access_decisions',
     'human-authentication.mfa.reset',
+    'apt.access',
+    'cashier-shifts.operate',
+    'cash-custody.operate',
+    'terminal-cash.receive',
     'HUMAN_IDENTITY_EVENT_TYPE'
 )
 
