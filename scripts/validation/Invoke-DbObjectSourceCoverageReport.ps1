@@ -242,6 +242,10 @@ $requiredMarkers = @(
     'operator_console.operator_shifts',
     'management-platform.identity-rbac.inventory.read',
     'human-authentication.session.self.view',
+    'apt.access',
+    'cashier-shifts.operate',
+    'cash-custody.operate',
+    'terminal-cash.receive',
     'HUMAN_IDENTITY_EVENT_TYPE'
 )
 $presence = @()
@@ -263,24 +267,44 @@ if ($RunDbApply) {
                 throw "Docker container is not running or not found: $DockerContainer"
             }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $AdminDatabase -c "DROP DATABASE IF EXISTS $ValidationDatabase;"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to drop the disposable validation database.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $AdminDatabase -c "CREATE DATABASE $ValidationDatabase;"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to create the disposable validation database.' }
             & docker cp $fullGenerated "$DockerContainer`:/tmp/exitpass-full-object.generated.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy generated SQL into the disposable database container.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/exitpass-full-object.generated.sql
+            if ($LASTEXITCODE -ne 0) { throw 'Canonical generated SQL failed against the disposable database.' }
             & docker cp $alignmentScript "$DockerContainer`:/tmp/Validate-V13CentralPmsAlignment.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the Central PMS alignment validator.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-V13CentralPmsAlignment.sql
+            if ($LASTEXITCODE -ne 0) { throw 'Central PMS alignment validation failed.' }
             $humanAuthValidation = Join-Path $RepoRoot 'scripts\validation\Validate-HumanAuthenticationFoundation.sql'
             & docker cp $humanAuthValidation "$DockerContainer`:/tmp/Validate-HumanAuthenticationFoundation.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the I-019 human-authentication validator.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-HumanAuthenticationFoundation.sql
+            if ($LASTEXITCODE -ne 0) { throw 'I-019 human-authentication foundation validation failed.' }
+            $aptRbacValidation = Join-Path $RepoRoot 'scripts\validation\Validate-AptOperationalRbacFoundation.sql'
+            & docker cp $aptRbacValidation "$DockerContainer`:/tmp/Validate-AptOperationalRbacFoundation.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the I-021B APT RBAC validator.' }
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-AptOperationalRbacFoundation.sql
+            if ($LASTEXITCODE -ne 0) { throw 'I-021B APT operational RBAC validation failed.' }
         } else {
             $psql = Get-Command psql -ErrorAction Stop
             $previousPassword = $env:PGPASSWORD
             if (-not [string]::IsNullOrWhiteSpace($DbPassword)) { $env:PGPASSWORD = $DbPassword }
             try {
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $AdminDatabase -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $ValidationDatabase;"
+                if ($LASTEXITCODE -ne 0) { throw 'Failed to drop the disposable validation database.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $AdminDatabase -v ON_ERROR_STOP=1 -c "CREATE DATABASE $ValidationDatabase;"
+                if ($LASTEXITCODE -ne 0) { throw 'Failed to create the disposable validation database.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f $fullGenerated
+                if ($LASTEXITCODE -ne 0) { throw 'Canonical generated SQL failed against the disposable database.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f $alignmentScript
+                if ($LASTEXITCODE -ne 0) { throw 'Central PMS alignment validation failed.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-HumanAuthenticationFoundation.sql')
+                if ($LASTEXITCODE -ne 0) { throw 'I-019 human-authentication foundation validation failed.' }
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-AptOperationalRbacFoundation.sql')
+                if ($LASTEXITCODE -ne 0) { throw 'I-021B APT operational RBAC validation failed.' }
             } finally {
                 $env:PGPASSWORD = $previousPassword
             }

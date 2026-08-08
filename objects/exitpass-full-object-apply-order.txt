@@ -2699,3 +2699,4 @@ objects/schemas/operator_console/comments/operator_console.statutory_discount_se
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
 objects/reference-data/identity.human-authentication-permissions.seed.sql
 objects/reference-data/identity.human-authentication-event-codes.seed.sql
+objects/reference-data/identity.apt-operational-permissions.seed.sql
