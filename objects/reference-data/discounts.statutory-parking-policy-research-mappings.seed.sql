@@ -8,7 +8,13 @@ WITH lgu AS (
   VALUES ('SENIOR_CITIZEN'::discounts.statutory_entitlement_type_enum, 'SENIOR_CITIZEN_ID'::discounts.discount_evidence_type_enum, 'Senior Citizen', 'SC'),
          ('PWD'::discounts.statutory_entitlement_type_enum, 'PWD_ID'::discounts.discount_evidence_type_enum, 'PWD', 'PWD')
 ), prepared AS (
-  SELECT (substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),1,8)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),9,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),13,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),17,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),21,12))::uuid AS registry_id,
+  SELECT CASE
+           WHEN lgu.psgc_code = '0731100000' AND ent.suffix = 'SC'
+             THEN 'a216d952-6bf6-e518-c91c-08cbcb608e1c'::uuid
+           WHEN lgu.psgc_code = '0731100000' AND ent.suffix = 'PWD'
+             THEN '42c440a6-a93c-7ac5-e6e6-3096e41808fc'::uuid
+           ELSE (substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),1,8)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),9,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),13,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),17,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),21,12))::uuid
+         END AS registry_id,
          ('I006_' || replace(lgu.psgc_code, '-', '_') || '_' || ent.suffix) AS policy_code,
          lgu.display_name || ' ' || ent.entitlement_label || ' statutory parking research mapping' AS policy_name,
          'No local parking rule found in current controlled research scan; not an absolute legal declaration.' AS policy_description,
@@ -108,7 +114,11 @@ FROM keyed
 WHERE r.policy_code = keyed.policy_code;
 
 INSERT INTO discounts.statutory_discount_policy_registry_lgu_scopes (statutory_discount_policy_registry_lgu_scope_id, statutory_discount_policy_registry_id, local_government_unit_id, coverage_available, auto_application_allowed, source_scan_date, source_reference, scope_status, created_by_service_identity_id, updated_by_service_identity_id)
-SELECT (substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),1,8)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),9,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),13,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),17,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),21,12))::uuid,
+SELECT CASE
+         WHEN r.policy_code = 'I006_0731100000_SC' THEN 'c336d25f-e95d-bb35-6c79-42b7f4b68e19'::uuid
+         WHEN r.policy_code = 'I006_0731100000_PWD' THEN '11e203f6-6a63-0174-086d-d2d6ce0b7e8a'::uuid
+         ELSE (substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),1,8)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),9,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),13,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),17,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),21,12))::uuid
+       END,
        r.statutory_discount_policy_registry_id, r.local_government_unit_id, r.coverage_available, false, '2026-07-28', r.source_reference, 'DRAFT', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM discounts.statutory_discount_policy_registry r
 WHERE r.policy_code LIKE 'I006_%' AND r.local_government_unit_id IS NOT NULL
