@@ -526,6 +526,24 @@ BEGIN
     IF to_regclass('sites.jurisdictions') IS NOT NULL THEN
         IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'sites' AND cls.relname = 'jurisdictions' AND con.conname = 'uq_jurisdictions__code' AND con.contype = 'u') THEN missing := array_append(missing, 'uq_jurisdictions__code'); END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid JOIN pg_namespace n ON n.oid = cls.relnamespace WHERE n.nspname = 'sites' AND cls.relname = 'jurisdictions' AND con.conname = 'ck_jurisdictions__no_self_replacement' AND con.contype = 'c') THEN missing := array_append(missing, 'ck_jurisdictions__no_self_replacement'); END IF;
+        IF (SELECT count(*) FROM sites.jurisdictions WHERE jurisdiction_id = '23104fc9-a144-381c-4347-ccb2aa1a2998') <> 1 THEN missing := array_append(missing, 'canonical City of Lapu-Lapu jurisdiction identity'); END IF;
+        IF NOT EXISTS (
+            SELECT 1
+            FROM sites.jurisdictions j
+            JOIN sites.philippine_regions r ON r.philippine_region_id = j.philippine_region_id
+            WHERE j.jurisdiction_id = '23104fc9-a144-381c-4347-ccb2aa1a2998'
+              AND j.jurisdiction_code = 'PH-PSGC-0731100000'
+              AND j.psgc_code = '0731100000'
+              AND j.correspondence_code = '072226000'
+              AND j.display_name = 'City of Lapu-Lapu'
+              AND j.jurisdiction_type = 'CITY'
+              AND j.city_classification = 'HIGHLY_URBANIZED'
+              AND j.philippine_province_id IS NULL
+              AND r.region_code = 'REGION_VII'
+        ) THEN missing := array_append(missing, 'canonical City of Lapu-Lapu current PSGC and topology'); END IF;
+        IF EXISTS (SELECT 1 FROM sites.jurisdictions WHERE psgc_code = '0730110000' OR jurisdiction_code = 'PH-PSGC-0730110000') THEN missing := array_append(missing, 'retired incorrect City of Lapu-Lapu PSGC remains current'); END IF;
+        IF EXISTS (SELECT psgc_code FROM sites.jurisdictions WHERE psgc_code IS NOT NULL GROUP BY psgc_code HAVING count(*) > 1) THEN missing := array_append(missing, 'duplicate current jurisdiction PSGC code'); END IF;
+        IF EXISTS (SELECT jurisdiction_code FROM sites.jurisdictions GROUP BY jurisdiction_code HAVING count(*) > 1) THEN missing := array_append(missing, 'duplicate current jurisdiction code'); END IF;
     END IF;
 
     IF to_regclass('sites.site_jurisdiction_assignments') IS NOT NULL THEN

@@ -21082,7 +21082,7 @@ WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, of
   ('CARCAR','REGION_VII','CEBU','0722140000','PH-PSGC-0722140000','City of Carcar','Carcar','CITY','COMPONENT'),
   ('CEBU_CITY','REGION_VII',NULL,'0730600000','PH-PSGC-0730600000','City of Cebu','Cebu City','CITY','HIGHLY_URBANIZED'),
   ('DANAO','REGION_VII','CEBU','0722170000','PH-PSGC-0722170000','City of Danao','Danao','CITY','COMPONENT'),
-  ('LAPU_LAPU','REGION_VII',NULL,'0730110000','PH-PSGC-0730110000','City of Lapu-Lapu','Lapu-Lapu','CITY','HIGHLY_URBANIZED'),
+  ('LAPU_LAPU','REGION_VII',NULL,'0731100000','PH-PSGC-0731100000','City of Lapu-Lapu','Lapu-Lapu','CITY','HIGHLY_URBANIZED'),
   ('MANDAUE','REGION_VII',NULL,'0730220000','PH-PSGC-0730220000','City of Mandaue','Mandaue','CITY','HIGHLY_URBANIZED'),
   ('NAGA_CEBU','REGION_VII','CEBU','0722340000','PH-PSGC-0722340000','City of Naga','Naga','CITY','COMPONENT'),
   ('TALISAY_CEBU','REGION_VII','CEBU','0722500000','PH-PSGC-0722500000','City of Talisay','Talisay','CITY','COMPONENT'),
@@ -21117,19 +21117,28 @@ WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, of
          r.philippine_region_id,
          p.philippine_province_id,
          seed.psgc_code,
+         CASE WHEN seed.seed_key = 'LAPU_LAPU' THEN '072226000' ELSE NULL END AS correspondence_code,
          seed.jurisdiction_code,
          seed.official_name,
          seed.short_display_name,
          seed.jurisdiction_type::sites.jurisdiction_type_enum AS jurisdiction_type,
          seed.city_classification::sites.city_classification_enum AS city_classification,
          r.official_name AS region_name,
-         p.official_name AS province_name
+         p.official_name AS province_name,
+         CASE WHEN seed.seed_key = 'LAPU_LAPU'
+              THEN 'I-006 controlled PSGC LGU seed; PSA PSGC as of 30 June 2026, accessed 2026-08-12.'
+              ELSE 'I-006 controlled PSGC LGU seed; validate against current PSA PSGC before production use.'
+         END AS source_reference,
+         CASE WHEN seed.seed_key = 'LAPU_LAPU'
+              THEN 'Canonical City of Lapu-Lapu identity corrected to current PSA PSGC 0731100000; correspondence code 072226000 is stored separately. Independent HUC province_id remains null.'
+              ELSE 'Canonical LGU seed for statutory parking jurisdiction coverage. NCR and independent HUCs have null province_id.'
+         END AS source_provenance
   FROM seed
   JOIN sites.philippine_regions r ON r.region_code = seed.region_code
   LEFT JOIN sites.philippine_provinces p ON p.province_code = seed.province_code
 )
-INSERT INTO sites.jurisdictions (jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, display_name, province_name, region_name, country_code, psgc_code, jurisdiction_status, effective_from, source_reference, source_provenance, created_by_service_identity_id, updated_by_service_identity_id)
-SELECT jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, official_name, province_name, region_name, 'PH', psgc_code, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, 'I-006 controlled PSGC LGU seed; validate against current PSA PSGC before production use.', 'Canonical LGU seed for statutory parking jurisdiction coverage. NCR and independent HUCs have null province_id.', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+INSERT INTO sites.jurisdictions (jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, display_name, province_name, region_name, country_code, psgc_code, correspondence_code, jurisdiction_status, effective_from, source_reference, source_provenance, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, official_name, province_name, region_name, 'PH', psgc_code, correspondence_code, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, source_reference, source_provenance, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM prepared
 ON CONFLICT ON CONSTRAINT uq_jurisdictions__code DO UPDATE SET
   jurisdiction_type = EXCLUDED.jurisdiction_type,
@@ -21141,6 +21150,7 @@ ON CONFLICT ON CONSTRAINT uq_jurisdictions__code DO UPDATE SET
   province_name = EXCLUDED.province_name,
   region_name = EXCLUDED.region_name,
   psgc_code = EXCLUDED.psgc_code,
+  correspondence_code = COALESCE(EXCLUDED.correspondence_code, sites.jurisdictions.correspondence_code),
   source_reference = EXCLUDED.source_reference,
   source_provenance = EXCLUDED.source_provenance,
   updated_at = now(),
@@ -21174,10 +21184,14 @@ ON CONFLICT ON CONSTRAINT uq_metropolitan_areas__code DO UPDATE SET
 WITH seed(area_code, jurisdiction_code, membership_classification) AS (
   VALUES
   ('METRO_MANILA','PH-PSGC-1380100000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380200000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380300000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380400000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380500000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380600000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380700000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380800000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1380900000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381000000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381100000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381200000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381300000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381400000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381500000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381600000','NCR_LGU'),('METRO_MANILA','PH-PSGC-1381700000','NCR_LGU'),
-  ('METRO_CEBU','PH-PSGC-0722140000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730600000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722170000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730110000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730220000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722340000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722500000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722180000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722190000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722220000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722270000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722310000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722410000','EXPANDED_METRO_CEBU_LGU'),
+  ('METRO_CEBU','PH-PSGC-0722140000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730600000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722170000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0731100000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0730220000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722340000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722500000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722180000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722190000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722220000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722270000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722310000','EXPANDED_METRO_CEBU_LGU'),('METRO_CEBU','PH-PSGC-0722410000','EXPANDED_METRO_CEBU_LGU'),
   ('METRO_DAVAO','PH-PSGC-1130700000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123150000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123190000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123170000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124030000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1125090000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124110000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124040000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124070000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124060000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1124140000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1123030000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1182040000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1186030000','RA_11708_LGU'),('METRO_DAVAO','PH-PSGC-1186040000','RA_11708_LGU')
 ), prepared AS (
-  SELECT (substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),1,8)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),9,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),13,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),17,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),21,12))::uuid AS metropolitan_area_jurisdiction_id,
+  SELECT CASE
+           WHEN seed.area_code = 'METRO_CEBU' AND seed.jurisdiction_code = 'PH-PSGC-0731100000'
+             THEN 'fb97785d-eed4-39b4-eb89-52bb20265fdd'::uuid
+           ELSE (substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),1,8)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),9,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),13,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),17,4)||'-'||substr(md5('exitpass:i006:metro-member:' || seed.area_code || ':' || seed.jurisdiction_code),21,12))::uuid
+         END AS metropolitan_area_jurisdiction_id,
          ma.metropolitan_area_id, j.jurisdiction_id, seed.membership_classification
   FROM seed
   JOIN sites.metropolitan_areas ma ON ma.metropolitan_area_code = seed.area_code
@@ -21202,7 +21216,13 @@ WITH lgu AS (
   VALUES ('SENIOR_CITIZEN'::discounts.statutory_entitlement_type_enum, 'SENIOR_CITIZEN_ID'::discounts.discount_evidence_type_enum, 'Senior Citizen', 'SC'),
          ('PWD'::discounts.statutory_entitlement_type_enum, 'PWD_ID'::discounts.discount_evidence_type_enum, 'PWD', 'PWD')
 ), prepared AS (
-  SELECT (substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),1,8)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),9,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),13,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),17,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),21,12))::uuid AS registry_id,
+  SELECT CASE
+           WHEN lgu.psgc_code = '0731100000' AND ent.suffix = 'SC'
+             THEN 'a216d952-6bf6-e518-c91c-08cbcb608e1c'::uuid
+           WHEN lgu.psgc_code = '0731100000' AND ent.suffix = 'PWD'
+             THEN '42c440a6-a93c-7ac5-e6e6-3096e41808fc'::uuid
+           ELSE (substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),1,8)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),9,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),13,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),17,4)||'-'||substr(md5('exitpass:i006:policy:' || lgu.psgc_code || ':' || ent.suffix),21,12))::uuid
+         END AS registry_id,
          ('I006_' || replace(lgu.psgc_code, '-', '_') || '_' || ent.suffix) AS policy_code,
          lgu.display_name || ' ' || ent.entitlement_label || ' statutory parking research mapping' AS policy_name,
          'No local parking rule found in current controlled research scan; not an absolute legal declaration.' AS policy_description,
@@ -21302,7 +21322,11 @@ FROM keyed
 WHERE r.policy_code = keyed.policy_code;
 
 INSERT INTO discounts.statutory_discount_policy_registry_lgu_scopes (statutory_discount_policy_registry_lgu_scope_id, statutory_discount_policy_registry_id, local_government_unit_id, coverage_available, auto_application_allowed, source_scan_date, source_reference, scope_status, created_by_service_identity_id, updated_by_service_identity_id)
-SELECT (substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),1,8)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),9,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),13,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),17,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),21,12))::uuid,
+SELECT CASE
+         WHEN r.policy_code = 'I006_0731100000_SC' THEN 'c336d25f-e95d-bb35-6c79-42b7f4b68e19'::uuid
+         WHEN r.policy_code = 'I006_0731100000_PWD' THEN '11e203f6-6a63-0174-086d-d2d6ce0b7e8a'::uuid
+         ELSE (substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),1,8)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),9,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),13,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),17,4)||'-'||substr(md5('exitpass:i006:policy-lgu-scope:' || r.policy_code),21,12))::uuid
+       END,
        r.statutory_discount_policy_registry_id, r.local_government_unit_id, r.coverage_available, false, '2026-07-28', r.source_reference, 'DRAFT', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM discounts.statutory_discount_policy_registry r
 WHERE r.policy_code LIKE 'I006_%' AND r.local_government_unit_id IS NOT NULL

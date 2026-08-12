@@ -21,7 +21,7 @@ WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, of
   ('CARCAR','REGION_VII','CEBU','0722140000','PH-PSGC-0722140000','City of Carcar','Carcar','CITY','COMPONENT'),
   ('CEBU_CITY','REGION_VII',NULL,'0730600000','PH-PSGC-0730600000','City of Cebu','Cebu City','CITY','HIGHLY_URBANIZED'),
   ('DANAO','REGION_VII','CEBU','0722170000','PH-PSGC-0722170000','City of Danao','Danao','CITY','COMPONENT'),
-  ('LAPU_LAPU','REGION_VII',NULL,'0730110000','PH-PSGC-0730110000','City of Lapu-Lapu','Lapu-Lapu','CITY','HIGHLY_URBANIZED'),
+  ('LAPU_LAPU','REGION_VII',NULL,'0731100000','PH-PSGC-0731100000','City of Lapu-Lapu','Lapu-Lapu','CITY','HIGHLY_URBANIZED'),
   ('MANDAUE','REGION_VII',NULL,'0730220000','PH-PSGC-0730220000','City of Mandaue','Mandaue','CITY','HIGHLY_URBANIZED'),
   ('NAGA_CEBU','REGION_VII','CEBU','0722340000','PH-PSGC-0722340000','City of Naga','Naga','CITY','COMPONENT'),
   ('TALISAY_CEBU','REGION_VII','CEBU','0722500000','PH-PSGC-0722500000','City of Talisay','Talisay','CITY','COMPONENT'),
@@ -56,19 +56,28 @@ WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, of
          r.philippine_region_id,
          p.philippine_province_id,
          seed.psgc_code,
+         CASE WHEN seed.seed_key = 'LAPU_LAPU' THEN '072226000' ELSE NULL END AS correspondence_code,
          seed.jurisdiction_code,
          seed.official_name,
          seed.short_display_name,
          seed.jurisdiction_type::sites.jurisdiction_type_enum AS jurisdiction_type,
          seed.city_classification::sites.city_classification_enum AS city_classification,
          r.official_name AS region_name,
-         p.official_name AS province_name
+         p.official_name AS province_name,
+         CASE WHEN seed.seed_key = 'LAPU_LAPU'
+              THEN 'I-006 controlled PSGC LGU seed; PSA PSGC as of 30 June 2026, accessed 2026-08-12.'
+              ELSE 'I-006 controlled PSGC LGU seed; validate against current PSA PSGC before production use.'
+         END AS source_reference,
+         CASE WHEN seed.seed_key = 'LAPU_LAPU'
+              THEN 'Canonical City of Lapu-Lapu identity corrected to current PSA PSGC 0731100000; correspondence code 072226000 is stored separately. Independent HUC province_id remains null.'
+              ELSE 'Canonical LGU seed for statutory parking jurisdiction coverage. NCR and independent HUCs have null province_id.'
+         END AS source_provenance
   FROM seed
   JOIN sites.philippine_regions r ON r.region_code = seed.region_code
   LEFT JOIN sites.philippine_provinces p ON p.province_code = seed.province_code
 )
-INSERT INTO sites.jurisdictions (jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, display_name, province_name, region_name, country_code, psgc_code, jurisdiction_status, effective_from, source_reference, source_provenance, created_by_service_identity_id, updated_by_service_identity_id)
-SELECT jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, official_name, province_name, region_name, 'PH', psgc_code, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, 'I-006 controlled PSGC LGU seed; validate against current PSA PSGC before production use.', 'Canonical LGU seed for statutory parking jurisdiction coverage. NCR and independent HUCs have null province_id.', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+INSERT INTO sites.jurisdictions (jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, display_name, province_name, region_name, country_code, psgc_code, correspondence_code, jurisdiction_status, effective_from, source_reference, source_provenance, created_by_service_identity_id, updated_by_service_identity_id)
+SELECT jurisdiction_id, jurisdiction_code, jurisdiction_type, philippine_region_id, philippine_province_id, short_display_name, city_classification, official_name, province_name, region_name, 'PH', psgc_code, correspondence_code, 'ACTIVE', '2026-07-28T00:00:00+08'::timestamptz, source_reference, source_provenance, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM prepared
 ON CONFLICT ON CONSTRAINT uq_jurisdictions__code DO UPDATE SET
   jurisdiction_type = EXCLUDED.jurisdiction_type,
@@ -80,6 +89,7 @@ ON CONFLICT ON CONSTRAINT uq_jurisdictions__code DO UPDATE SET
   province_name = EXCLUDED.province_name,
   region_name = EXCLUDED.region_name,
   psgc_code = EXCLUDED.psgc_code,
+  correspondence_code = COALESCE(EXCLUDED.correspondence_code, sites.jurisdictions.correspondence_code),
   source_reference = EXCLUDED.source_reference,
   source_provenance = EXCLUDED.source_provenance,
   updated_at = now(),
