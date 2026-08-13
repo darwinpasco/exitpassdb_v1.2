@@ -288,6 +288,11 @@ if ($RunDbApply) {
             if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the I-021B APT RBAC validator.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-AptOperationalRbacFoundation.sql
             if ($LASTEXITCODE -ne 0) { throw 'I-021B APT operational RBAC validation failed.' }
+            $realisticCatalogValidation = Join-Path $RepoRoot 'scripts\validation\Validate-RealisticCarparkCatalog.sql'
+            & docker cp $realisticCatalogValidation "$DockerContainer`:/tmp/Validate-RealisticCarparkCatalog.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the realistic carpark catalog validator.' }
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-RealisticCarparkCatalog.sql
+            if ($LASTEXITCODE -ne 0) { throw 'Realistic carpark catalog validation failed.' }
         } else {
             $psql = Get-Command psql -ErrorAction Stop
             $previousPassword = $env:PGPASSWORD
@@ -305,6 +310,8 @@ if ($RunDbApply) {
                 if ($LASTEXITCODE -ne 0) { throw 'I-019 human-authentication foundation validation failed.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-AptOperationalRbacFoundation.sql')
                 if ($LASTEXITCODE -ne 0) { throw 'I-021B APT operational RBAC validation failed.' }
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-RealisticCarparkCatalog.sql')
+                if ($LASTEXITCODE -ne 0) { throw 'Realistic carpark catalog validation failed.' }
             } finally {
                 $env:PGPASSWORD = $previousPassword
             }

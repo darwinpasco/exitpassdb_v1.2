@@ -2450,6 +2450,7 @@ objects/reference-data/sites.philippine-lgus.seed.sql
 objects/reference-data/sites.metropolitan-areas-membership.seed.sql
 objects/reference-data/discounts.statutory-parking-policy-research-mappings.seed.sql
 objects/reference-data/sites.synthetic-metropolitan-site-groups-sites.seed.sql
+objects/reference-data/sites.realistic-carpark-catalog.seed.sql
 objects/schemas/core/tables/core.fiscal_issuance_references.sql
 objects/schemas/core/constraints/core.fiscal_issuance_references.semantic_request_hash_status.sql
 objects/schemas/core/constraints/core.fiscal_issuance_references.semantic_request_hash_value.sql
