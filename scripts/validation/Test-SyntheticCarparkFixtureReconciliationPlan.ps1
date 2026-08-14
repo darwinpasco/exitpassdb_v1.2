@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryRoot,
-    [switch]$RunNegativeTests
+    [switch]$RunNegativeTests,
+    [string[]]$ChangedPaths
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +25,58 @@ function Test-ReadOnlySql {
     Assert-True ($text -notmatch '(?im)\bSELECT\b[^;]*\bINTO\s+(?:TEMP|TEMPORARY|UNLOGGED|TABLE)\b') "$Path creates state through SELECT INTO."
 }
 
+function Test-ActivationText {
+    param([string]$Text, [string]$Label)
+
+    $forbiddenCaseInsensitive = @(
+        ('PROPOSED' + '_NOT_ACTIVATED'),
+        ('non' + '-activated'),
+        ('not ' + 'activated'),
+        ('proposed ' + 'activation'),
+        ('future activation ' + 'proposal'),
+        ('before a later PITX ' + 'activation'),
+        ('unless separately ' + 'activated')
+    )
+    $catalogStatusPattern = '\b' + 'DRA' + 'FT\b'
+    $targetToken = 'PIT' + 'X'
+    $questionedActivationPattern = '(?i)' + $targetToken + '[^\r\n]{0,120}\b(pending|provisional|assumed|unverified|inactive|non-' + 'operational)\b'
+
+    Assert-True (-not [regex]::IsMatch($Text, $catalogStatusPattern, [Text.RegularExpressions.RegexOptions]::CultureInvariant)) "$Label contains prohibited catalog-status wording."
+    foreach ($phrase in $forbiddenCaseInsensitive) {
+        Assert-True ($Text.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) "$Label contains contradictory PITX activation wording: $phrase"
+    }
+    Assert-True (-not [regex]::IsMatch($Text, $questionedActivationPattern)) "$Label questions confirmed PITX activation."
+}
+
+function Test-Wave0ChangedPaths {
+    param([string[]]$Paths)
+
+    $protectedExactPaths = @(
+        'docs/v1.3/reference-data/ExitPass_Synthetic_Carpark_Fixture_Reconciliation_and_Migration_Plan_v1.0.md',
+        'docs/v1.3/reference-data/data/ExitPass_Synthetic_Carpark_Fixture_Dependent_Reference_Inventory_v1.0.csv',
+        'docs/v1.3/reference-data/data/ExitPass_Synthetic_Carpark_Fixture_Tracked_Source_Occurrence_Inventory_v1.0.csv',
+        'docs/v1.3/reference-data/data/ExitPass_Synthetic_Site_Fixture_Inventory_v1.0.csv',
+        'docs/v1.3/reference-data/data/ExitPass_Synthetic_Site_Group_Fixture_Inventory_v1.0.csv',
+        'docs/v1.3/reference-data/data/ExitPass_Synthetic_Site_Jurisdiction_Assignment_Inventory_v1.0.csv',
+        'docs/v1.3/reference-data/data/ExitPass_Synthetic_to_Realistic_Identity_Reconciliation_v1.0.csv',
+        'scripts/validation/Analyze-SyntheticCarparkFixtureDependencies.sql',
+        'scripts/validation/Validate-SyntheticCarparkFixtureReconciliation.sql'
+    )
+    foreach ($pathValue in @($Paths)) {
+        $path = $pathValue.Replace('\', '/')
+        $restricted = $path.StartsWith('migrations/', [StringComparison]::OrdinalIgnoreCase) -or
+            $path.StartsWith('objects/reference-data/', [StringComparison]::OrdinalIgnoreCase) -or
+            $path.StartsWith('objects/uat/', [StringComparison]::OrdinalIgnoreCase) -or
+            $path.StartsWith('scripts/uat/', [StringComparison]::OrdinalIgnoreCase) -or
+            $path.StartsWith('build/generated/', [StringComparison]::OrdinalIgnoreCase) -or
+            $path -match '(?i)(^|/)[^/]*seed[^/]*\.sql$' -or
+            $path.Equals('reference-data/ExitPass_Reference_Data_v1.2.sql', [StringComparison]::OrdinalIgnoreCase) -or
+            $path.IndexOf('hikcentral', [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+            $path -in $protectedExactPaths
+        Assert-True (-not $restricted) "Wave 0 cannot change seed, migration, fixture baseline, generated SQL, or HikCentral path: $path"
+    }
+}
+
 function Test-PackageActivationLanguage {
     param([string]$Root)
 
@@ -39,28 +92,11 @@ function Test-PackageActivationLanguage {
         'scripts\validation\Test-SyntheticCarparkFixtureReconciliationPlan.ps1',
         'scripts\validation\Validate-SyntheticCarparkFixtureReconciliation.sql'
     )
-    $forbiddenCaseInsensitive = @(
-        ('PROPOSED' + '_NOT_ACTIVATED'),
-        ('non' + '-activated'),
-        ('not ' + 'activated'),
-        ('proposed ' + 'activation'),
-        ('future activation ' + 'proposal'),
-        ('before a later PITX ' + 'activation'),
-        ('unless separately ' + 'activated')
-    )
-    $catalogStatusPattern = '\b' + 'DRA' + 'FT\b'
-    $targetToken = 'PIT' + 'X'
-    $questionedActivationPattern = '(?i)' + $targetToken + '[^\r\n]{0,120}\b(pending|provisional|assumed|unverified|inactive|non-' + 'operational)\b'
-
     foreach ($relativePath in $relativePaths) {
         $path = Join-Path $Root $relativePath
         Assert-True (Test-Path -LiteralPath $path -PathType Leaf) "Missing reconciliation package file: $relativePath"
         $text = [IO.File]::ReadAllText($path)
-        Assert-True (-not [regex]::IsMatch($text, $catalogStatusPattern, [Text.RegularExpressions.RegexOptions]::CultureInvariant)) "$relativePath contains the prohibited catalog-status wording."
-        foreach ($phrase in $forbiddenCaseInsensitive) {
-            Assert-True ($text.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) "$relativePath contains contradictory PITX activation wording: $phrase"
-        }
-        Assert-True (-not [regex]::IsMatch($text, $questionedActivationPattern)) "$relativePath questions confirmed PITX activation."
+        Test-ActivationText -Text $text -Label $relativePath
     }
 
     $plan = [IO.File]::ReadAllText((Join-Path $Root $relativePaths[0]))
@@ -107,11 +143,13 @@ function Test-PlanData {
     )
     Assert-True (@($Mappings | Where-Object { $_.realistic_target_id -and $_.realistic_target_id -notin $approvedTargets }).Count -eq 0) 'A proposed realistic target does not exist in the approved target set.'
     Assert-True (@($Mappings | Where-Object { $_.operational_activation_change_in_scope -ne 'false' }).Count -eq 0) 'Reconciliation must not change operational activation for PITX or another realistic Site.'
+    Assert-True (@($Mappings | Where-Object { $_.mapping_decision -match '^(APPROVED|MIGRATE|REPLACE|REPURPOSE)' }).Count -eq 0) 'Wave 0 cannot approve fixture identity migration or repurposing.'
 
     Assert-True (@($Dependencies | Where-Object { -not $_.reference_class }).Count -eq 0) 'Every dependency must be classified.'
     Assert-True (@($Dependencies | Where-Object { $_.historical -eq 'true' -and ($_.must_remain_immutable -ne 'true' -or $_.can_reassign_safely -eq 'true') }).Count -eq 0) 'Historical dependencies must remain immutable and non-reassignable.'
     $referencedIds = @{}; foreach ($row in $Dependencies) { if ([int64]$row.row_count -gt 0) { $referencedIds[$row.fixture_id] = $true } }
     Assert-True (@($allFixtures | Where-Object { $_.proposed_disposition -eq 'DELETE_ONLY_IF_PROVEN_UNREFERENCED' -and $referencedIds.ContainsKey($_.fixture_id) }).Count -eq 0) 'A referenced fixture cannot be marked directly deletable.'
+    Assert-True (@($allFixtures | Where-Object { $_.proposed_disposition -eq 'DELETE_ONLY_IF_PROVEN_UNREFERENCED' }).Count -eq 0) 'Wave 0 grants no direct fixture deletion approval.'
 
     $testGroup = $Groups | Where-Object fixture_id -eq '77000000-0000-0000-0000-000000000001'
     $testSite = $Sites | Where-Object fixture_id -eq '77000000-0000-0000-0000-000000000002'
@@ -133,6 +171,7 @@ Test-PackageActivationLanguage $RepositoryRoot
 Test-PlanData $groups $sites $assignments $dependencies $mappings $sourceOccurrences
 Test-ReadOnlySql (Join-Path $RepositoryRoot 'scripts\validation\Analyze-SyntheticCarparkFixtureDependencies.sql')
 Test-ReadOnlySql (Join-Path $RepositoryRoot 'scripts\validation\Validate-SyntheticCarparkFixtureReconciliation.sql')
+if ($ChangedPaths) { Test-Wave0ChangedPaths $ChangedPaths }
 
 if ($RunNegativeTests) {
     $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("exitpass-fixture-plan-" + [guid]::NewGuid().ToString('N'))
@@ -140,12 +179,15 @@ if ($RunNegativeTests) {
     try {
         $cases = @(
             @{ Name='omitted fixture'; Action={ param($g,$s,$a,$d,$m,$o) Test-PlanData @($g | Select-Object -Skip 1) $s $a $d $m $o } },
+            @{ Name='multiple classifications'; Action={ param($g,$s,$a,$d,$m,$o) $g[0].identity_classification='CONTROLLED_TEST_FIXTURE;UNRESOLVED_IDENTITY'; Test-PlanData $g $s $a $d $m $o } },
+            @{ Name='multiple dispositions'; Action={ param($g,$s,$a,$d,$m,$o) $g[0].proposed_disposition='KEEP_UNCHANGED;KEEP_FOR_TEST_SCOPE_ONLY'; Test-PlanData $g $s $a $d $m $o } },
             @{ Name='unclassified dependency'; Action={ param($g,$s,$a,$d,$m,$o) $d[0].reference_class=''; Test-PlanData $g $s $a $d $m $o } },
             @{ Name='missing mapping target'; Action={ param($g,$s,$a,$d,$m,$o) $m[0].realistic_target_id='00000000-0000-0000-0000-000000000099'; Test-PlanData $g $s $a $d $m $o } },
             @{ Name='multiple mapping targets'; Action={ param($g,$s,$a,$d,$m,$o) Test-PlanData $g $s $a $d @($m + $m[0]) $o } },
             @{ Name='historical row rewritable'; Action={ param($g,$s,$a,$d,$m,$o) $d[0].historical='true';$d[0].must_remain_immutable='false';$d[0].can_reassign_safely='true'; Test-PlanData $g $s $a $d $m $o } },
             @{ Name='referenced fixture directly deletable'; Action={ param($g,$s,$a,$d,$m,$o) $g[0].proposed_disposition='DELETE_ONLY_IF_PROVEN_UNREFERENCED';$d[0].fixture_id=$g[0].fixture_id;$d[0].row_count='1'; Test-PlanData $g $s $a $d $m $o } },
             @{ Name='Test Site without disposition'; Action={ param($g,$s,$a,$d,$m,$o) ($s | Where-Object fixture_id -eq '77000000-0000-0000-0000-000000000002').proposed_disposition=''; Test-PlanData $g $s $a $d $m $o } },
+            @{ Name='new unclassified tracked source occurrence'; Action={ param($g,$s,$a,$d,$m,$o) $newOccurrence=[pscustomobject]@{repository='exitpassdb_v1.2';commit='test';path='scripts/validation/unclassified-fixture-reference.sql';reference_type='';matched_fixture_tokens='fixture-test-token';controls_runtime_behavior='false';later_migration_action='';current_action='';classification_basis=''}; Test-PlanData $g $s $a $d $m @($o + $newOccurrence) } },
             @{ Name='operational activation change introduced'; Action={ param($g,$s,$a,$d,$m,$o) ($m | Where-Object realistic_target_code -eq 'PITX-LEVEL-3').operational_activation_change_in_scope='true'; Test-PlanData $g $s $a $d $m $o } }
         )
         foreach ($case in $cases) {
@@ -165,7 +207,17 @@ if ($RunNegativeTests) {
         $writeFailed = $false
         try { Test-ReadOnlySql $writeSql } catch { $writeFailed = $true }
         Assert-True $writeFailed 'Negative test did not reject a mutating SQL statement.'
-        Write-Output 'NEGATIVE_TESTS_PASSED=9'
+        $activationFailed = $false
+        try { Test-ActivationText -Text (('PIT' + 'X Level 3 is ') + 'pending') -Label 'negative activation fixture' } catch { $activationFailed = $true }
+        Assert-True $activationFailed 'Negative test did not reject contradictory PITX activation language.'
+
+        foreach ($restrictedPath in @('migrations/99999999999999_wave0_forbidden.sql','objects/reference-data/wave0-forbidden.seed.sql')) {
+            $restrictedDiffFailed = $false
+            try { Test-Wave0ChangedPaths @($restrictedPath) } catch { $restrictedDiffFailed = $true }
+            Assert-True $restrictedDiffFailed "Negative test did not reject restricted path: $restrictedPath"
+        }
+
+        Write-Output 'NEGATIVE_TESTS_PASSED=13'
     }
     finally {
         if (Test-Path -LiteralPath $temporaryRoot) {
