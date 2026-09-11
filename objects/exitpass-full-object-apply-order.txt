@@ -1212,6 +1212,7 @@ objects/schemas/identity/types/identity.permission_status_enum.sql
 objects/schemas/identity/types/identity.role_permission_binding_status_enum.sql
 objects/schemas/identity/types/identity.role_status_enum.sql
 objects/schemas/identity/types/identity.role_type_enum.sql
+objects/schemas/identity/types/identity.role_provenance_enum.sql
 objects/schemas/identity/types/identity.service_credential_type_enum.sql
 objects/schemas/identity/types/identity.service_identity_status_enum.sql
 objects/schemas/identity/types/identity.service_identity_type_enum.sql
@@ -1265,6 +1266,7 @@ objects/schemas/identity/comments/identity.role_permissions.column-comments.18.s
 objects/schemas/identity/comments/identity.role_permissions.column-comments.19.sql
 objects/schemas/identity/comments/identity.role_permissions.column-comments.20.sql
 objects/schemas/identity/tables/identity.roles.sql
+objects/schemas/identity/tables/identity.role_user_type_compatibility.sql
 objects/schemas/identity/indexes/identity.ix_roles__role_status.sql
 objects/schemas/identity/comments/identity.roles.comments.sql
 objects/schemas/identity/comments/identity.roles.column-comments.sql
@@ -1284,6 +1286,7 @@ objects/schemas/identity/comments/identity.roles.column-comments.13.sql
 objects/schemas/identity/comments/identity.roles.column-comments.14.sql
 objects/schemas/identity/comments/identity.roles.column-comments.15.sql
 objects/schemas/identity/comments/identity.roles.column-comments.16.sql
+objects/schemas/identity/comments/identity.roles.wave3-column-comments.sql
 objects/schemas/identity/tables/identity.service_identities.sql
 objects/schemas/identity/indexes/identity.ix_service_identities__credential_expires_at.sql
 objects/schemas/identity/indexes/identity.ix_service_identities__identity_status.sql
@@ -2698,7 +2701,7 @@ objects/schemas/operator_console/indexes/operator_console.ix_stat_disc_svc_revie
 objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.comments.sql
 objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.sql
 objects/schemas/operator_console/comments/operator_console.statutory_discount_service_channel_reviews.column-comments.1.sql
-objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
 objects/reference-data/identity.human-authentication-permissions.seed.sql
 objects/reference-data/identity.human-authentication-event-codes.seed.sql
 objects/reference-data/identity.apt-operational-permissions.seed.sql
+objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
