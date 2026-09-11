@@ -191,6 +191,8 @@ INSERT INTO wave3_role_permissions VALUES
 ('OPERATIONS_SUPERVISOR','ops.vendor-session-projection-health.view'),('OPERATIONS_SUPERVISOR','vendor-acknowledgments.view'),
 ('SITE_OPERATOR','sessions.resolve'),('SITE_OPERATOR','gate.consume_authorization'),
 ('SITE_OPERATOR','gate.record_event'),('SITE_OPERATOR','operations.manual_gate'),
+('SITE_OPERATOR','apt.access'),('SITE_OPERATOR','cashier-shifts.operate'),
+('SITE_OPERATOR','cash-custody.operate'),('SITE_OPERATOR','terminal-cash.receive'),
 ('SUPPORT_AGENT','sessions.resolve'),('SUPPORT_AGENT','tariffs.quote'),
 ('SUPPORT_AGENT','ticket.lookup'),('SUPPORT_AGENT','projection-health.view'),
 ('SUPPORT_AGENT','ops.vendor-session-projection-health.view'),
