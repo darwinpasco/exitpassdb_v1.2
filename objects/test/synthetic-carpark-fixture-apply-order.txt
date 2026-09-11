@@ -1,0 +1,3 @@
+# Explicit isolated-test fixture fragment. Apply only after the normal full object build.
+objects/reference-data/exitpass.reference-data-v1.2.sql
+objects/test/sites.synthetic-metropolitan-site-groups-sites.fixture.sql

@@ -104,11 +104,12 @@ foreach ($category in @('schema','types','tables','constraints','indexes','funct
 $counts['extensions'] = (Get-ChildItem -Path (Join-Path $objectsRoot 'extensions') -File -Filter *.sql -ErrorAction SilentlyContinue | Measure-Object).Count
 $counts['referenceData'] = (Get-ChildItem -Path (Join-Path $objectsRoot 'reference-data') -File -Filter *.sql -ErrorAction SilentlyContinue | Measure-Object).Count
 $counts['uat'] = (Get-ChildItem -Path (Join-Path $objectsRoot 'uat') -File -Filter *.sql -ErrorAction SilentlyContinue | Measure-Object).Count
+$counts['testFixtures'] = (Get-ChildItem -Path (Join-Path $objectsRoot 'test') -File -Filter *.sql -ErrorAction SilentlyContinue | Measure-Object).Count
 $counts['totalObjectFiles'] = (Get-ChildItem -Path $objectsRoot -Recurse -File -Filter *.sql -ErrorAction SilentlyContinue | Measure-Object).Count
 
 $allObjectFiles = @(Get-ChildItem -Path $objectsRoot -Recurse -File -Filter *.sql -ErrorAction SilentlyContinue | ForEach-Object { ConvertTo-RepoPath $_.FullName } | Sort-Object)
 $applyOrderSpecs = @(
-    [ordered]@{ name = 'full'; path = 'objects/exitpass-full-object-apply-order.txt'; allowOmittedPattern = '^objects/uat/' },
+    [ordered]@{ name = 'full'; path = 'objects/exitpass-full-object-apply-order.txt'; allowOmittedPattern = '^objects/(uat|test)/' },
     [ordered]@{ name = 'v13-central-pms'; path = 'objects/v13-central-pms-object-apply-order.txt'; scoped = $true },
     [ordered]@{ name = 'v13-central-pms-uat'; path = 'objects/v13-central-pms-uat-object-apply-order.txt'; scoped = $true }
 )

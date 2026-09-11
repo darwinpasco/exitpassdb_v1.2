@@ -299,6 +299,8 @@ DO $$
 BEGIN
   IF (SELECT count(*) FROM sites.site_groups g JOIN ep_realistic_catalog_groups e ON e.site_group_id = g.site_group_id) <> 39
      OR (SELECT count(*) FROM sites.sites s JOIN ep_realistic_catalog_sites e ON e.site_id = s.site_id) <> 46
+     OR (SELECT count(*) FROM sites.real_carpark_catalog_site_groups c JOIN ep_realistic_catalog_groups e USING (site_group_id)) <> 39
+     OR (SELECT count(*) FROM sites.real_carpark_catalog_sites c JOIN ep_realistic_catalog_sites e ON e.site_id = c.site_id AND e.site_group_id = c.site_group_id) <> 46
      OR (SELECT count(*) FROM sites.site_jurisdiction_assignments a JOIN ep_realistic_catalog_assignments e ON e.assignment_id = a.site_jurisdiction_assignment_id) <> 46 THEN
     RAISE EXCEPTION 'Realistic carpark catalog seed failed post-insert cardinality validation.';
   END IF;
@@ -327,25 +329,22 @@ END $$;
 
 DO $$
 DECLARE
-  baseline_group_hash constant text := 'cb10b90dae01325d951e860932a70373';
-  baseline_site_hash constant text := 'f0380c3b7ec122e0bce46173c266f8e4';
-  baseline_assignment_hash constant text := '9e3a409c5d2cc26c8a1d04279a582b07';
   actual_hash text;
 BEGIN
   SELECT md5(string_agg(concat_ws('|',g.site_group_id,g.site_group_code,g.site_group_name,coalesce(g.business_label,''),coalesce(g.description,''),coalesce(g.operator_entity_name,''),g.timezone_name,g.default_currency_code,g.site_group_status,g.public_lookup_enabled,g.default_payment_enabled), E'\n' ORDER BY g.site_group_id))
   INTO actual_hash FROM sites.site_groups g
   WHERE NOT EXISTS (SELECT 1 FROM ep_realistic_catalog_groups e WHERE e.site_group_id = g.site_group_id);
-  IF actual_hash <> baseline_group_hash THEN RAISE EXCEPTION 'Realistic carpark validation failed: pre-existing Site Group fixtures changed.'; END IF;
+  IF actual_hash IS NOT NULL THEN RAISE EXCEPTION 'Realistic carpark validation failed: non-canonical Site Group exists in the normal build.'; END IF;
 
   SELECT md5(string_agg(concat_ws('|',s.site_id,s.site_group_id,s.site_code,s.site_name,coalesce(s.site_description,''),s.site_type,s.timezone_name,coalesce(s.address_line1,''),coalesce(s.address_line2,''),coalesce(s.city,''),coalesce(s.province,''),s.country_code,coalesce(s.lgu_code,''),coalesce(s.local_government_unit_id::text,''),s.site_status,s.public_lookup_enabled,s.payment_enabled), E'\n' ORDER BY s.site_id))
   INTO actual_hash FROM sites.sites s
   WHERE NOT EXISTS (SELECT 1 FROM ep_realistic_catalog_sites e WHERE e.site_id = s.site_id);
-  IF actual_hash <> baseline_site_hash THEN RAISE EXCEPTION 'Realistic carpark validation failed: pre-existing Site fixtures changed.'; END IF;
+  IF actual_hash IS NOT NULL THEN RAISE EXCEPTION 'Realistic carpark validation failed: non-canonical Site exists in the normal build.'; END IF;
 
   SELECT md5(string_agg(concat_ws('|',a.site_jurisdiction_assignment_id,a.site_id,a.jurisdiction_id,a.assignment_status,coalesce(a.source_reference,''),coalesce(a.approval_reference,''),coalesce(a.correction_reason,'')), E'\n' ORDER BY a.site_jurisdiction_assignment_id))
   INTO actual_hash FROM sites.site_jurisdiction_assignments a
   WHERE NOT EXISTS (SELECT 1 FROM ep_realistic_catalog_assignments e WHERE e.assignment_id = a.site_jurisdiction_assignment_id);
-  IF actual_hash <> baseline_assignment_hash THEN RAISE EXCEPTION 'Realistic carpark validation failed: pre-existing assignment fixtures changed.'; END IF;
+  IF actual_hash IS NOT NULL THEN RAISE EXCEPTION 'Realistic carpark validation failed: non-canonical Site assignment exists in the normal build.'; END IF;
 
   IF (SELECT count(*) FROM ep_realistic_catalog_sites WHERE site_type = 'OPEN_LOT') <> 5
      OR (SELECT count(*) FROM ep_realistic_catalog_sites WHERE site_type = 'STRUCTURED_PARKING') <> 2

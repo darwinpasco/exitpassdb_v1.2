@@ -3,6 +3,17 @@
 
 BEGIN;
 
+-- The canonical clean-build catalog intentionally begins in DRAFT. Activate one
+-- real PITX Site only inside this rolled-back validator; do not depend on the
+-- former MNT development topology to supply an ACTIVE business Site.
+UPDATE sites.site_groups
+SET site_group_status = 'ACTIVE'
+WHERE site_group_id = 'a6dbadf6-68b5-5bed-a7e0-a75faee70841';
+
+UPDATE sites.sites
+SET site_status = 'ACTIVE'
+WHERE site_id = '2d1dcdf8-f563-537c-8542-0bde7cc9da97';
+
 DO $$
 DECLARE
     required_codes constant text[] := ARRAY[
