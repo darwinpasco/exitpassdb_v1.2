@@ -1,4 +1,8 @@
 [CmdletBinding()]
+# HISTORICAL WAVE 0 VALIDATOR.
+# Wave 0 intentionally prohibited seed/migration/generated-SQL changes. Active CI superseded
+# that transition-only freeze with Invoke-RealCarparkCatalogBoundaryValidation.ps1 after the
+# approved Wave 1/2 real-catalog boundary was implemented. Keep this script for audit history.
 param(
     [string]$RepositoryRoot,
     [string]$BaselineRef = 'origin/develop',

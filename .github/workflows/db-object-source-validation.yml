@@ -93,11 +93,17 @@ jobs:
           -AdminDatabase $env:EXITPASS_DB_ADMIN_DATABASE
           -ValidationDatabase $env:EXITPASS_DB_VALIDATION_DATABASE
 
-      - name: Run synthetic carpark fixture Wave 0 enforcement
+      - name: Validate real carpark catalog and synthetic fixture isolation
         shell: pwsh
         run: >-
-          ./scripts/validation/Invoke-SyntheticCarparkFixtureWave0Validation.ps1
-          -BaselineRef origin/develop
+          ./scripts/validation/Invoke-RealCarparkCatalogBoundaryValidation.ps1
+          -RunNegativeTests
+          -DbHost $env:EXITPASS_DB_HOST
+          -DbPort ([int]$env:EXITPASS_DB_PORT)
+          -DbUser $env:EXITPASS_DB_USER
+          -DbPassword $env:EXITPASS_DB_PASSWORD
+          -AdminDatabase $env:EXITPASS_DB_ADMIN_DATABASE
+          -ValidationDatabase exitpass_real_carpark_boundary_validation
 
       - name: Check whitespace
         shell: pwsh

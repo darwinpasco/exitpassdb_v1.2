@@ -1,5 +1,16 @@
 # Management Platform real catalog boundary
 
+## Continuous validation after Wave 1/2
+
+The Wave 0 changed-path freeze remains historical evidence of the documentation-only phase.
+It is superseded in active CI by
+`scripts/validation/Invoke-RealCarparkCatalogBoundaryValidation.ps1`. The current validator
+regenerates normal SQL from object source, compares it byte-for-byte with the committed
+artifact, applies the normal and explicit test-fixture paths to disposable PostgreSQL
+databases, and verifies the 39/46 canonical boundary and 43/138 explicit-fixture topology.
+It also retains the useful Wave 0 inventory, immutable-history, cleanup-safety, tracked-source,
+and PITX consistency checks without prohibiting authorized seed or migration evolution.
+
 The database classifies the approved Professional Parking catalog through
 `sites.real_carpark_catalog_site_groups` and `sites.real_carpark_catalog_sites`.
 Membership is registered only from the canonical 39-group/46-site seed sourced
