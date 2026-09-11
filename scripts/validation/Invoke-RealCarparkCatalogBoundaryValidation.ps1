@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
-    $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 }
 $RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 
@@ -23,24 +23,48 @@ $catalogCode = 'PROFESSIONAL_PARKING_REAL_CARPARK_V1'
 $catalogHash = '63C20CD3ABA3E13D6F9FC022083507C0BC43A2AB9C751E9084DD19C59969359A'
 $fixturePath = 'objects/test/sites.synthetic-metropolitan-site-groups-sites.fixture.sql'
 $fixtureLeaf = 'sites.synthetic-metropolitan-site-groups-sites.fixture.sql'
-$normalApplyPath = Join-Path $RepositoryRoot 'objects\exitpass-full-object-apply-order.txt'
-$testApplyPath = Join-Path $RepositoryRoot 'objects\test\synthetic-carpark-fixture-apply-order.txt'
-$generatedPath = Join-Path $RepositoryRoot 'build\generated\exitpass-full-object.generated.sql'
-$referenceDataPath = Join-Path $RepositoryRoot 'objects\reference-data\exitpass.reference-data-v1.2.sql'
-$catalogSeedPath = Join-Path $RepositoryRoot 'objects\reference-data\sites.realistic-carpark-catalog.seed.sql'
-$migrationPath = Join-Path $RepositoryRoot 'migrations\20260911120000_management_platform_real_catalog_boundary.sql'
-$stateValidationPath = Join-Path $RepositoryRoot 'scripts\validation\Validate-RealCarparkCatalogBoundaryState.sql'
-$realisticValidationPath = Join-Path $RepositoryRoot 'scripts\validation\Validate-RealisticCarparkCatalog.sql'
+$normalApplyPath = Join-Path $RepositoryRoot 'objects/exitpass-full-object-apply-order.txt'
+$testApplyPath = Join-Path $RepositoryRoot 'objects/test/synthetic-carpark-fixture-apply-order.txt'
+$generatedPath = Join-Path $RepositoryRoot 'build/generated/exitpass-full-object.generated.sql'
+$referenceDataPath = Join-Path $RepositoryRoot 'objects/reference-data/exitpass.reference-data-v1.2.sql'
+$catalogSeedPath = Join-Path $RepositoryRoot 'objects/reference-data/sites.realistic-carpark-catalog.seed.sql'
+$migrationPath = Join-Path $RepositoryRoot 'migrations/20260911120000_management_platform_real_catalog_boundary.sql'
+$stateValidationPath = Join-Path $RepositoryRoot 'scripts/validation/Validate-RealCarparkCatalogBoundaryState.sql'
+$realisticValidationPath = Join-Path $RepositoryRoot 'scripts/validation/Validate-RealisticCarparkCatalog.sql'
 $negativeTestCount = 0
+$portabilityTestCount = 0
 
 function Assert-Condition {
     param([bool]$Condition, [string]$Message)
     if (-not $Condition) { throw $Message }
 }
 
+function Get-NormalizedRepositoryRelativePath {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$Root = $RepositoryRoot
+    )
+
+    $normalizedRoot = $Root.Replace('\', '/').TrimEnd([char[]]@('\', '/'))
+    $normalizedPath = $Path.Replace('\', '/')
+    if ($normalizedPath.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase)) { return '' }
+
+    $rootPrefix = $normalizedRoot + '/'
+    Assert-Condition ($normalizedPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) "Path is outside the repository root: $Path"
+    return $normalizedPath.Substring($rootPrefix.Length)
+}
+
+function Test-IsTestOnlyRepositoryPath {
+    param([string]$Path, [string]$Root = $RepositoryRoot)
+    $relativePath = Get-NormalizedRepositoryRelativePath -Path $Path -Root $Root
+    return $relativePath.StartsWith('objects/test/', [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Get-ApplyOrderEntries {
     param([string]$Text)
-    return @($Text -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+    return @($Text -split '\r?\n' |
+        ForEach-Object { $_.Trim().Replace('\', '/') } |
+        Where-Object { $_ -and -not $_.StartsWith('#') })
 }
 
 function Test-MntTopologyGuard {
@@ -105,31 +129,33 @@ function Test-MigrationAndSeedSource {
 
 function Test-NormalConstructionReferences {
     foreach ($applyOrder in @(Get-ChildItem $RepositoryRoot -Recurse -File -Filter '*apply-order*.txt')) {
-        if ($applyOrder.FullName -eq $testApplyPath) { continue }
+        $relativePath = Get-NormalizedRepositoryRelativePath $applyOrder.FullName
+        if ($relativePath.Equals('objects/test/synthetic-carpark-fixture-apply-order.txt', [StringComparison]::OrdinalIgnoreCase)) { continue }
         $text = [IO.File]::ReadAllText($applyOrder.FullName)
-        Assert-Condition ($text.IndexOf($fixtureLeaf, [StringComparison]::OrdinalIgnoreCase) -lt 0) "Synthetic fixture path is reachable from a non-test apply order: $($applyOrder.FullName.Substring($RepositoryRoot.Length + 1))"
+        Assert-Condition ($text.IndexOf($fixtureLeaf, [StringComparison]::OrdinalIgnoreCase) -lt 0) "Synthetic fixture path is reachable from a non-test apply order: $relativePath"
     }
 
     $candidateFiles = New-Object 'System.Collections.Generic.List[IO.FileInfo]'
-    foreach ($root in @('objects', 'scripts\build', 'scripts\uat', '.github\workflows')) {
+    foreach ($root in @('objects', 'scripts/build', 'scripts/uat', '.github/workflows')) {
         $fullRoot = Join-Path $RepositoryRoot $root
         if (-not (Test-Path -LiteralPath $fullRoot)) { continue }
         foreach ($file in @(Get-ChildItem $fullRoot -Recurse -File | Where-Object { $_.Extension -in @('.sql','.txt','.ps1','.yml','.yaml') })) {
-            if ($file.FullName -like "*\objects\test\*") { continue }
+            if (Test-IsTestOnlyRepositoryPath $file.FullName) { continue }
             $candidateFiles.Add($file)
         }
     }
     foreach ($file in $candidateFiles) {
+        $relativePath = Get-NormalizedRepositoryRelativePath $file.FullName
         $text = [IO.File]::ReadAllText($file.FullName)
-        Assert-Condition ($text.IndexOf($fixtureLeaf, [StringComparison]::OrdinalIgnoreCase) -lt 0) "Synthetic fixture path is reachable from normal construction source: $($file.FullName.Substring($RepositoryRoot.Length + 1))"
+        Assert-Condition ($text.IndexOf($fixtureLeaf, [StringComparison]::OrdinalIgnoreCase) -lt 0) "Synthetic fixture path is reachable from normal construction source: $relativePath"
     }
 }
 
 function Test-GeneratedReproducibility {
-    $temporaryOutput = 'build\generated\exitpass-full-object.boundary-validation.tmp.sql'
+    $temporaryOutput = 'build/generated/exitpass-full-object.boundary-validation.tmp.sql'
     $temporaryFullPath = Join-Path $RepositoryRoot $temporaryOutput
     try {
-        & (Join-Path $RepositoryRoot 'scripts\build\Build-ExitPassFullObjectSql.ps1') -RepoRoot $RepositoryRoot -OutputPath $temporaryOutput
+        & (Join-Path $RepositoryRoot 'scripts/build/Build-ExitPassFullObjectSql.ps1') -RepoRoot $RepositoryRoot -OutputPath $temporaryOutput
         $expectedHash = (Get-FileHash -LiteralPath $generatedPath -Algorithm SHA256).Hash
         $actualHash = (Get-FileHash -LiteralPath $temporaryFullPath -Algorithm SHA256).Hash
         Assert-Condition ($expectedHash -ceq $actualHash) "Committed generated SQL is not byte-stable with current object source. Expected $expectedHash, generated $actualHash."
@@ -215,11 +241,50 @@ function Test-ExpectedFailure {
     Write-Host "Negative boundary test passed: $Name"
 }
 
+function Test-PortabilityExpectedFailure {
+    param([string]$Name, [scriptblock]$Action)
+    $failed = $false
+    try { & $Action } catch { $failed = $true }
+    Assert-Condition $failed "Portability test did not fail: $Name"
+    $script:portabilityTestCount++
+    Write-Host "Path portability test passed: $Name"
+}
+
+function Test-RepositoryPathPortability {
+    $testCases = @(
+        @{ Name = 'forward-slash explicit test apply order'; Root = '/repo'; Path = '/repo/objects/test/synthetic-carpark-fixture-apply-order.txt' },
+        @{ Name = 'backslash explicit test apply order'; Root = 'C:\repo'; Path = 'C:\repo\objects\test\synthetic-carpark-fixture-apply-order.txt' }
+    )
+    foreach ($case in $testCases) {
+        $relativePath = Get-NormalizedRepositoryRelativePath -Path $case.Path -Root $case.Root
+        Assert-Condition ($relativePath -ceq 'objects/test/synthetic-carpark-fixture-apply-order.txt') "Repository-relative normalization failed: $($case.Name)"
+        Assert-Condition (Test-IsTestOnlyRepositoryPath -Path $case.Path -Root $case.Root) "Explicit test apply order was classified as normal source: $($case.Name)"
+        $script:portabilityTestCount++
+        Write-Host "Path portability test passed: $($case.Name)"
+    }
+
+    Test-PortabilityExpectedFailure 'forward-slash normal source fixture reachability' {
+        $path = Get-NormalizedRepositoryRelativePath -Path '/repo/objects/reference-data/normal.sql' -Root '/repo'
+        Assert-Condition (-not $path.StartsWith('objects/test/', [StringComparison]::OrdinalIgnoreCase)) 'Normal source was classified as test-only.'
+        Assert-Condition ('objects/test/sites.synthetic-metropolitan-site-groups-sites.fixture.sql'.IndexOf($fixtureLeaf, [StringComparison]::OrdinalIgnoreCase) -lt 0) "Synthetic fixture path is reachable from normal construction source: $path"
+    }
+    Test-PortabilityExpectedFailure 'backslash normal source fixture reachability' {
+        $path = Get-NormalizedRepositoryRelativePath -Path 'C:\repo\objects\reference-data\normal.sql' -Root 'C:\repo'
+        Assert-Condition (-not $path.StartsWith('objects/test/', [StringComparison]::OrdinalIgnoreCase)) 'Normal source was classified as test-only.'
+        Assert-Condition ('objects\test\sites.synthetic-metropolitan-site-groups-sites.fixture.sql'.IndexOf($fixtureLeaf, [StringComparison]::OrdinalIgnoreCase) -lt 0) "Synthetic fixture path is reachable from normal construction source: $path"
+    }
+    Test-PortabilityExpectedFailure 'normal apply order fixture reachability after separator normalization' {
+        Test-SourceBoundary ($normalApplyText + "`nobjects\test\sites.synthetic-metropolitan-site-groups-sites.fixture.sql") $testApplyText $generatedText $referenceDataText
+    }
+}
+
 $normalApplyText = [IO.File]::ReadAllText($normalApplyPath)
 $testApplyText = [IO.File]::ReadAllText($testApplyPath)
 $generatedText = [IO.File]::ReadAllText($generatedPath)
 $referenceDataText = [IO.File]::ReadAllText($referenceDataPath)
 
+Test-RepositoryPathPortability
+Assert-Condition ($portabilityTestCount -eq 5) "Expected 5 path portability tests, observed $portabilityTestCount."
 Test-SourceBoundary $normalApplyText $testApplyText $generatedText $referenceDataText
 Test-NormalConstructionReferences
 Test-MigrationAndSeedSource
@@ -227,7 +292,7 @@ Test-GeneratedReproducibility
 
 # Preserve the useful Wave 0 inventory, immutable-history, cleanup-safety, source-occurrence,
 # and PITX consistency checks. Changed-path prohibition is intentionally not passed.
-& (Join-Path $RepositoryRoot 'scripts\validation\Test-SyntheticCarparkFixtureReconciliationPlan.ps1') -RepositoryRoot $RepositoryRoot
+& (Join-Path $RepositoryRoot 'scripts/validation/Test-SyntheticCarparkFixtureReconciliationPlan.ps1') -RepositoryRoot $RepositoryRoot
 
 if ($RunNegativeTests) {
     Test-ExpectedFailure 'synthetic fixture added to normal apply order' {
@@ -276,10 +341,10 @@ try {
     Assert-Condition ($digestA -and $digestA -ceq $digestB) 'Migration output is not repeatable across equivalent database states.'
 
     foreach ($entry in @(Get-ApplyOrderEntries $testApplyText)) {
-        [void](Invoke-PsqlFile $normalDatabase (Join-Path $RepositoryRoot ($entry -replace '/', '\')) @{ EXITPASS_INCLUDE_TEST_FIXTURES = 'true' })
+        [void](Invoke-PsqlFile $normalDatabase (Join-Path $RepositoryRoot $entry) @{ EXITPASS_INCLUDE_TEST_FIXTURES = 'true' })
     }
     foreach ($entry in @(Get-ApplyOrderEntries $testApplyText)) {
-        [void](Invoke-PsqlFile $normalDatabase (Join-Path $RepositoryRoot ($entry -replace '/', '\')) @{ EXITPASS_INCLUDE_TEST_FIXTURES = 'true' })
+        [void](Invoke-PsqlFile $normalDatabase (Join-Path $RepositoryRoot $entry) @{ EXITPASS_INCLUDE_TEST_FIXTURES = 'true' })
     }
     Test-BoundaryState $normalDatabase 43 138 $true
 
@@ -315,6 +380,7 @@ try {
     Write-Output 'CANONICAL_MEMBERSHIP_WITH_FIXTURE=39_SITE_GROUPS/46_SITES'
     Write-Output "CATALOG_CODE=$catalogCode"
     Write-Output "NEGATIVE_TESTS=$negativeTestCount"
+    Write-Output "PATH_PORTABILITY_TESTS=$portabilityTestCount"
     Write-Output "MIGRATION_REPEATABILITY_SHA256=$digestA"
 }
 finally {
