@@ -20276,343 +20276,343 @@ ON CONFLICT ON CONSTRAINT uq_permissions__permission_code DO UPDATE SET
   permission_status = EXCLUDED.permission_status, is_sensitive = EXCLUDED.is_sensitive,
   requires_audit = EXCLUDED.requires_audit, updated_at = now(), updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
 
--- Role-permission bindings. Uses NOT EXISTS because active binding uniqueness is enforced by a partial unique index.
+-- Role-permission bindings. Any existing role + permission lifecycle row suppresses legacy reinsertion.
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '84260e8e-0892-571e-92fd-9d46935f7f37', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '8e8c119d-402e-50ec-9b07-4010afd06ee4', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'f2cf31c9-7b1e-54b8-92ec-9feffb302fe1', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.create_attempt'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '35f971f5-459c-5fd1-8f43-1ffe2b222748', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.finalize'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '0fed1ff0-fd69-5c00-99c4-d397697f5ead', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.provider_callback'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '081126e5-225d-5dfb-9a6e-cf7bc92fd63f', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'exit_authorizations.issue'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd8912736-a85f-5d9c-93b3-deb5738d6c92', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '200ec6f2-150c-5a9b-80e7-d0aa3fb2009a', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'a4652c4e-3251-5334-b2de-5668180cfc21', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '32e427b4-355e-5d8e-b811-a046d91e7c9e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '04bb5196-09da-5126-a200-4f91de5603f0', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '20389737-cb1e-58c1-a0e4-8f4312b2d744', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'operations.manual_gate'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd2545ef1-d42a-5129-a202-9a483dbf59a9', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'reconciliation.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'bb0e7337-5125-527f-bbb9-f2cde9d39b12', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'f12882f0-c3fc-5f81-acbb-848c2146285b', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'evidence.read_restricted'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '79109408-9f22-5e05-b1bb-e673816de2b6', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'config.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd3ee60bb-7060-54b1-95c7-2615d1e30c04', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'identity.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4e6fbe9b-187b-59b7-8819-80d9d347700e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '5f5105bc-61d9-5d63-a8fd-372566a5e08f', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '30f3c0b3-2d8b-511b-b5f9-6fbb229c1158', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'e14a50e9-8c3f-54d9-8738-f2ad64c9c49e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '6b809cd4-6ad2-5f97-abff-63a187e7a484', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'operations.manual_gate'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'aa66c4f7-7bbd-5798-b8ef-ea47aac16720', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'reconciliation.manage'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '93522106-b984-5a8a-a235-9c06ed36dded', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4eef04bb-e4b2-5b3e-9066-f6e12f021482', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd98981d7-a4ba-5ff4-8dd1-97c693386dc8', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'e78d7cf4-a760-574c-a97e-9beba03c498e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '241d2ed5-65e2-52e0-a407-80af019b292d', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'operations.manual_gate'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'eba5bb29-91d0-54c5-85fc-2120ed77b465', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '685fa54f-edd2-5047-9538-fba2d58ce269', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'b3ef46a4-f4e3-59d5-ae46-82172bf5a1ff', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.create_attempt'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '5ce9bcd7-7e80-536d-b06c-de4b73c21989', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'bde479ab-82ce-5140-bdfb-ad40092c4dbc', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'c534e194-a8ab-527c-979a-b33df52c85bb', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '53c5e093-11ff-56ea-a038-6b0e5757a7c4', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.finalize'
 WHERE r.role_code = 'FINANCE_RECONCILIATION'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '08c6a4fd-cb07-5cd5-a190-2e3b3b53a4ac', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'reconciliation.manage'
 WHERE r.role_code = 'FINANCE_RECONCILIATION'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '50c81c45-9de8-5e02-82f8-1de6fbb462c9', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'FINANCE_RECONCILIATION'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'a6c6b5b4-a951-5cff-b7d8-dc5e2944c5e9', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'COMPLIANCE_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'cf2039f8-02df-5fd7-912d-fee19ce95df6', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'COMPLIANCE_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd2739842-8a59-5e6d-8412-9ef15b566152', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'evidence.read_restricted'
 WHERE r.role_code = 'COMPLIANCE_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'dc2b99b8-3a61-5d63-9deb-acfc8a4bbc97', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.manage'
 WHERE r.role_code = 'MERCHANT_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '255adaf5-154f-50f0-be29-b59d43d1adbd', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'MERCHANT_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'b209511d-7f45-555e-8b49-4fa67814731e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'MERCHANT_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '57bcc55a-9629-512d-bd64-3c1090a32e9e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'SECURITY_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '039c9120-ac17-522b-99ff-31483d3bc0df', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'evidence.read_restricted'
 WHERE r.role_code = 'SECURITY_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '85c72154-ddba-5dc5-ba03-07b7b1abab2a', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'identity.manage'
 WHERE r.role_code = 'SECURITY_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4f243c9c-6359-57bb-8f24-5e6ec1d62c91', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4d7265e5-8dab-5ecf-813b-b6703da75f81', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '23ee4fa2-8efb-5aa4-bb91-622537fe5474', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.create_attempt'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '7ea0bec6-a1b0-571a-bb56-cf02d6468863', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.finalize'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '7b9544e9-8d60-5ae1-aeb1-7795fbfa3e5b', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.provider_callback'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd588ac83-928b-5cfc-8066-8d63f1fc9e3c', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'exit_authorizations.issue'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '2b8125fd-f646-557c-bc9f-544fe38e8223', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '0cf510dd-48d6-5fbc-8174-8c07c16cde64', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '2141de8e-8265-5e9b-b160-3c1bd9b4de76', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'b147c7b2-1de6-5761-8c6f-76535bc38fa7', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 
 -- 3. Controlled code sets
 INSERT INTO config.controlled_code_sets (controlled_code_set_id, code_set_name, code_value, code_label, code_description, code_domain, code_status, sort_order, requires_comment, requires_approval, is_sensitive, effective_from, created_by_service_identity_id, updated_by_service_identity_id) VALUES('8c7ea04a-8425-530c-baee-edf6f2fbecf6','OVERRIDE_REASON','MANUAL_GATE_DEVICE_FAILURE','Manual gate device failure','Baseline controlled code for OVERRIDE_REASON.','operations','ACTIVE',1,true,true,false,now(),'1f2ffdfb-c4a9-5a00-a656-9f3a132b1978','1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'),
