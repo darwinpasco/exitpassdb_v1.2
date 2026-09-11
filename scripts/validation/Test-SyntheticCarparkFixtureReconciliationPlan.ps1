@@ -1,4 +1,8 @@
 [CmdletBinding()]
+# HISTORICAL WAVE 0 PLAN HARNESS.
+# Test-Wave0ChangedPaths documents the original documentation-only freeze and is not called
+# with current PR paths by active CI. Post-Wave-1/2 CI enforces resulting catalog content and
+# database state through Invoke-RealCarparkCatalogBoundaryValidation.ps1.
 param(
     [string]$RepositoryRoot,
     [switch]$RunNegativeTests,

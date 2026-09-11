@@ -1,4 +1,4 @@
--- I-006 disabled synthetic metropolitan sample Site Groups and Sites.
+-- TEST-ONLY: I-006 disabled synthetic metropolitan sample Site Groups and Sites.
 WITH seed(seed_key, site_group_code, site_group_name, description) AS (
   VALUES
   ('METRO_MANILA','SAMPLE-METRO-MANILA','Synthetic Sample Metro Manila Site Group','Disabled synthetic Site Group spanning Metro Manila LGUs for jurisdiction coverage proof only.'),

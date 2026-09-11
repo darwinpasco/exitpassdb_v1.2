@@ -338,10 +338,30 @@ WHERE NOT EXISTS (
   SELECT 1 FROM sites.site_jurisdiction_assignments a
   WHERE a.site_jurisdiction_assignment_id = e.assignment_id OR a.site_id = e.site_id
 );
+
+INSERT INTO sites.real_carpark_catalog_site_groups (
+  site_group_id, catalog_code, source_reference, source_sha256
+)
+SELECT e.site_group_id, 'PROFESSIONAL_PARKING_REAL_CARPARK_V1',
+       'D:\Docs\Carparks.xlsx',
+       '63C20CD3ABA3E13D6F9FC022083507C0BC43A2AB9C751E9084DD19C59969359A'
+FROM ep_realistic_catalog_groups e
+ON CONFLICT (site_group_id) DO NOTHING;
+
+INSERT INTO sites.real_carpark_catalog_sites (
+  site_id, site_group_id, catalog_code, source_reference, source_sha256
+)
+SELECT e.site_id, e.site_group_id, 'PROFESSIONAL_PARKING_REAL_CARPARK_V1',
+       'D:\Docs\Carparks.xlsx',
+       '63C20CD3ABA3E13D6F9FC022083507C0BC43A2AB9C751E9084DD19C59969359A'
+FROM ep_realistic_catalog_sites e
+ON CONFLICT (site_id) DO NOTHING;
 DO $$
 BEGIN
   IF (SELECT count(*) FROM sites.site_groups g JOIN ep_realistic_catalog_groups e ON e.site_group_id = g.site_group_id) <> 39
      OR (SELECT count(*) FROM sites.sites s JOIN ep_realistic_catalog_sites e ON e.site_id = s.site_id) <> 46
+     OR (SELECT count(*) FROM sites.real_carpark_catalog_site_groups c JOIN ep_realistic_catalog_groups e ON e.site_group_id = c.site_group_id WHERE c.catalog_code = 'PROFESSIONAL_PARKING_REAL_CARPARK_V1') <> 39
+     OR (SELECT count(*) FROM sites.real_carpark_catalog_sites c JOIN ep_realistic_catalog_sites e ON e.site_id = c.site_id AND e.site_group_id = c.site_group_id WHERE c.catalog_code = 'PROFESSIONAL_PARKING_REAL_CARPARK_V1') <> 46
      OR (SELECT count(*) FROM sites.site_jurisdiction_assignments a JOIN ep_realistic_catalog_assignments e ON e.assignment_id = a.site_jurisdiction_assignment_id) <> 46 THEN
     RAISE EXCEPTION 'Realistic carpark catalog seed failed post-insert cardinality validation.';
   END IF;
@@ -363,6 +383,17 @@ BEGIN
     WHERE a.site_id <> e.site_id OR a.jurisdiction_id <> e.jurisdiction_id
        OR a.assignment_status <> 'PENDING_APPROVAL' OR a.effective_from <> e.effective_from
        OR a.effective_to IS NOT NULL OR a.approval_reference IS NOT NULL
+  ) OR EXISTS (
+    SELECT 1 FROM sites.real_carpark_catalog_site_groups c
+    JOIN ep_realistic_catalog_groups e ON e.site_group_id = c.site_group_id
+    WHERE c.catalog_code <> 'PROFESSIONAL_PARKING_REAL_CARPARK_V1'
+       OR c.source_sha256 <> '63C20CD3ABA3E13D6F9FC022083507C0BC43A2AB9C751E9084DD19C59969359A'
+  ) OR EXISTS (
+    SELECT 1 FROM sites.real_carpark_catalog_sites c
+    JOIN ep_realistic_catalog_sites e ON e.site_id = c.site_id
+    WHERE c.site_group_id <> e.site_group_id
+       OR c.catalog_code <> 'PROFESSIONAL_PARKING_REAL_CARPARK_V1'
+       OR c.source_sha256 <> '63C20CD3ABA3E13D6F9FC022083507C0BC43A2AB9C751E9084DD19C59969359A'
   ) THEN
     RAISE EXCEPTION 'Realistic carpark catalog seed failed post-insert semantic validation.';
   END IF;

@@ -2374,6 +2374,8 @@ objects/schemas/sites/indexes/sites.ix_jurisdictions__status.sql
 objects/schemas/sites/comments/sites.jurisdictions.comments.sql
 objects/schemas/sites/comments/sites.jurisdictions.column-comments.sql
 objects/schemas/sites/tables/sites.sites.sql
+objects/schemas/sites/tables/sites.real_carpark_catalog_site_groups.sql
+objects/schemas/sites/tables/sites.real_carpark_catalog_sites.sql
 objects/schemas/sites/indexes/sites.ix_sites__site_group_id.sql
 objects/schemas/sites/indexes/sites.ix_sites__site_status.sql
 objects/schemas/sites/indexes/sites.ix_sites__local_government_unit_id.sql
@@ -2449,7 +2451,6 @@ objects/reference-data/sites.philippine-regions-provinces.seed.sql
 objects/reference-data/sites.philippine-lgus.seed.sql
 objects/reference-data/sites.metropolitan-areas-membership.seed.sql
 objects/reference-data/discounts.statutory-parking-policy-research-mappings.seed.sql
-objects/reference-data/sites.synthetic-metropolitan-site-groups-sites.seed.sql
 objects/reference-data/sites.realistic-carpark-catalog.seed.sql
 objects/schemas/core/tables/core.fiscal_issuance_references.sql
 objects/schemas/core/constraints/core.fiscal_issuance_references.semantic_request_hash_status.sql

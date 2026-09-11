@@ -1,5 +1,5 @@
 ﻿-- ExitPass Reference Data v1.2
--- Purpose: controlled baseline data for local development and integration testing.
+-- Purpose: baseline reference data plus an explicitly gated TEST-ONLY local business fixture section.
 -- This script must be executed only after ExitPass_Full_Database_Creation_DDL_v1.2.sql.
 -- This script is idempotent for the declared natural keys.
 -- Do not store production secrets, private keys, webhook secrets, or legal production policy data here.
@@ -600,6 +600,10 @@ ON CONFLICT ON CONSTRAINT uq_payment_rails__rail_code DO UPDATE SET
   configuration_ref = EXCLUDED.configuration_ref, updated_at = now(), updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
 
 -- 9. Local-development site topology
+-- psql callers must deliberately set EXITPASS_INCLUDE_TEST_FIXTURES=true to apply
+-- this section. Normal local/UAT/IST full-object builds leave it undefined.
+\if :{?EXITPASS_INCLUDE_TEST_FIXTURES}
+\if :EXITPASS_INCLUDE_TEST_FIXTURES
 INSERT INTO sites.site_groups (site_group_id, site_group_code, site_group_name, business_label, description, operator_entity_name, timezone_name, default_currency_code, site_group_status, public_lookup_enabled, default_payment_enabled, effective_from, created_by_service_identity_id, updated_by_service_identity_id) VALUES
 ('594afaf3-6f55-54be-933d-c6572f4e02ec','MNT','Mactan Newtown','Property','Local development site group for ExitPass v1.2','Pro Parking Group','Asia/Manila','PHP','ACTIVE',true,true,now(),'1f2ffdfb-c4a9-5a00-a656-9f3a132b1978','1f2ffdfb-c4a9-5a00-a656-9f3a132b1978')
 ON CONFLICT ON CONSTRAINT uq_site_groups__site_group_code DO UPDATE SET
@@ -870,6 +874,9 @@ BEGIN
         RAISE EXCEPTION 'ExitPass v1.2 reference-data verification failed. Missing required seeded records: %', missing_count;
     END IF;
 END $$;
+
+\endif
+\endif
 
 COMMIT;
 
