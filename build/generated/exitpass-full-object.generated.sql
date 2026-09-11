@@ -9715,6 +9715,18 @@ CREATE TYPE "identity"."role_type_enum" AS ENUM ('SYSTEM', 'OPERATIONS', 'MERCHA
 
 
 -- ============================================================================
+-- Source object: objects/schemas/identity/types/identity.role_provenance_enum.sql
+-- ============================================================================
+-- Create enum type "role_provenance_enum"
+CREATE TYPE "identity"."role_provenance_enum" AS ENUM (
+  'CANONICAL_ROLE',
+  'HISTORICAL_LEGACY_ROLE',
+  'UAT_TEST_ROLE',
+  'SERVICE_ROLE'
+);;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/identity/types/identity.service_credential_type_enum.sql
 -- ============================================================================
 -- Create enum type "service_credential_type_enum"
@@ -10130,9 +10142,12 @@ CREATE TABLE "identity"."roles" (
   "role_name" character varying(128) NOT NULL,
   "role_description" text NULL,
   "role_type" "identity"."role_type_enum" NOT NULL,
+  "role_provenance" "identity"."role_provenance_enum" NOT NULL DEFAULT 'HISTORICAL_LEGACY_ROLE',
   "role_status" "identity"."role_status_enum" NOT NULL,
   "is_privileged" boolean NOT NULL DEFAULT false,
   "requires_elevated_approval" boolean NOT NULL DEFAULT false,
+  "direct_add_user_eligible" boolean NOT NULL DEFAULT false,
+  "human_assignable" boolean NOT NULL DEFAULT true,
   "effective_from" timestamptz NOT NULL,
   "effective_to" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
@@ -10145,6 +10160,29 @@ CREATE TABLE "identity"."roles" (
   CONSTRAINT "pk_roles" PRIMARY KEY ("role_id"),
   CONSTRAINT "uq_roles__role_code" UNIQUE ("role_code")
 );;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/tables/identity.role_user_type_compatibility.sql
+-- ============================================================================
+-- Authoritative compatibility between human user types and canonical roles.
+CREATE TABLE "identity"."role_user_type_compatibility" (
+  "role_id" uuid NOT NULL,
+  "user_type" "identity"."user_type_enum" NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "created_by_service_identity_id" uuid NULL,
+  CONSTRAINT "pk_role_user_type_compatibility" PRIMARY KEY ("role_id", "user_type"),
+  CONSTRAINT "fk_role_user_type_compatibility__role_id" FOREIGN KEY ("role_id")
+    REFERENCES "identity"."roles" ("role_id") ON UPDATE NO ACTION ON DELETE RESTRICT,
+  CONSTRAINT "ck_role_user_type_compatibility__human_role" CHECK ("user_type" IS NOT NULL)
+);;
+
+COMMENT ON TABLE "identity"."role_user_type_compatibility" IS
+  'Database-owned allow-list used by Central PMS for initial and later human role assignments.';;
+COMMENT ON COLUMN "identity"."role_user_type_compatibility"."role_id" IS
+  'Canonical human role allowed for the user type.';;
+COMMENT ON COLUMN "identity"."role_user_type_compatibility"."user_type" IS
+  'Authoritative identity.user_type_enum value compatible with the role.';;
 
 
 -- ============================================================================
@@ -10278,6 +10316,17 @@ COMMENT ON COLUMN "identity"."roles"."updated_by_service_identity_id" IS 'Servic
 -- ============================================================================
 -- Set comment to column: "row_version" on table: "roles"
 COMMENT ON COLUMN "identity"."roles"."row_version" IS 'Optimistic concurrency version.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/identity/comments/identity.roles.wave3-column-comments.sql
+-- ============================================================================
+COMMENT ON COLUMN "identity"."roles"."role_provenance" IS
+  'Authoritative classification: canonical, historical legacy, isolated UAT test, or service-only.';;
+COMMENT ON COLUMN "identity"."roles"."direct_add_user_eligible" IS
+  'True only when Central PMS may offer the role for atomic direct Add User assignment.';;
+COMMENT ON COLUMN "identity"."roles"."human_assignable" IS
+  'False for service roles, isolated test roles, and retired historical roles.';;
 
 
 -- ============================================================================
@@ -20227,343 +20276,343 @@ ON CONFLICT ON CONSTRAINT uq_permissions__permission_code DO UPDATE SET
   permission_status = EXCLUDED.permission_status, is_sensitive = EXCLUDED.is_sensitive,
   requires_audit = EXCLUDED.requires_audit, updated_at = now(), updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
 
--- Role-permission bindings. Uses NOT EXISTS because active binding uniqueness is enforced by a partial unique index.
+-- Role-permission bindings. Any existing role + permission lifecycle row suppresses legacy reinsertion.
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '84260e8e-0892-571e-92fd-9d46935f7f37', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '8e8c119d-402e-50ec-9b07-4010afd06ee4', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'f2cf31c9-7b1e-54b8-92ec-9feffb302fe1', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.create_attempt'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '35f971f5-459c-5fd1-8f43-1ffe2b222748', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.finalize'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '0fed1ff0-fd69-5c00-99c4-d397697f5ead', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.provider_callback'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '081126e5-225d-5dfb-9a6e-cf7bc92fd63f', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'exit_authorizations.issue'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd8912736-a85f-5d9c-93b3-deb5738d6c92', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '200ec6f2-150c-5a9b-80e7-d0aa3fb2009a', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'a4652c4e-3251-5334-b2de-5668180cfc21', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '32e427b4-355e-5d8e-b811-a046d91e7c9e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '04bb5196-09da-5126-a200-4f91de5603f0', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '20389737-cb1e-58c1-a0e4-8f4312b2d744', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'operations.manual_gate'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd2545ef1-d42a-5129-a202-9a483dbf59a9', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'reconciliation.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'bb0e7337-5125-527f-bbb9-f2cde9d39b12', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'f12882f0-c3fc-5f81-acbb-848c2146285b', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'evidence.read_restricted'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '79109408-9f22-5e05-b1bb-e673816de2b6', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'config.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd3ee60bb-7060-54b1-95c7-2615d1e30c04', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'identity.manage'
 WHERE r.role_code = 'SYSTEM_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4e6fbe9b-187b-59b7-8819-80d9d347700e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '5f5105bc-61d9-5d63-a8fd-372566a5e08f', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '30f3c0b3-2d8b-511b-b5f9-6fbb229c1158', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'e14a50e9-8c3f-54d9-8738-f2ad64c9c49e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '6b809cd4-6ad2-5f97-abff-63a187e7a484', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'operations.manual_gate'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'aa66c4f7-7bbd-5798-b8ef-ea47aac16720', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'reconciliation.manage'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '93522106-b984-5a8a-a235-9c06ed36dded', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'OPERATIONS_MANAGER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4eef04bb-e4b2-5b3e-9066-f6e12f021482', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd98981d7-a4ba-5ff4-8dd1-97c693386dc8', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'e78d7cf4-a760-574c-a97e-9beba03c498e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '241d2ed5-65e2-52e0-a407-80af019b292d', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'operations.manual_gate'
 WHERE r.role_code = 'SITE_OPERATOR'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'eba5bb29-91d0-54c5-85fc-2120ed77b465', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '685fa54f-edd2-5047-9538-fba2d58ce269', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'b3ef46a4-f4e3-59d5-ae46-82172bf5a1ff', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.create_attempt'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '5ce9bcd7-7e80-536d-b06c-de4b73c21989', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'bde479ab-82ce-5140-bdfb-ad40092c4dbc', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'c534e194-a8ab-527c-979a-b33df52c85bb', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'SUPPORT_AGENT'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '53c5e093-11ff-56ea-a038-6b0e5757a7c4', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.finalize'
 WHERE r.role_code = 'FINANCE_RECONCILIATION'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '08c6a4fd-cb07-5cd5-a190-2e3b3b53a4ac', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'reconciliation.manage'
 WHERE r.role_code = 'FINANCE_RECONCILIATION'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '50c81c45-9de8-5e02-82f8-1de6fbb462c9', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'FINANCE_RECONCILIATION'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'a6c6b5b4-a951-5cff-b7d8-dc5e2944c5e9', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'COMPLIANCE_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'cf2039f8-02df-5fd7-912d-fee19ce95df6', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'COMPLIANCE_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd2739842-8a59-5e6d-8412-9ef15b566152', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'evidence.read_restricted'
 WHERE r.role_code = 'COMPLIANCE_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'dc2b99b8-3a61-5d63-9deb-acfc8a4bbc97', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.manage'
 WHERE r.role_code = 'MERCHANT_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '255adaf5-154f-50f0-be29-b59d43d1adbd', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'MERCHANT_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'b209511d-7f45-555e-8b49-4fa67814731e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'MERCHANT_ADMIN'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '57bcc55a-9629-512d-bd64-3c1090a32e9e', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'audit.read'
 WHERE r.role_code = 'SECURITY_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '039c9120-ac17-522b-99ff-31483d3bc0df', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'evidence.read_restricted'
 WHERE r.role_code = 'SECURITY_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '85c72154-ddba-5dc5-ba03-07b7b1abab2a', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'identity.manage'
 WHERE r.role_code = 'SECURITY_REVIEWER'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4f243c9c-6359-57bb-8f24-5e6ec1d62c91', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'sessions.resolve'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '4d7265e5-8dab-5ecf-813b-b6703da75f81', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'tariffs.quote'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '23ee4fa2-8efb-5aa4-bb91-622537fe5474', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.create_attempt'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '7ea0bec6-a1b0-571a-bb56-cf02d6468863', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.finalize'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '7b9544e9-8d60-5ae1-aeb1-7795fbfa3e5b', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'payments.provider_callback'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'd588ac83-928b-5cfc-8066-8d63f1fc9e3c', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'exit_authorizations.issue'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '2b8125fd-f646-557c-bc9f-544fe38e8223', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.consume_authorization'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '0cf510dd-48d6-5fbc-8174-8c07c16cde64', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'gate.record_event'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT '2141de8e-8265-5e9b-b160-3c1bd9b4de76', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'coupons.apply'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 INSERT INTO identity.role_permissions (role_permission_id, role_id, permission_id, binding_status, binding_reason_code, assigned_by_service_identity_id, effective_from, created_by_service_identity_id, updated_by_service_identity_id)
 SELECT 'b147c7b2-1de6-5761-8c6f-76535bc38fa7', r.role_id, p.permission_id, 'ACTIVE', 'BASELINE_REFERENCE_DATA', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', now(), '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
 FROM identity.roles r
 JOIN identity.permissions p ON p.permission_code = 'discounts.validate_statutory'
 WHERE r.role_code = 'SERVICE_PRINCIPAL'
-  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id AND rp.binding_status = 'ACTIVE');
+  AND NOT EXISTS (SELECT 1 FROM identity.role_permissions rp WHERE rp.role_id = r.role_id AND rp.permission_id = p.permission_id);
 
 -- 3. Controlled code sets
 INSERT INTO config.controlled_code_sets (controlled_code_set_id, code_set_name, code_value, code_label, code_description, code_domain, code_status, sort_order, requires_comment, requires_approval, is_sensitive, effective_from, created_by_service_identity_id, updated_by_service_identity_id) VALUES('8c7ea04a-8425-530c-baee-edf6f2fbecf6','OVERRIDE_REASON','MANUAL_GATE_DEVICE_FAILURE','Manual gate device failure','Baseline controlled code for OVERRIDE_REASON.','operations','ACTIVE',1,true,true,false,now(),'1f2ffdfb-c4a9-5a00-a656-9f3a132b1978','1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'),
@@ -27226,439 +27275,6 @@ COMMENT ON COLUMN "operator_console"."statutory_discount_service_channel_reviews
 
 
 -- ============================================================================
--- Source object: objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
--- ============================================================================
--- ExitPass v1.3 Central PMS Management Platform role and permission reference data.
--- This is role/permission catalog reference data only. It intentionally excludes
--- local/UAT users and user-role assignments, which remain in scripts/uat and objects/uat.
-
-BEGIN;
-SET CONSTRAINTS ALL DEFERRED;
-
-DO $$
-BEGIN
-    IF to_regclass('identity.service_identities') IS NULL
-       OR to_regclass('identity.roles') IS NULL
-       OR to_regclass('identity.permissions') IS NULL
-       OR to_regclass('identity.role_permissions') IS NULL THEN
-        RAISE EXCEPTION 'Required identity/RBAC tables are not present.';
-    END IF;
-END $$;
-
-CREATE OR REPLACE FUNCTION pg_temp.exitpass_uat_uuid(input text)
-RETURNS uuid
-LANGUAGE sql
-IMMUTABLE
-AS $$
-    SELECT (
-        substr(md5(input), 1, 8) || '-' ||
-        substr(md5(input), 9, 4) || '-' ||
-        substr(md5(input), 13, 4) || '-' ||
-        substr(md5(input), 17, 4) || '-' ||
-        substr(md5(input), 21, 12)
-    )::uuid
-$$;
-
-
-CREATE TEMP TABLE management_platform_uat_roles (
-    role_code varchar(64) PRIMARY KEY,
-    role_name varchar(128) NOT NULL,
-    role_description text NOT NULL,
-    role_type identity.role_type_enum NOT NULL,
-    is_privileged boolean NOT NULL,
-    requires_elevated_approval boolean NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO management_platform_uat_roles (role_code, role_name, role_description, role_type, is_privileged, requires_elevated_approval) VALUES
-('SYSTEM_RBAC_ADMINISTRATOR', 'System / RBAC Administrator', 'UAT role bundle for identity, RBAC, role, permission, assignment, and access audit inventory/admin posture. Business workflow authority must be separately granted.', 'SYSTEM', true, true),
-('PLATFORM_ADMINISTRATOR', 'Platform Administrator', 'UAT role bundle for site, site group, device, shift, POS Server/fiscal configuration, connector, platform configuration, and operational readiness administration.', 'OPERATIONS', true, true),
-('OPERATIONS_SUPERVISOR', 'Operations Supervisor', 'UAT role bundle for higher-trust operational review, statutory discount approval/apply, controlled Sales Invoice void authority, and operational audit visibility.', 'OPERATIONS', true, true),
-('OPERATOR_SUPPORT_STAFF', 'Operator / Support Staff', 'UAT role bundle for site-scoped operational lookup, statutory discount draft initiation, metadata-only evidence capture, and status viewing.', 'SUPPORT', false, false),
-('FINANCE_RECONCILIATION_ANALYST', 'Finance / Reconciliation Analyst', 'UAT role bundle for financial, payment, fiscal, discount, revenue, variance, and reconciliation reporting.', 'FINANCE', false, false),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'Compliance / Policy Administrator', 'UAT role bundle for compliance audit review, statutory discount policy governance, evidence rules, policy import review, and compliance reporting.', 'COMPLIANCE', true, true),
-('EXECUTIVE_MANAGEMENT', 'Executive / Management', 'UAT role bundle for read-only executive dashboard, management reporting, KPI, performance, fiscal summary, statutory discount summary, and exception trend visibility.', 'OTHER', false, false);
-
-
-CREATE TEMP TABLE management_platform_uat_permissions (
-    permission_code varchar(96) PRIMARY KEY,
-    permission_name varchar(128) NOT NULL,
-    permission_description text NOT NULL,
-    permission_domain varchar(64) NOT NULL,
-    permission_action varchar(64) NOT NULL,
-    is_sensitive boolean NOT NULL,
-    requires_audit boolean NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO management_platform_uat_permissions (permission_code, permission_name, permission_description, permission_domain, permission_action, is_sensitive, requires_audit) VALUES
-('management-platform.identity-rbac.inventory.read', 'Identity/RBAC inventory read', 'Read safe identity and RBAC inventory for the Management Platform.', 'management-platform', 'read', true, true),
-('user.view', 'View users', 'Read safe user inventory.', 'administration', 'view', true, true),
-('user.manage', 'Manage users', 'Target permission for future user administration.', 'administration', 'manage', true, true),
-('rbac.view', 'View RBAC', 'Read RBAC configuration and assignment inventory.', 'administration', 'view', true, true),
-('rbac.manage', 'Manage RBAC', 'Target permission for future RBAC administration.', 'administration', 'manage', true, true),
-('role.view', 'View roles', 'Read role inventory.', 'administration', 'view', true, true),
-('role.manage', 'Manage roles', 'Target permission for future role administration.', 'administration', 'manage', true, true),
-('permission.view', 'View permissions', 'Read permission inventory.', 'administration', 'view', true, true),
-('permission.manage', 'Manage permissions', 'Target permission for future permission administration.', 'administration', 'manage', true, true),
-('assignment.view', 'View assignments', 'Read user, role, site, device, and shift assignments.', 'administration', 'view', true, true),
-('assignment.manage', 'Manage assignments', 'Target permission for future assignment administration.', 'administration', 'manage', true, true),
-('access-audit.view', 'View access audit', 'Read access and RBAC audit visibility.', 'administration', 'view', true, true),
-('site.view', 'View sites', 'Read site inventory.', 'platform-config', 'view', false, true),
-('site.manage', 'Manage sites', 'Target permission for future site administration.', 'platform-config', 'manage', true, true),
-('site-group.view', 'View site groups', 'Read site group inventory.', 'platform-config', 'view', false, true),
-('site-group.manage', 'Manage site groups', 'Target permission for future site group administration.', 'platform-config', 'manage', true, true),
-('device.view', 'View devices', 'Read device inventory.', 'platform-config', 'view', false, true),
-('device.manage', 'Manage devices', 'Target permission for future device administration.', 'platform-config', 'manage', true, true),
-('device-binding.view', 'View device bindings', 'Read operator device binding inventory.', 'platform-config', 'view', true, true),
-('device-binding.manage', 'Manage device bindings', 'Target permission for future device binding administration.', 'platform-config', 'manage', true, true),
-('shift.view', 'View shifts', 'Read operator shift inventory.', 'platform-config', 'view', true, true),
-('shift.manage', 'Manage shifts', 'Target permission for future shift administration.', 'platform-config', 'manage', true, true),
-('pos-server-config.view', 'View POS Server configuration', 'Read POS Server/fiscal configuration inventory.', 'platform-config', 'view', true, true),
-('pos-server-config.manage', 'Manage POS Server configuration', 'Target permission for future POS Server/fiscal configuration administration.', 'platform-config', 'manage', true, true),
-('connector-config.view', 'View connector configuration', 'Read connector configuration inventory.', 'platform-config', 'view', true, true),
-('connector-config.manage', 'Manage connector configuration', 'Target permission for future connector configuration administration.', 'platform-config', 'manage', true, true),
-('platform-config.view', 'View platform configuration', 'Read platform configuration inventory.', 'platform-config', 'view', true, true),
-('platform-config.manage', 'Manage platform configuration', 'Target permission for future platform configuration administration.', 'platform-config', 'manage', true, true),
-('environment-config.view', 'View environment configuration', 'Read safe local/UAT environment configuration inventory.', 'platform-config', 'view', true, true),
-('uat-fixture.manage', 'Manage UAT fixtures', 'Local/UAT-only permission for deterministic fixture preparation.', 'platform-config', 'manage', true, true),
-('operational-monitoring.view', 'View operational monitoring', 'Read operational monitoring surfaces.', 'monitoring', 'view', false, true),
-('statutory-discounts.session.lookup', 'Lookup statutory discount session', 'Lookup session context for statutory discount workflow.', 'statutory-discounts', 'lookup', false, true),
-('statutory-discounts.draft.view', 'View statutory discount draft', 'View statutory discount draft/detail records.', 'statutory-discounts', 'view', false, true),
-('statutory-discounts.draft.create', 'Create statutory discount draft', 'Create statutory discount review draft.', 'statutory-discounts', 'create', true, true),
-('statutory-discounts.evidence.view', 'View statutory discount evidence', 'View metadata-only statutory discount evidence references.', 'statutory-discounts', 'view', true, true),
-('statutory-discounts.evidence.capture', 'Capture statutory discount evidence', 'Capture metadata-only statutory discount evidence references.', 'statutory-discounts', 'capture', true, true),
-('statutory-discounts.decision.review', 'Review statutory discount decision', 'Review statutory discount decision context.', 'statutory-discounts', 'review', true, true),
-('statutory-discounts.decision.approve', 'Approve statutory discount', 'Approve statutory discount validation when prerequisites and segregation controls are satisfied.', 'statutory-discounts', 'approve', true, true),
-('statutory-discounts.decision.reject', 'Reject statutory discount', 'Reject statutory discount validation when authorized.', 'statutory-discounts', 'reject', true, true),
-('statutory-discounts.payable-basis.apply', 'Apply statutory discount payable basis', 'Apply approved statutory discount to payable basis.', 'statutory-discounts', 'apply', true, true),
-('statutory-discounts.policy.resolve', 'Resolve statutory discount policy', 'Read statutory discount policy resolution context.', 'statutory-discounts', 'resolve', true, true),
-('statutory-discounts.audit.read', 'Read statutory discount audit', 'Read statutory discount audit/reporting surfaces.', 'statutory-discounts', 'read', true, true),
-('fiscal-issuance.status.read', 'Read Sales Invoice status', 'Read Sales Invoice/fiscal issuance status.', 'fiscal', 'read', false, true),
-('fiscal-issuance.void.command', 'Command Sales Invoice void', 'Execute controlled Sales Invoice void command where allowed.', 'fiscal', 'command', true, true),
-('fiscal-issuance.void.audit.read', 'Read Sales Invoice void audit', 'Read Sales Invoice void audit report.', 'fiscal', 'read', true, true),
-('fiscal-view-audit.read', 'Read Sales Invoice view audit', 'Read Sales Invoice status view audit report.', 'fiscal', 'read', true, true),
-('sales-invoice-report.view', 'View Sales Invoice report', 'Read Sales Invoice reporting surfaces.', 'reporting', 'view', false, true),
-('fiscal-report.view', 'View fiscal report', 'Read fiscal reporting surfaces.', 'reporting', 'view', false, true),
-('ticket.lookup', 'Lookup ticket', 'Lookup operator ticket/session context.', 'operator-console', 'lookup', false, true),
-('projection-health.view', 'View projection health', 'Read projection health surfaces.', 'operator-console', 'view', false, true),
-('ops.vendor-session-projection-health.view', 'View vendor session projection health', 'Read vendor session projection health.', 'operator-console', 'view', false, true),
-('operator-console.vendor-projection-health.view', 'View Operator Console vendor projection health', 'Read Operator Console vendor projection health.', 'operator-console', 'view', false, true),
-('vendor-acknowledgments.view', 'View vendor acknowledgments', 'Read vendor acknowledgment surfaces.', 'operator-console', 'view', false, true),
-('operator-workflow-audit.view', 'View operator workflow audit', 'Read operator workflow audit surfaces.', 'audit', 'view', true, true),
-('reconciliation.view', 'View reconciliation', 'Read reconciliation records.', 'reconciliation', 'view', false, true),
-('reconciliation.manage', 'Manage reconciliation', 'Manage reconciliation workflows where UAT requires.', 'reconciliation', 'manage', true, true),
-('payment-report.view', 'View payment report', 'Read payment reporting surfaces.', 'reporting', 'view', false, true),
-('statutory-discount-report.view', 'View statutory discount report', 'Read statutory discount reporting surfaces.', 'reporting', 'view', false, true),
-('revenue-report.view', 'View revenue report', 'Read revenue reporting surfaces.', 'reporting', 'view', false, true),
-('variance-report.view', 'View variance report', 'Read variance reporting surfaces.', 'reporting', 'view', false, true),
-('reports.view', 'View reports', 'Read reporting surfaces.', 'reporting', 'view', false, true),
-('reports.export', 'Export reports', 'Export reports where explicitly granted.', 'reporting', 'export', true, true),
-('dashboard.view', 'View dashboard', 'Read dashboard surfaces.', 'reporting', 'view', false, true),
-('executive-summary.view', 'View executive summary', 'Read executive summary surfaces.', 'reporting', 'view', false, true),
-('site-performance.view', 'View site performance', 'Read site performance dashboard.', 'reporting', 'view', false, true),
-('site-group-performance.view', 'View site group performance', 'Read site group performance dashboard.', 'reporting', 'view', false, true),
-('revenue-summary.view', 'View revenue summary', 'Read revenue summary dashboard.', 'reporting', 'view', false, true),
-('payment-summary.view', 'View payment summary', 'Read payment summary dashboard.', 'reporting', 'view', false, true),
-('fiscal-summary.view', 'View fiscal summary', 'Read fiscal summary dashboard.', 'reporting', 'view', false, true),
-('statutory-discount-summary.view', 'View statutory discount summary', 'Read statutory discount summary dashboard.', 'reporting', 'view', false, true),
-('exception-trend.view', 'View exception trends', 'Read exception trend dashboard.', 'reporting', 'view', false, true),
-('audit-report.view', 'View audit report', 'Read audit reporting surfaces.', 'audit', 'view', true, true),
-('compliance-report.view', 'View compliance report', 'Read compliance reporting surfaces.', 'reporting', 'view', true, true),
-('policy-import.submit', 'Submit policy import', 'Submit policy import review package.', 'policy', 'submit', true, true),
-('policy-import.review', 'Review policy import', 'Review policy import package.', 'policy', 'review', true, true),
-('policy-import.approve', 'Approve policy import', 'Approve policy import package where allowed.', 'policy', 'approve', true, true),
-('policy-import.manage', 'Manage policy import', 'Manage policy import workflow.', 'policy', 'manage', true, true),
-('operator-console.policy-import-review.submit', 'Submit Operator Console policy import', 'Existing Operator Console policy import submit permission.', 'policy', 'submit', true, true),
-('operator-console.policy-import-review.view-own', 'View own Operator Console policy import', 'Existing Operator Console policy import own-view permission.', 'policy', 'view', true, true),
-('operator-console.policy-import-review.review', 'Review Operator Console policy import', 'Existing Operator Console policy import review permission.', 'policy', 'review', true, true),
-('operator-console.policy-import-review.manage', 'Manage Operator Console policy import', 'Existing Operator Console policy import manage permission.', 'policy', 'manage', true, true),
-('operator-console.policy-import-review.approve.legal', 'Approve policy import legal', 'Existing legal policy import approval permission.', 'policy', 'approve', true, true),
-('operator-console.policy-import-review.approve.ops', 'Approve policy import ops', 'Existing operations policy import approval permission.', 'policy', 'approve', true, true),
-('operator-console.policy-import-review.approve.qa', 'Approve policy import QA', 'Existing QA policy import approval permission.', 'policy', 'approve', true, true),
-('operator-console.policy-import-review.approve.db', 'Approve policy import DB', 'Existing DB policy import approval permission.', 'policy', 'approve', true, true),
-('statutory-discount-policy.view', 'View statutory discount policy', 'Read statutory discount policy inventory.', 'policy', 'view', true, true),
-('statutory-discount-policy.manage', 'Manage statutory discount policy', 'Target permission for future statutory discount policy administration.', 'policy', 'manage', true, true),
-('evidence-rule-policy.view', 'View evidence rule policy', 'Read evidence rule policy inventory.', 'policy', 'view', true, true),
-('evidence-rule-policy.manage', 'Manage evidence rule policy', 'Target permission for future evidence rule policy administration.', 'policy', 'manage', true, true);
-
-
-CREATE TEMP TABLE management_platform_uat_role_permission_map (
-    role_code varchar(64) NOT NULL,
-    permission_code varchar(96) NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO management_platform_uat_role_permission_map (role_code, permission_code) VALUES
-('SYSTEM_RBAC_ADMINISTRATOR', 'management-platform.identity-rbac.inventory.read'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'user.view'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'user.manage'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'rbac.view'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'rbac.manage'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'role.view'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'role.manage'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'permission.view'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'permission.manage'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'assignment.view'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'assignment.manage'),
-('SYSTEM_RBAC_ADMINISTRATOR', 'access-audit.view'),
-('PLATFORM_ADMINISTRATOR', 'site.view'),
-('PLATFORM_ADMINISTRATOR', 'site.manage'),
-('PLATFORM_ADMINISTRATOR', 'site-group.view'),
-('PLATFORM_ADMINISTRATOR', 'site-group.manage'),
-('PLATFORM_ADMINISTRATOR', 'device.view'),
-('PLATFORM_ADMINISTRATOR', 'device.manage'),
-('PLATFORM_ADMINISTRATOR', 'device-binding.view'),
-('PLATFORM_ADMINISTRATOR', 'device-binding.manage'),
-('PLATFORM_ADMINISTRATOR', 'shift.view'),
-('PLATFORM_ADMINISTRATOR', 'shift.manage'),
-('PLATFORM_ADMINISTRATOR', 'pos-server-config.view'),
-('PLATFORM_ADMINISTRATOR', 'pos-server-config.manage'),
-('PLATFORM_ADMINISTRATOR', 'connector-config.view'),
-('PLATFORM_ADMINISTRATOR', 'connector-config.manage'),
-('PLATFORM_ADMINISTRATOR', 'operational-monitoring.view'),
-('PLATFORM_ADMINISTRATOR', 'platform-config.view'),
-('PLATFORM_ADMINISTRATOR', 'platform-config.manage'),
-('PLATFORM_ADMINISTRATOR', 'environment-config.view'),
-('PLATFORM_ADMINISTRATOR', 'uat-fixture.manage'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.draft.view'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.evidence.view'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.decision.review'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.decision.approve'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.decision.reject'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.payable-basis.apply'),
-('OPERATIONS_SUPERVISOR', 'statutory-discounts.policy.resolve'),
-('OPERATIONS_SUPERVISOR', 'fiscal-issuance.status.read'),
-('OPERATIONS_SUPERVISOR', 'fiscal-issuance.void.command'),
-('OPERATIONS_SUPERVISOR', 'operator-workflow-audit.view'),
-('OPERATIONS_SUPERVISOR', 'projection-health.view'),
-('OPERATIONS_SUPERVISOR', 'ops.vendor-session-projection-health.view'),
-('OPERATIONS_SUPERVISOR', 'operator-console.vendor-projection-health.view'),
-('OPERATIONS_SUPERVISOR', 'vendor-acknowledgments.view'),
-('OPERATOR_SUPPORT_STAFF', 'statutory-discounts.session.lookup'),
-('OPERATOR_SUPPORT_STAFF', 'statutory-discounts.draft.view'),
-('OPERATOR_SUPPORT_STAFF', 'statutory-discounts.draft.create'),
-('OPERATOR_SUPPORT_STAFF', 'statutory-discounts.evidence.view'),
-('OPERATOR_SUPPORT_STAFF', 'statutory-discounts.evidence.capture'),
-('OPERATOR_SUPPORT_STAFF', 'statutory-discounts.policy.resolve'),
-('OPERATOR_SUPPORT_STAFF', 'fiscal-issuance.status.read'),
-('OPERATOR_SUPPORT_STAFF', 'ticket.lookup'),
-('OPERATOR_SUPPORT_STAFF', 'projection-health.view'),
-('OPERATOR_SUPPORT_STAFF', 'ops.vendor-session-projection-health.view'),
-('OPERATOR_SUPPORT_STAFF', 'operator-console.vendor-projection-health.view'),
-('OPERATOR_SUPPORT_STAFF', 'vendor-acknowledgments.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'reconciliation.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'reconciliation.manage'),
-('FINANCE_RECONCILIATION_ANALYST', 'payment-report.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'fiscal-report.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'sales-invoice-report.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'statutory-discount-report.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'revenue-report.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'variance-report.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'reports.view'),
-('FINANCE_RECONCILIATION_ANALYST', 'reports.export'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'statutory-discounts.audit.read'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'fiscal-issuance.void.audit.read'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'fiscal-view-audit.read'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'audit-report.view'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'policy-import.submit'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'policy-import.review'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'policy-import.approve'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'policy-import.manage'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.submit'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.view-own'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.review'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.manage'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.approve.legal'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.approve.ops'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.approve.qa'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'operator-console.policy-import-review.approve.db'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'statutory-discount-policy.view'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'statutory-discount-policy.manage'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'evidence-rule-policy.view'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'evidence-rule-policy.manage'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'compliance-report.view'),
-('COMPLIANCE_POLICY_ADMINISTRATOR', 'reports.export'),
-('EXECUTIVE_MANAGEMENT', 'dashboard.view'),
-('EXECUTIVE_MANAGEMENT', 'reports.view'),
-('EXECUTIVE_MANAGEMENT', 'executive-summary.view'),
-('EXECUTIVE_MANAGEMENT', 'site-performance.view'),
-('EXECUTIVE_MANAGEMENT', 'site-group-performance.view'),
-('EXECUTIVE_MANAGEMENT', 'revenue-summary.view'),
-('EXECUTIVE_MANAGEMENT', 'payment-summary.view'),
-('EXECUTIVE_MANAGEMENT', 'fiscal-summary.view'),
-('EXECUTIVE_MANAGEMENT', 'statutory-discount-summary.view'),
-('EXECUTIVE_MANAGEMENT', 'exception-trend.view'),
-('EXECUTIVE_MANAGEMENT', 'operational-monitoring.view');
-
-
-INSERT INTO identity.service_identities (
-    service_identity_id,
-    service_identity_code,
-    service_identity_name,
-    identity_type,
-    identity_status,
-    owning_service_name,
-    credential_type,
-    effective_from,
-    effective_to
-)
-VALUES (
-    '79000000-0000-0000-0000-000000000003',
-    'MANAGEMENT_PLATFORM_UAT_IDENTITY_RBAC_SEED',
-    'Management Platform UAT Identity/RBAC Seeder',
-    'INTERNAL_SERVICE',
-    'ACTIVE',
-    'Central PMS Local UAT',
-    'NONE',
-    '2020-01-01T00:00:00Z',
-    '2035-01-01T00:00:00Z'
-)
-ON CONFLICT (service_identity_id) DO UPDATE
-SET service_identity_code = EXCLUDED.service_identity_code,
-    service_identity_name = EXCLUDED.service_identity_name,
-    identity_type = EXCLUDED.identity_type,
-    identity_status = EXCLUDED.identity_status,
-    owning_service_name = EXCLUDED.owning_service_name,
-    credential_type = EXCLUDED.credential_type,
-    effective_from = EXCLUDED.effective_from,
-    effective_to = EXCLUDED.effective_to,
-    updated_at = now();
-
-
-INSERT INTO identity.roles (
-    role_id,
-    role_code,
-    role_name,
-    role_description,
-    role_type,
-    role_status,
-    is_privileged,
-    requires_elevated_approval,
-    effective_from,
-    effective_to,
-    created_by_service_identity_id,
-    updated_by_service_identity_id
-)
-SELECT
-    pg_temp.exitpass_uat_uuid('management-platform-uat-role:' || role_code),
-    role_code,
-    role_name,
-    role_description,
-    role_type,
-    'ACTIVE',
-    is_privileged,
-    requires_elevated_approval,
-    '2020-01-01T00:00:00Z',
-    '2035-01-01T00:00:00Z',
-    '79000000-0000-0000-0000-000000000003',
-    '79000000-0000-0000-0000-000000000003'
-FROM management_platform_uat_roles
-ON CONFLICT ON CONSTRAINT uq_roles__role_code DO UPDATE
-SET role_name = EXCLUDED.role_name,
-    role_description = EXCLUDED.role_description,
-    role_type = EXCLUDED.role_type,
-    role_status = EXCLUDED.role_status,
-    is_privileged = EXCLUDED.is_privileged,
-    requires_elevated_approval = EXCLUDED.requires_elevated_approval,
-    effective_from = EXCLUDED.effective_from,
-    effective_to = EXCLUDED.effective_to,
-    updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id,
-    updated_at = now();
-
-
-INSERT INTO identity.permissions (
-    permission_id,
-    permission_code,
-    permission_name,
-    permission_description,
-    permission_domain,
-    permission_action,
-    permission_status,
-    is_sensitive,
-    requires_audit,
-    created_by_service_identity_id,
-    updated_by_service_identity_id
-)
-SELECT
-    pg_temp.exitpass_uat_uuid('management-platform-uat-permission:' || permission_code),
-    permission_code,
-    permission_name,
-    permission_description,
-    permission_domain,
-    permission_action,
-    'ACTIVE',
-    is_sensitive,
-    requires_audit,
-    '79000000-0000-0000-0000-000000000003',
-    '79000000-0000-0000-0000-000000000003'
-FROM management_platform_uat_permissions
-ON CONFLICT ON CONSTRAINT uq_permissions__permission_code DO UPDATE
-SET permission_name = EXCLUDED.permission_name,
-    permission_description = EXCLUDED.permission_description,
-    permission_domain = EXCLUDED.permission_domain,
-    permission_action = EXCLUDED.permission_action,
-    permission_status = EXCLUDED.permission_status,
-    is_sensitive = EXCLUDED.is_sensitive,
-    requires_audit = EXCLUDED.requires_audit,
-    updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id,
-    updated_at = now();
-
-
-UPDATE identity.role_permissions rp
-SET binding_status = 'ACTIVE',
-    binding_reason_code = 'MANAGEMENT_PLATFORM_UAT_ROLE_PERMISSION_SEED',
-    assigned_by_service_identity_id = '79000000-0000-0000-0000-000000000003',
-    effective_from = '2020-01-01T00:00:00Z',
-    effective_to = '2035-01-01T00:00:00Z',
-    revoked_at = NULL,
-    revoked_by_user_id = NULL,
-    revoked_by_service_identity_id = NULL,
-    revocation_reason_code = NULL,
-    updated_by_service_identity_id = '79000000-0000-0000-0000-000000000003',
-    updated_at = now()
-FROM management_platform_uat_role_permission_map rpm
-JOIN identity.roles r ON r.role_code = rpm.role_code
-JOIN identity.permissions p ON p.permission_code = rpm.permission_code
-WHERE rp.role_id = r.role_id
-  AND rp.permission_id = p.permission_id;
-
-INSERT INTO identity.role_permissions (
-    role_permission_id,
-    role_id,
-    permission_id,
-    binding_status,
-    binding_reason_code,
-    assigned_by_service_identity_id,
-    effective_from,
-    effective_to,
-    created_by_service_identity_id,
-    updated_by_service_identity_id
-)
-SELECT
-    pg_temp.exitpass_uat_uuid('management-platform-uat-role-permission:' || rpm.role_code || ':' || rpm.permission_code),
-    r.role_id,
-    p.permission_id,
-    'ACTIVE',
-    'MANAGEMENT_PLATFORM_UAT_ROLE_PERMISSION_SEED',
-    '79000000-0000-0000-0000-000000000003',
-    '2020-01-01T00:00:00Z',
-    '2035-01-01T00:00:00Z',
-    '79000000-0000-0000-0000-000000000003',
-    '79000000-0000-0000-0000-000000000003'
-FROM management_platform_uat_role_permission_map rpm
-JOIN identity.roles r ON r.role_code = rpm.role_code
-JOIN identity.permissions p ON p.permission_code = rpm.permission_code
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM identity.role_permissions existing
-    WHERE existing.role_id = r.role_id
-      AND existing.permission_id = p.permission_id
-      AND existing.binding_status = 'ACTIVE'
-);
-
-
-COMMIT;
-
-
--- ============================================================================
 -- Source object: objects/reference-data/identity.human-authentication-permissions.seed.sql
 -- ============================================================================
 BEGIN;
@@ -27897,6 +27513,362 @@ WHERE NOT EXISTS (
       AND existing.permission_id = permission.permission_id
       AND existing.binding_status = 'ACTIVE'
 );
+
+COMMIT;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
+-- ============================================================================
+-- ExitPass Wave 3 canonical Management Platform human-role catalog.
+-- Database-owned provenance, assignment policy, compatibility, and permissions.
+-- No user or user-role assignment is created by this clean-build reference data.
+
+BEGIN;
+SET CONSTRAINTS ALL DEFERRED;
+
+CREATE OR REPLACE FUNCTION pg_temp.exitpass_wave3_uuid(input text)
+RETURNS uuid LANGUAGE sql IMMUTABLE AS $$
+    SELECT (substr(md5(input),1,8)||'-'||substr(md5(input),9,4)||'-'||substr(md5(input),13,4)||'-'||substr(md5(input),17,4)||'-'||substr(md5(input),21,12))::uuid
+$$;
+
+CREATE TEMP TABLE wave3_roles (
+    role_code varchar(64) PRIMARY KEY,
+    role_name varchar(128) NOT NULL,
+    role_description text NOT NULL,
+    role_type identity.role_type_enum NOT NULL,
+    role_provenance identity.role_provenance_enum NOT NULL,
+    role_status identity.role_status_enum NOT NULL,
+    is_privileged boolean NOT NULL,
+    requires_elevated_approval boolean NOT NULL,
+    direct_add_user_eligible boolean NOT NULL,
+    human_assignable boolean NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO wave3_roles VALUES
+('SYSTEM_ADMIN','System Administrator','Emergency break-glass administration only.','SYSTEM','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('SYSTEM_RBAC_ADMINISTRATOR','System / RBAC Administrator','Identity, role, permission, scope, session, and MFA administration.','SYSTEM','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('PLATFORM_ADMINISTRATOR','Platform Administrator','Site, Site Group, device, POS/fiscal configuration, connector, and platform administration.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('OPERATIONS_MANAGER','Operations Manager','Governed operational management without finance reconciliation administration.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('OPERATIONS_SUPERVISOR','Operations Supervisor','Operational and statutory review without payable-basis application or fiscal-void command authority.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('SITE_OPERATOR','Site Operator','Site-scoped parking operations.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
+('SUPPORT_AGENT','Support Agent','Read-oriented support and operational diagnosis without payment or statutory-decision mutation.','SUPPORT','CANONICAL_ROLE','ACTIVE',false,false,true,true),
+('FINANCE_RECONCILIATION_ANALYST','Finance / Reconciliation Analyst','Financial reporting and reconciliation analysis without payment finalization.','FINANCE','CANONICAL_ROLE','ACTIVE',false,false,true,true),
+('COMPLIANCE_REVIEWER','Compliance Reviewer','Compliance and restricted-evidence review.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('COMPLIANCE_POLICY_ADMINISTRATOR','Compliance / Policy Administrator','Compliance policy, evidence-rule, and policy-import administration.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','Head Office Statutory Benefit Reviewer','Statutory-benefit queue, evidence, approval, and rejection only.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('EXECUTIVE_MANAGEMENT','Executive / Management','Read-only dashboards, summaries, KPI, performance, and management reporting.','OTHER','CANONICAL_ROLE','ACTIVE',false,false,true,true),
+('MERCHANT_ADMIN','Merchant Administrator','Merchant coupon administration.','MERCHANT','CANONICAL_ROLE','ACTIVE',false,false,true,true),
+('SECURITY_REVIEWER','Security Reviewer','Review-oriented identity, session, evidence, and access-audit visibility.','SECURITY','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('FINANCE_RECONCILIATION','Finance Reconciliation','Historical finance role retained only for migration evidence.','FINANCE','HISTORICAL_LEGACY_ROLE','RETIRED',false,false,false,false),
+('OPERATOR_SUPPORT_STAFF','Operator / Support Staff','Historical combined operator/support role retained only for migration evidence.','SUPPORT','HISTORICAL_LEGACY_ROLE','RETIRED',false,false,false,false),
+('SERVICE_PRINCIPAL','Service Principal','Non-human service identity role.','SERVICE','SERVICE_ROLE','ACTIVE',false,false,false,false);
+
+INSERT INTO identity.roles (
+    role_id, role_code, role_name, role_description, role_type, role_provenance,
+    role_status, is_privileged, requires_elevated_approval,
+    direct_add_user_eligible, human_assignable, effective_from,
+    created_by_service_identity_id, updated_by_service_identity_id)
+SELECT pg_temp.exitpass_wave3_uuid('wave3:canonical-role:'||role_code), role_code, role_name,
+       role_description, role_type, role_provenance, role_status, is_privileged,
+       requires_elevated_approval, direct_add_user_eligible, human_assignable,
+       '2020-01-01T00:00:00Z', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978',
+       '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM wave3_roles
+ON CONFLICT ON CONSTRAINT uq_roles__role_code DO UPDATE SET
+    role_name=EXCLUDED.role_name, role_description=EXCLUDED.role_description,
+    role_type=EXCLUDED.role_type, role_provenance=EXCLUDED.role_provenance,
+    role_status=EXCLUDED.role_status, is_privileged=EXCLUDED.is_privileged,
+    requires_elevated_approval=EXCLUDED.requires_elevated_approval,
+    direct_add_user_eligible=EXCLUDED.direct_add_user_eligible,
+    human_assignable=EXCLUDED.human_assignable, effective_to=NULL,
+    updated_at=now(), row_version=identity.roles.row_version+1
+WHERE (identity.roles.role_name,identity.roles.role_description,identity.roles.role_type,
+       identity.roles.role_provenance,identity.roles.role_status,identity.roles.is_privileged,
+       identity.roles.requires_elevated_approval,identity.roles.direct_add_user_eligible,
+       identity.roles.human_assignable,identity.roles.effective_to)
+  IS DISTINCT FROM
+      (EXCLUDED.role_name,EXCLUDED.role_description,EXCLUDED.role_type,
+       EXCLUDED.role_provenance,EXCLUDED.role_status,EXCLUDED.is_privileged,
+       EXCLUDED.requires_elevated_approval,EXCLUDED.direct_add_user_eligible,
+       EXCLUDED.human_assignable,NULL);
+
+CREATE TEMP TABLE wave3_permissions (
+    permission_code varchar(96) PRIMARY KEY, permission_name varchar(128) NOT NULL,
+    permission_description text NOT NULL, permission_domain varchar(64) NOT NULL,
+    permission_action varchar(64) NOT NULL, is_sensitive boolean NOT NULL,
+    requires_audit boolean NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO wave3_permissions VALUES
+('management-platform.identity-rbac.inventory.read','Identity/RBAC inventory read','Read safe identity and RBAC inventory.','management-platform','read',true,true),
+('user.view','View users','Read safe user inventory.','administration','view',true,true),
+('user.manage','Manage users','Manage human identity profiles and lifecycle.','administration','manage',true,true),
+('rbac.view','View RBAC','Read RBAC configuration.','administration','view',true,true),
+('rbac.manage','Manage RBAC','Manage governed RBAC configuration.','administration','manage',true,true),
+('role.view','View roles','Read role inventory.','administration','view',true,true),
+('role.manage','Manage roles','Manage governed roles.','administration','manage',true,true),
+('permission.view','View permissions','Read permission inventory.','administration','view',true,true),
+('permission.manage','Manage permissions','Manage governed permissions.','administration','manage',true,true),
+('assignment.view','View assignments','Read role and scope assignments.','administration','view',true,true),
+('assignment.manage','Manage assignments','Manage governed role and scope assignments.','administration','manage',true,true),
+('access-audit.view','View access audit','Read access and RBAC audit evidence.','administration','view',true,true),
+('site.view','View sites','Read Site inventory.','platform-config','view',false,true),
+('site.manage','Manage sites','Manage Sites.','platform-config','manage',true,true),
+('site-group.view','View Site Groups','Read Site Group inventory.','platform-config','view',false,true),
+('site-group.manage','Manage Site Groups','Manage Site Groups.','platform-config','manage',true,true),
+('device.view','View devices','Read device inventory.','platform-config','view',false,true),
+('device.manage','Manage devices','Manage devices.','platform-config','manage',true,true),
+('device-binding.view','View device bindings','Read device bindings.','platform-config','view',true,true),
+('device-binding.manage','Manage device bindings','Manage device bindings.','platform-config','manage',true,true),
+('shift.view','View shifts','Read shift inventory.','platform-config','view',true,true),
+('shift.manage','Manage shifts','Manage shifts.','platform-config','manage',true,true),
+('pos-server-config.view','View POS Server configuration','Read POS/fiscal configuration.','platform-config','view',true,true),
+('pos-server-config.manage','Manage POS Server configuration','Manage POS/fiscal configuration.','platform-config','manage',true,true),
+('connector-config.view','View connector configuration','Read connector configuration.','platform-config','view',true,true),
+('connector-config.manage','Manage connector configuration','Manage connector configuration.','platform-config','manage',true,true),
+('platform-config.view','View platform configuration','Read platform configuration.','platform-config','view',true,true),
+('platform-config.manage','Manage platform configuration','Manage platform configuration.','platform-config','manage',true,true),
+('environment-config.view','View environment configuration','Read safe environment configuration.','platform-config','view',true,true),
+('uat-fixture.manage','Manage UAT fixtures','Isolated local/UAT fixture preparation only.','uat-fixture','manage',true,true),
+('operational-monitoring.view','View operational monitoring','Read operational monitoring.','monitoring','view',false,true),
+('statutory-discounts.session.lookup','Lookup statutory session','Read statutory session context.','statutory-discounts','lookup',false,true),
+('statutory-discounts.draft.view','View statutory draft','Read statutory review drafts.','statutory-discounts','view',false,true),
+('statutory-discounts.evidence.view','View statutory evidence','Read statutory evidence metadata.','statutory-discounts','view',true,true),
+('statutory-discounts.decision.review','Review statutory decision','Review statutory decision context.','statutory-discounts','review',true,true),
+('statutory-discounts.decision.approve','Approve statutory decision','Approve a statutory benefit decision.','statutory-discounts','approve',true,true),
+('statutory-discounts.decision.reject','Reject statutory decision','Reject a statutory benefit decision.','statutory-discounts','reject',true,true),
+('statutory-discounts.policy.resolve','Resolve statutory policy','Read resolved statutory policy.','statutory-discounts','resolve',true,true),
+('statutory-discounts.audit.read','Read statutory audit','Read statutory decision audit.','statutory-discounts','read',true,true),
+('statutory-discounts.review.queue.read','Read statutory review queue','Read the statutory-benefit review queue.','statutory-discounts','read',true,true),
+('statutory-discounts.review.detail.read','Read statutory review detail','Read statutory-benefit review detail.','statutory-discounts','read',true,true),
+('statutory-discounts.evidence.review.view','Review statutory evidence','Read evidence needed for statutory-benefit review.','statutory-discounts','view',true,true),
+('fiscal-issuance.status.read','Read fiscal issuance status','Read Sales Invoice status.','fiscal','read',false,true),
+('fiscal-issuance.void.audit.read','Read fiscal void audit','Read Sales Invoice void audit.','fiscal','read',true,true),
+('fiscal-view-audit.read','Read fiscal view audit','Read Sales Invoice view audit.','fiscal','read',true,true),
+('ticket.lookup','Lookup ticket','Read ticket and parking session context.','operator-console','lookup',false,true),
+('projection-health.view','View projection health','Read projection health.','operator-console','view',false,true),
+('ops.vendor-session-projection-health.view','View vendor projection health','Read vendor projection health.','operator-console','view',false,true),
+('operator-console.vendor-projection-health.view','View console projection health','Read Operator Console projection health.','operator-console','view',false,true),
+('vendor-acknowledgments.view','View vendor acknowledgments','Read vendor acknowledgments.','operator-console','view',false,true),
+('operator-workflow-audit.view','View operator workflow audit','Read operator workflow audit.','audit','view',true,true),
+('reconciliation.view','View reconciliation','Read reconciliation records.','reconciliation','view',false,true),
+('payment-report.view','View payment report','Read payment reporting.','reporting','view',false,true),
+('fiscal-report.view','View fiscal report','Read fiscal reporting.','reporting','view',false,true),
+('sales-invoice-report.view','View Sales Invoice report','Read Sales Invoice reports.','reporting','view',false,true),
+('statutory-discount-report.view','View statutory discount report','Read statutory discount reports.','reporting','view',false,true),
+('revenue-report.view','View revenue report','Read revenue reports.','reporting','view',false,true),
+('variance-report.view','View variance report','Read variance reports.','reporting','view',false,true),
+('reports.view','View reports','Read reporting surfaces.','reporting','view',false,true),
+('reports.export','Export reports','Export governed reports.','reporting','export',true,true),
+('dashboard.view','View dashboard','Read dashboards.','reporting','view',false,true),
+('executive-summary.view','View executive summary','Read executive summaries.','reporting','view',false,true),
+('site-performance.view','View Site performance','Read Site performance.','reporting','view',false,true),
+('site-group-performance.view','View Site Group performance','Read Site Group performance.','reporting','view',false,true),
+('revenue-summary.view','View revenue summary','Read revenue summaries.','reporting','view',false,true),
+('payment-summary.view','View payment summary','Read payment summaries.','reporting','view',false,true),
+('fiscal-summary.view','View fiscal summary','Read fiscal summaries.','reporting','view',false,true),
+('statutory-discount-summary.view','View statutory summary','Read statutory summaries.','reporting','view',false,true),
+('exception-trend.view','View exception trends','Read exception trends.','reporting','view',false,true),
+('audit-report.view','View audit report','Read audit reports.','audit','view',true,true),
+('compliance-report.view','View compliance report','Read compliance reports.','reporting','view',true,true),
+('policy-import.submit','Submit policy import','Submit a policy import.','policy','submit',true,true),
+('policy-import.review','Review policy import','Review a policy import.','policy','review',true,true),
+('policy-import.approve','Approve policy import','Approve a policy import.','policy','approve',true,true),
+('policy-import.manage','Manage policy import','Manage policy imports.','policy','manage',true,true),
+('operator-console.policy-import-review.submit','Submit console policy import','Submit an Operator Console policy import.','policy','submit',true,true),
+('operator-console.policy-import-review.view-own','View own console policy import','Read own Operator Console policy import.','policy','view',true,true),
+('operator-console.policy-import-review.review','Review console policy import','Review Operator Console policy import.','policy','review',true,true),
+('operator-console.policy-import-review.manage','Manage console policy import','Manage Operator Console policy imports.','policy','manage',true,true),
+('operator-console.policy-import-review.approve.legal','Approve legal policy import','Legal policy-import approval.','policy','approve',true,true),
+('operator-console.policy-import-review.approve.ops','Approve operations policy import','Operations policy-import approval.','policy','approve',true,true),
+('operator-console.policy-import-review.approve.qa','Approve QA policy import','QA policy-import approval.','policy','approve',true,true),
+('operator-console.policy-import-review.approve.db','Approve DB policy import','Database policy-import approval.','policy','approve',true,true),
+('statutory-discount-policy.view','View statutory policy','Read statutory policy.','policy','view',true,true),
+('statutory-discount-policy.manage','Manage statutory policy','Manage statutory policy.','policy','manage',true,true),
+('evidence-rule-policy.view','View evidence rule policy','Read evidence-rule policy.','policy','view',true,true),
+('evidence-rule-policy.manage','Manage evidence rule policy','Manage evidence-rule policy.','policy','manage',true,true),
+('fiscal-reporting.ej.read','Read Electronic Journal','Read Electronic Journal fiscal records.','fiscal-reporting','read',true,true),
+('fiscal-reporting.ej.export','Export Electronic Journal','Export Electronic Journal fiscal records.','fiscal-reporting','export',true,true),
+('fiscal-reporting.x.read','Read X reports','Read X report records.','fiscal-reporting','read',true,true),
+('fiscal-reporting.x.generate','Generate X report','Generate a non-closing X report.','fiscal-reporting','generate',true,true),
+('fiscal-reporting.z.read','Read Z reports','Read Z report records.','fiscal-reporting','read',true,true),
+('fiscal-reporting.z.generate','Generate Z report','Generate a closing Z report.','fiscal-reporting','generate',true,true);
+
+INSERT INTO identity.permissions (permission_id,permission_code,permission_name,permission_description,
+    permission_domain,permission_action,permission_status,is_sensitive,requires_audit,
+    created_by_service_identity_id,updated_by_service_identity_id)
+SELECT pg_temp.exitpass_wave3_uuid('wave3:permission:'||permission_code),permission_code,
+    permission_name,permission_description,permission_domain,permission_action,'ACTIVE',
+    is_sensitive,requires_audit,'1f2ffdfb-c4a9-5a00-a656-9f3a132b1978',
+    '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM wave3_permissions
+ON CONFLICT ON CONSTRAINT uq_permissions__permission_code DO UPDATE SET
+    permission_name=EXCLUDED.permission_name, permission_description=EXCLUDED.permission_description,
+    permission_domain=EXCLUDED.permission_domain, permission_action=EXCLUDED.permission_action,
+    permission_status='ACTIVE', is_sensitive=EXCLUDED.is_sensitive,
+    requires_audit=EXCLUDED.requires_audit, updated_at=now(),
+    row_version=identity.permissions.row_version+1
+WHERE (identity.permissions.permission_name,identity.permissions.permission_description,
+       identity.permissions.permission_domain,identity.permissions.permission_action,
+       identity.permissions.permission_status,identity.permissions.is_sensitive,
+       identity.permissions.requires_audit)
+  IS DISTINCT FROM
+      (EXCLUDED.permission_name,EXCLUDED.permission_description,
+       EXCLUDED.permission_domain,EXCLUDED.permission_action,
+       'ACTIVE'::identity.permission_status_enum,EXCLUDED.is_sensitive,
+       EXCLUDED.requires_audit);
+
+CREATE TEMP TABLE wave3_compatibility(role_code varchar(64),user_type identity.user_type_enum,
+    PRIMARY KEY(role_code,user_type)) ON COMMIT DROP;
+INSERT INTO wave3_compatibility VALUES
+('SYSTEM_RBAC_ADMINISTRATOR','INTERNAL_ADMIN'),('PLATFORM_ADMINISTRATOR','INTERNAL_ADMIN'),('SYSTEM_ADMIN','INTERNAL_ADMIN'),
+('OPERATIONS_MANAGER','OPERATIONS_USER'),('OPERATIONS_SUPERVISOR','OPERATIONS_USER'),
+('SITE_OPERATOR','SITE_OPERATOR'),('SUPPORT_AGENT','SUPPORT_USER'),
+('FINANCE_RECONCILIATION_ANALYST','FINANCE_USER'),
+('COMPLIANCE_REVIEWER','COMPLIANCE_USER'),('COMPLIANCE_POLICY_ADMINISTRATOR','COMPLIANCE_USER'),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','COMPLIANCE_USER'),
+('MERCHANT_ADMIN','MERCHANT_USER'),('SECURITY_REVIEWER','SECURITY_USER'),
+('EXECUTIVE_MANAGEMENT','OTHER');
+
+DELETE FROM identity.role_user_type_compatibility c
+USING identity.roles r
+WHERE r.role_id=c.role_id AND r.role_provenance='CANONICAL_ROLE'
+  AND NOT EXISTS (
+    SELECT 1 FROM wave3_compatibility desired
+    WHERE desired.role_code=r.role_code AND desired.user_type=c.user_type);
+INSERT INTO identity.role_user_type_compatibility(role_id,user_type,created_by_service_identity_id)
+SELECT r.role_id,c.user_type,'1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM wave3_compatibility c JOIN identity.roles r ON r.role_code=c.role_code
+ON CONFLICT DO NOTHING;
+
+CREATE TEMP TABLE wave3_role_permissions(role_code varchar(64),permission_code varchar(96),
+    PRIMARY KEY(role_code,permission_code)) ON COMMIT DROP;
+INSERT INTO wave3_role_permissions VALUES
+('SYSTEM_RBAC_ADMINISTRATOR','management-platform.identity-rbac.inventory.read'),
+('SYSTEM_RBAC_ADMINISTRATOR','user.view'),('SYSTEM_RBAC_ADMINISTRATOR','user.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','rbac.view'),('SYSTEM_RBAC_ADMINISTRATOR','rbac.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','role.view'),('SYSTEM_RBAC_ADMINISTRATOR','role.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','permission.view'),('SYSTEM_RBAC_ADMINISTRATOR','permission.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','assignment.view'),('SYSTEM_RBAC_ADMINISTRATOR','assignment.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','access-audit.view'),
+('SYSTEM_RBAC_ADMINISTRATOR','identity.role-assignment.manage'),('SYSTEM_RBAC_ADMINISTRATOR','identity.scope-assignment.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','identity.privileged-access.decide'),('SYSTEM_RBAC_ADMINISTRATOR','identity.access-review.manage'),
+('SYSTEM_RBAC_ADMINISTRATOR','human-authentication.session.admin.view'),('SYSTEM_RBAC_ADMINISTRATOR','human-authentication.session.admin.revoke'),
+('SYSTEM_RBAC_ADMINISTRATOR','human-authentication.credential.reset'),('SYSTEM_RBAC_ADMINISTRATOR','human-authentication.mfa.status.view'),
+('SYSTEM_RBAC_ADMINISTRATOR','human-authentication.mfa.reset'),('SYSTEM_RBAC_ADMINISTRATOR','human-authentication.mfa.remove'),
+('PLATFORM_ADMINISTRATOR','site.view'),('PLATFORM_ADMINISTRATOR','site.manage'),
+('PLATFORM_ADMINISTRATOR','site-group.view'),('PLATFORM_ADMINISTRATOR','site-group.manage'),
+('PLATFORM_ADMINISTRATOR','device.view'),('PLATFORM_ADMINISTRATOR','device.manage'),
+('PLATFORM_ADMINISTRATOR','device-binding.view'),('PLATFORM_ADMINISTRATOR','device-binding.manage'),
+('PLATFORM_ADMINISTRATOR','shift.view'),('PLATFORM_ADMINISTRATOR','shift.manage'),
+('PLATFORM_ADMINISTRATOR','pos-server-config.view'),('PLATFORM_ADMINISTRATOR','pos-server-config.manage'),
+('PLATFORM_ADMINISTRATOR','connector-config.view'),('PLATFORM_ADMINISTRATOR','connector-config.manage'),
+('PLATFORM_ADMINISTRATOR','operational-monitoring.view'),('PLATFORM_ADMINISTRATOR','platform-config.view'),
+('PLATFORM_ADMINISTRATOR','platform-config.manage'),('PLATFORM_ADMINISTRATOR','environment-config.view'),
+('OPERATIONS_MANAGER','sessions.resolve'),('OPERATIONS_MANAGER','tariffs.quote'),
+('OPERATIONS_MANAGER','gate.consume_authorization'),('OPERATIONS_MANAGER','gate.record_event'),
+('OPERATIONS_MANAGER','operations.manual_gate'),('OPERATIONS_MANAGER','audit.read'),
+('OPERATIONS_MANAGER','fiscal-issuance.status.read'),('OPERATIONS_MANAGER','operational-monitoring.view'),
+('OPERATIONS_MANAGER','projection-health.view'),('OPERATIONS_MANAGER','ops.vendor-session-projection-health.view'),
+('OPERATIONS_MANAGER','vendor-acknowledgments.view'),
+('OPERATIONS_SUPERVISOR','statutory-discounts.review.queue.read'),('OPERATIONS_SUPERVISOR','statutory-discounts.review.detail.read'),
+('OPERATIONS_SUPERVISOR','statutory-discounts.evidence.review.view'),('OPERATIONS_SUPERVISOR','statutory-discounts.decision.review'),
+('OPERATIONS_SUPERVISOR','statutory-discounts.decision.approve'),('OPERATIONS_SUPERVISOR','statutory-discounts.decision.reject'),
+('OPERATIONS_SUPERVISOR','statutory-discounts.policy.resolve'),('OPERATIONS_SUPERVISOR','fiscal-issuance.status.read'),
+('OPERATIONS_SUPERVISOR','operator-workflow-audit.view'),('OPERATIONS_SUPERVISOR','projection-health.view'),
+('OPERATIONS_SUPERVISOR','ops.vendor-session-projection-health.view'),('OPERATIONS_SUPERVISOR','vendor-acknowledgments.view'),
+('SITE_OPERATOR','sessions.resolve'),('SITE_OPERATOR','gate.consume_authorization'),
+('SITE_OPERATOR','gate.record_event'),('SITE_OPERATOR','operations.manual_gate'),
+('SITE_OPERATOR','apt.access'),('SITE_OPERATOR','cashier-shifts.operate'),
+('SITE_OPERATOR','cash-custody.operate'),('SITE_OPERATOR','terminal-cash.receive'),
+('SUPPORT_AGENT','sessions.resolve'),('SUPPORT_AGENT','tariffs.quote'),('SUPPORT_AGENT','ticket.lookup'),
+('SUPPORT_AGENT','projection-health.view'),('SUPPORT_AGENT','ops.vendor-session-projection-health.view'),
+('SUPPORT_AGENT','operator-console.vendor-projection-health.view'),('SUPPORT_AGENT','vendor-acknowledgments.view'),
+('SUPPORT_AGENT','audit.read'),
+('FINANCE_RECONCILIATION_ANALYST','reconciliation.view'),('FINANCE_RECONCILIATION_ANALYST','payment-report.view'),
+('FINANCE_RECONCILIATION_ANALYST','fiscal-report.view'),('FINANCE_RECONCILIATION_ANALYST','sales-invoice-report.view'),
+('FINANCE_RECONCILIATION_ANALYST','statutory-discount-report.view'),('FINANCE_RECONCILIATION_ANALYST','revenue-report.view'),
+('FINANCE_RECONCILIATION_ANALYST','variance-report.view'),('FINANCE_RECONCILIATION_ANALYST','reports.view'),
+('FINANCE_RECONCILIATION_ANALYST','reports.export'),('FINANCE_RECONCILIATION_ANALYST','fiscal-reporting.ej.read'),
+('FINANCE_RECONCILIATION_ANALYST','fiscal-reporting.ej.export'),('FINANCE_RECONCILIATION_ANALYST','fiscal-reporting.x.read'),
+('FINANCE_RECONCILIATION_ANALYST','fiscal-reporting.x.generate'),('FINANCE_RECONCILIATION_ANALYST','fiscal-reporting.z.read'),
+('COMPLIANCE_REVIEWER','statutory-discounts.review.queue.read'),('COMPLIANCE_REVIEWER','statutory-discounts.review.detail.read'),
+('COMPLIANCE_REVIEWER','statutory-discounts.evidence.review.view'),('COMPLIANCE_REVIEWER','statutory-discounts.audit.read'),
+('COMPLIANCE_REVIEWER','audit.read'),('COMPLIANCE_REVIEWER','evidence.read_restricted'),
+('COMPLIANCE_REVIEWER','compliance-report.view'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','statutory-discounts.audit.read'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','fiscal-issuance.void.audit.read'),('COMPLIANCE_POLICY_ADMINISTRATOR','fiscal-view-audit.read'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','audit-report.view'),('COMPLIANCE_POLICY_ADMINISTRATOR','compliance-report.view'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','policy-import.submit'),('COMPLIANCE_POLICY_ADMINISTRATOR','policy-import.review'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','policy-import.approve'),('COMPLIANCE_POLICY_ADMINISTRATOR','policy-import.manage'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.submit'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.view-own'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.review'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.manage'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.approve.legal'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.approve.ops'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.approve.qa'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','operator-console.policy-import-review.approve.db'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','statutory-discount-policy.view'),('COMPLIANCE_POLICY_ADMINISTRATOR','statutory-discount-policy.manage'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','evidence-rule-policy.view'),('COMPLIANCE_POLICY_ADMINISTRATOR','evidence-rule-policy.manage'),
+('COMPLIANCE_POLICY_ADMINISTRATOR','reports.export'),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','statutory-discounts.review.queue.read'),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','statutory-discounts.review.detail.read'),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','statutory-discounts.evidence.review.view'),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','statutory-discounts.decision.approve'),
+('HEAD_OFFICE_STATUTORY_BENEFIT_REVIEWER','statutory-discounts.decision.reject'),
+('EXECUTIVE_MANAGEMENT','dashboard.view'),('EXECUTIVE_MANAGEMENT','reports.view'),
+('EXECUTIVE_MANAGEMENT','executive-summary.view'),('EXECUTIVE_MANAGEMENT','site-performance.view'),
+('EXECUTIVE_MANAGEMENT','site-group-performance.view'),('EXECUTIVE_MANAGEMENT','revenue-summary.view'),
+('EXECUTIVE_MANAGEMENT','payment-summary.view'),('EXECUTIVE_MANAGEMENT','fiscal-summary.view'),
+('EXECUTIVE_MANAGEMENT','statutory-discount-summary.view'),('EXECUTIVE_MANAGEMENT','exception-trend.view'),
+('EXECUTIVE_MANAGEMENT','operational-monitoring.view'),
+('MERCHANT_ADMIN','coupons.manage'),('MERCHANT_ADMIN','coupons.apply'),('MERCHANT_ADMIN','audit.read'),
+('SECURITY_REVIEWER','audit.read'),('SECURITY_REVIEWER','evidence.read_restricted'),
+('SECURITY_REVIEWER','user.view'),('SECURITY_REVIEWER','rbac.view'),('SECURITY_REVIEWER','role.view'),
+('SECURITY_REVIEWER','permission.view'),('SECURITY_REVIEWER','assignment.view'),
+('SECURITY_REVIEWER','access-audit.view'),('SECURITY_REVIEWER','human-authentication.session.admin.view');
+
+-- SYSTEM_ADMIN is explicit break-glass and receives every active non-UAT permission.
+INSERT INTO wave3_role_permissions
+SELECT 'SYSTEM_ADMIN',p.permission_code FROM identity.permissions p
+WHERE p.permission_status='ACTIVE' AND p.permission_code<>'uat-fixture.manage'
+ON CONFLICT DO NOTHING;
+
+UPDATE identity.role_permissions rp SET binding_status='RETIRED', effective_to=now(),
+    revocation_reason_code='WAVE3_CANONICAL_PERMISSION_REVIEW', updated_at=now(),
+    row_version=rp.row_version+1
+FROM identity.roles r
+WHERE r.role_id=rp.role_id AND r.role_provenance='CANONICAL_ROLE'
+  AND rp.binding_status='ACTIVE'
+  AND NOT EXISTS (
+    SELECT 1 FROM wave3_role_permissions desired
+    WHERE desired.role_code=r.role_code
+      AND desired.permission_code=(
+        SELECT p.permission_code FROM identity.permissions p
+        WHERE p.permission_id=rp.permission_id));
+
+INSERT INTO identity.role_permissions(role_permission_id,role_id,permission_id,binding_status,
+    binding_reason_code,assigned_by_service_identity_id,effective_from,
+    created_by_service_identity_id,updated_by_service_identity_id)
+SELECT pg_temp.exitpass_wave3_uuid('wave3:role-permission:'||m.role_code||':'||m.permission_code),
+    r.role_id,p.permission_id,'ACTIVE','WAVE3_CANONICAL_PERMISSION_REVIEW',
+    '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978','2020-01-01T00:00:00Z',
+    '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978','1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
+FROM wave3_role_permissions m JOIN identity.roles r ON r.role_code=m.role_code
+JOIN identity.permissions p ON p.permission_code=m.permission_code
+WHERE NOT EXISTS (
+    SELECT 1 FROM identity.role_permissions active
+    WHERE active.role_id=r.role_id AND active.permission_id=p.permission_id
+      AND active.binding_status='ACTIVE')
+ON CONFLICT (role_permission_id) DO UPDATE SET binding_status='ACTIVE',effective_to=NULL,
+    revoked_at=NULL,revocation_reason_code=NULL,updated_at=now(),
+    row_version=identity.role_permissions.row_version+1
+WHERE identity.role_permissions.binding_status<>'ACTIVE'
+   OR identity.role_permissions.effective_to IS NOT NULL
+   OR identity.role_permissions.revoked_at IS NOT NULL
+   OR identity.role_permissions.revocation_reason_code IS NOT NULL;
 
 COMMIT;
 
