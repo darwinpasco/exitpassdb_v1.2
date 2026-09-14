@@ -1,7 +1,26 @@
 \set ON_ERROR_STOP on
 
 DO $$
-DECLARE canonical_count integer;
+DECLARE
+  canonical_count integer;
+  fiscal_codes constant text[] := ARRAY[
+    'fiscal-reporting.ej.read','fiscal-reporting.ej.export',
+    'fiscal-reporting.x.read','fiscal-reporting.x.generate',
+    'fiscal-reporting.z.read','fiscal-reporting.z.generate'];
+  site_operator_fiscal_codes constant text[] := ARRAY[
+    'fiscal-reporting.ej.read','fiscal-reporting.ej.export',
+    'fiscal-reporting.x.read','fiscal-reporting.x.generate',
+    'fiscal-reporting.z.read'];
+  site_operator_existing_codes constant text[] := ARRAY[
+    'sessions.resolve','gate.consume_authorization','gate.record_event','operations.manual_gate',
+    'apt.access','cashier-shifts.operate','cash-custody.operate','terminal-cash.receive'];
+  operations_supervisor_existing_codes constant text[] := ARRAY[
+    'statutory-discounts.review.queue.read','statutory-discounts.review.detail.read',
+    'statutory-discounts.evidence.review.view','statutory-discounts.decision.review',
+    'statutory-discounts.decision.approve','statutory-discounts.decision.reject',
+    'statutory-discounts.policy.resolve','fiscal-issuance.status.read',
+    'operator-workflow-audit.view','projection-health.view',
+    'ops.vendor-session-projection-health.view','vendor-acknowledgments.view'];
 BEGIN
   SELECT count(*) INTO canonical_count FROM identity.roles
   WHERE role_provenance='CANONICAL_ROLE' AND human_assignable;
@@ -55,6 +74,96 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM identity.role_user_type_compatibility c JOIN identity.roles r ON r.role_id=c.role_id
                  WHERE r.role_code='EXECUTIVE_MANAGEMENT' AND c.user_type='OTHER') THEN
     RAISE EXCEPTION 'Executive Management must use existing OTHER user type.';
+  END IF;
+
+  IF (SELECT count(*) FROM identity.permissions
+      WHERE permission_status='ACTIVE' AND permission_code=ANY(fiscal_codes)) <> 6 THEN
+    RAISE EXCEPTION 'The six canonical fiscal-reporting permissions are missing, duplicated, or inactive.';
+  END IF;
+
+  IF (SELECT count(*) FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='SITE_OPERATOR' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(site_operator_fiscal_codes)) <> 5
+     OR EXISTS (
+      SELECT 1 FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='SITE_OPERATOR' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(fiscal_codes)
+        AND NOT (p.permission_code=ANY(site_operator_fiscal_codes))) THEN
+    RAISE EXCEPTION 'SITE_OPERATOR fiscal-reporting authority is not the approved five-permission non-closing set.';
+  END IF;
+
+  IF (SELECT count(*) FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='OPERATIONS_SUPERVISOR' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(fiscal_codes)) <> 6 THEN
+    RAISE EXCEPTION 'OPERATIONS_SUPERVISOR does not have all six fiscal-reporting permissions.';
+  END IF;
+
+  IF (SELECT count(*) FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='SITE_OPERATOR' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(site_operator_existing_codes)) <> 8 THEN
+    RAISE EXCEPTION 'Existing SITE_OPERATOR operational and APT/cash permissions were not preserved.';
+  END IF;
+
+  IF (SELECT count(*) FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='OPERATIONS_SUPERVISOR' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(operations_supervisor_existing_codes)) <> 12 THEN
+    RAISE EXCEPTION 'Existing OPERATIONS_SUPERVISOR permissions were not preserved.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM identity.role_permissions rp
+    JOIN identity.roles r ON r.role_id=rp.role_id
+    JOIN identity.permissions p ON p.permission_id=rp.permission_id
+    WHERE r.role_code='OPERATIONS_SUPERVISOR' AND rp.binding_status='ACTIVE'
+      AND p.permission_code IN ('apt.access','cashier-shifts.operate','cash-custody.operate','terminal-cash.receive')) THEN
+    RAISE EXCEPTION 'OPERATIONS_SUPERVISOR received automatic APT cashier authority.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM identity.roles r
+    WHERE r.role_code IN ('SITE_OPERATOR','OPERATIONS_SUPERVISOR')
+      AND (r.role_provenance<>'CANONICAL_ROLE' OR r.role_status<>'ACTIVE'
+        OR r.role_type<>'OPERATIONS' OR NOT r.human_assignable
+        OR (r.role_code='SITE_OPERATOR' AND (r.is_privileged OR r.requires_elevated_approval OR NOT r.direct_add_user_eligible))
+        OR (r.role_code='OPERATIONS_SUPERVISOR' AND (NOT r.is_privileged OR NOT r.requires_elevated_approval OR r.direct_add_user_eligible)))) THEN
+    RAISE EXCEPTION 'Operational role provenance, status, assignability, or privilege metadata changed.';
+  END IF;
+
+  IF (SELECT count(*) FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='SYSTEM_ADMIN' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(fiscal_codes)) <> 6
+     OR (SELECT count(*) FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='FINANCE_RECONCILIATION_ANALYST' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(fiscal_codes)) <> 5
+     OR EXISTS (
+      SELECT 1 FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_provenance='CANONICAL_ROLE' AND rp.binding_status='ACTIVE'
+        AND p.permission_code=ANY(fiscal_codes)
+        AND r.role_code NOT IN ('SYSTEM_ADMIN','SITE_OPERATOR','OPERATIONS_SUPERVISOR','FINANCE_RECONCILIATION_ANALYST')) THEN
+    RAISE EXCEPTION 'An unrelated canonical role fiscal-reporting binding changed unexpectedly.';
+  END IF;
+
+  IF EXISTS (
+    SELECT role_id,permission_id FROM identity.role_permissions
+    WHERE binding_status='ACTIVE'
+    GROUP BY role_id,permission_id HAVING count(*)>1) THEN
+    RAISE EXCEPTION 'Duplicate ACTIVE role-permission bindings exist.';
   END IF;
 END $$;
 
