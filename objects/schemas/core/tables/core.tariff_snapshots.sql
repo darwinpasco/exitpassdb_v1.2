@@ -4,6 +4,7 @@ CREATE TABLE "core"."tariff_snapshots" (
   "parking_session_id" uuid NOT NULL,
   "superseded_by_tariff_snapshot_id" uuid NULL,
   "vendor_system_id" uuid NOT NULL,
+  "source_adapter_identity_id" uuid NULL,
   "vendor_tariff_ref" character varying(128) NULL,
   "tariff_version_reference" character varying(128) NULL,
   "currency_code" character(3) NOT NULL,

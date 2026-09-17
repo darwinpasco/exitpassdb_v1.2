@@ -1,0 +1,22 @@
+CREATE UNIQUE INDEX ux_vendor_session_projection_sync_targets__scope
+ON sessions.vendor_session_projection_sync_targets (site_id, vendor_system_id, parking_lot_index_code);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__enabled_due
+ON sessions.vendor_session_projection_sync_targets (enabled_flag, last_attempt_at, poll_interval_seconds)
+WHERE enabled_flag = TRUE;
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__site
+ON sessions.vendor_session_projection_sync_targets (site_id);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__parking_lot
+ON sessions.vendor_session_projection_sync_targets (parking_lot_index_code);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__vendor_system
+ON sessions.vendor_session_projection_sync_targets (vendor_system_id);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__health
+ON sessions.vendor_session_projection_sync_targets (health_status, last_success_at DESC, last_failure_at DESC);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__correlation_id
+ON sessions.vendor_session_projection_sync_targets (correlation_id)
+WHERE correlation_id IS NOT NULL;

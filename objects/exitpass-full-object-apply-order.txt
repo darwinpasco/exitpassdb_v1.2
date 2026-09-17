@@ -2704,4 +2704,19 @@ objects/schemas/operator_console/comments/operator_console.statutory_discount_se
 objects/reference-data/identity.human-authentication-permissions.seed.sql
 objects/reference-data/identity.human-authentication-event-codes.seed.sql
 objects/reference-data/identity.apt-operational-permissions.seed.sql
+
+# Central PMS Human Authentication and vendor-session projection parity.
+objects/schemas/core/tables/core.vendor_adapter_routing.v13-alignment.sql
+objects/schemas/core/constraints/core.fk_parking_sessions__source_adapter_identity_id.sql
+objects/schemas/core/constraints/core.fk_tariff_snapshots__source_adapter_identity_id.sql
+objects/schemas/core/indexes/core.ix_parking_sessions__source_adapter_identity_id.sql
+objects/schemas/core/indexes/core.ix_tariff_snapshots__source_adapter_identity_id.sql
+objects/schemas/core/comments/core.parking_sessions.source_adapter_identity_id.column-comment.sql
+objects/schemas/core/comments/core.tariff_snapshots.source_adapter_identity_id.column-comment.sql
+objects/schemas/sessions/tables/sessions.vendor_session_projections.sql
+objects/schemas/sessions/indexes/sessions.vendor_session_projections.indexes.sql
+objects/schemas/sessions/comments/sessions.vendor_session_projections.comments.sql
+objects/schemas/sessions/tables/sessions.vendor_session_projection_sync_targets.sql
+objects/schemas/sessions/indexes/sessions.vendor_session_projection_sync_targets.indexes.sql
+objects/schemas/sessions/comments/sessions.vendor_session_projection_sync_targets.comments.sql
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql

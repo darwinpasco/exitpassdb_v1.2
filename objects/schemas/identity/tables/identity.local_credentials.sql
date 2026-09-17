@@ -16,6 +16,7 @@ CREATE TABLE "identity"."local_credentials" (
   "revoked_by_user_id" uuid NULL,
   "revoked_by_service_identity_id" uuid NULL,
   "status_reason_code" character varying(64) NULL,
+  "temporary_password_expires_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "created_by_user_id" uuid NULL,
   "created_by_service_identity_id" uuid NULL,
@@ -35,10 +36,12 @@ CREATE TABLE "identity"."local_credentials" (
   CONSTRAINT "ck_local_credentials__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
   CONSTRAINT "ck_local_credentials__changed_at" CHECK ("last_changed_at" IS NULL OR "last_changed_at" >= "created_at"),
   CONSTRAINT "ck_local_credentials__credential_version" CHECK ("credential_version" > 0),
-  CONSTRAINT "ck_local_credentials__row_version" CHECK ("row_version" > 0)
+  CONSTRAINT "ck_local_credentials__row_version" CHECK ("row_version" > 0),
+  CONSTRAINT "ck_local_credentials_temporary_password_expiry" CHECK ((("credential_status" = 'CHANGE_REQUIRED') AND ("temporary_password_expires_at" IS NOT NULL)) OR (("credential_status" <> 'CHANGE_REQUIRED') AND ("temporary_password_expires_at" IS NULL)))
 );;
 
 CREATE UNIQUE INDEX "ux_local_credentials__current_user" ON "identity"."local_credentials" ("user_id") WHERE "credential_status" IN ('PENDING_ACTIVATION', 'ACTIVE', 'CHANGE_REQUIRED', 'LOCKED');;
 CREATE INDEX "ix_local_credentials__user_status" ON "identity"."local_credentials" ("user_id", "credential_status");;
+CREATE INDEX "ix_local_credentials_temporary_password_expiry" ON "identity"."local_credentials" ("temporary_password_expires_at") WHERE "credential_status" = 'CHANGE_REQUIRED';;
 
 COMMENT ON TABLE "identity"."local_credentials" IS 'Restricted local human credential verifier authority. Stores one-way verifier material and upgrade parameters only; it stores no plaintext or recoverable password, hint, reset token, session secret, or provider password.';;

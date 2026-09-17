@@ -223,6 +223,11 @@ $requiredMarkers = @(
     'identity.users',
     'username_normalized',
     'identity.local_credentials',
+    'temporary_password_expires_at',
+    'NATIVE_PARKING_APP',
+    'sessions.vendor_session_projections',
+    'sessions.vendor_session_projection_sync_targets',
+    'source_adapter_identity_id',
     'identity.external_identity_providers',
     'identity.external_identity_bindings',
     'identity.user_mfa_authenticators',
@@ -284,6 +289,11 @@ if ($RunDbApply) {
             if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the I-019 human-authentication validator.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-HumanAuthenticationFoundation.sql
             if ($LASTEXITCODE -ne 0) { throw 'I-019 human-authentication foundation validation failed.' }
+            $centralPmsRuntimeValidation = Join-Path $RepoRoot 'scripts\validation\Validate-CentralPmsRuntimeSchemaContract.sql'
+            & docker cp $centralPmsRuntimeValidation "$DockerContainer`:/tmp/Validate-CentralPmsRuntimeSchemaContract.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the Central PMS runtime schema contract validator.' }
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-CentralPmsRuntimeSchemaContract.sql
+            if ($LASTEXITCODE -ne 0) { throw 'Central PMS runtime schema contract validation failed.' }
             $aptRbacValidation = Join-Path $RepoRoot 'scripts\validation\Validate-AptOperationalRbacFoundation.sql'
             & docker cp $aptRbacValidation "$DockerContainer`:/tmp/Validate-AptOperationalRbacFoundation.sql"
             if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the I-021B APT RBAC validator.' }
@@ -314,6 +324,8 @@ if ($RunDbApply) {
                 if ($LASTEXITCODE -ne 0) { throw 'Central PMS alignment validation failed.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-HumanAuthenticationFoundation.sql')
                 if ($LASTEXITCODE -ne 0) { throw 'I-019 human-authentication foundation validation failed.' }
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-CentralPmsRuntimeSchemaContract.sql')
+                if ($LASTEXITCODE -ne 0) { throw 'Central PMS runtime schema contract validation failed.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-AptOperationalRbacFoundation.sql')
                 if ($LASTEXITCODE -ne 0) { throw 'I-021B APT operational RBAC validation failed.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-CanonicalManagementPlatformRoles.sql')
