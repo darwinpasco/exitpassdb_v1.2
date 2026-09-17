@@ -66,6 +66,11 @@ $required = @(
     'cashier-shifts.operate',
     'cash-custody.operate',
     'terminal-cash.receive',
+    'SYSTEM_ADMINISTRATOR',
+    'PARKING_ATTENDANT',
+    'APT_CASHIER_OPERATOR',
+    'parking-attendant.operate',
+    'apt.cashier.operate',
     'HUMAN_IDENTITY_EVENT_TYPE'
 )
 
