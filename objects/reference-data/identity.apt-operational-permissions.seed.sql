@@ -52,47 +52,8 @@ SET permission_name = EXCLUDED.permission_name,
     updated_at = now(),
     row_version = identity.permissions.row_version + 1;
 
-CREATE TEMP TABLE i021b_site_operator_bindings (
-    role_permission_id uuid PRIMARY KEY,
-    permission_code varchar(96) UNIQUE NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO i021b_site_operator_bindings VALUES
-('fd1580da-c069-5250-e49f-697d767af8a1', 'apt.access'),
-('45b48318-f583-7fd1-d048-d1e753f4057a', 'cashier-shifts.operate'),
-('06730455-c02f-4f7f-d89a-c822f76ab2f0', 'cash-custody.operate'),
-('e1504522-9e04-571d-d507-9b9441012ee4', 'terminal-cash.receive');
-
-INSERT INTO identity.role_permissions (
-    role_permission_id,
-    role_id,
-    permission_id,
-    binding_status,
-    binding_reason_code,
-    assigned_by_service_identity_id,
-    effective_from,
-    created_by_service_identity_id,
-    updated_by_service_identity_id
-)
-SELECT
-    binding.role_permission_id,
-    role.role_id,
-    permission.permission_id,
-    'ACTIVE',
-    'I021B_APT_OPERATIONAL_BASELINE',
-    '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978',
-    now(),
-    '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978',
-    '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'
-FROM i021b_site_operator_bindings binding
-JOIN identity.permissions permission ON permission.permission_code = binding.permission_code
-JOIN identity.roles role ON role.role_code = 'SITE_OPERATOR'
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM identity.role_permissions existing
-    WHERE existing.role_id = role.role_id
-      AND existing.permission_id = permission.permission_id
-      AND existing.binding_status = 'ACTIVE'
-);
+-- These granular v1.3 permission definitions remain available for application
+-- policy composition. The approved eight-role catalog binds APT human authority
+-- only through apt.cashier.operate on APT_CASHIER_OPERATOR.
 
 COMMIT;

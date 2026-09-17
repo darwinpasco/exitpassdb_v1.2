@@ -25,6 +25,7 @@ if ($SkipDbApply -and $RunDbApply) {
 & (Join-Path $RepoRoot 'scripts\build\Build-V13CentralPmsObjectSql.ps1') -RepoRoot $RepoRoot
 & (Join-Path $RepoRoot 'scripts\validation\Validate-ExitPassFullObjectSourceLayout.ps1') -RepoRoot $RepoRoot -SkipBuild
 & (Join-Path $RepoRoot 'scripts\validation\Validate-V13CentralPmsObjectSourceLayout.ps1') -RepoRoot $RepoRoot -SkipBuild
+& (Join-Path $RepoRoot 'scripts\validation\Validate-ApprovedIdentityRoleCatalogMigration.ps1') -RepoRoot $RepoRoot
 
 $coverageArgs = @{ RepoRoot = $RepoRoot }
 if ($RunDbApply) {
