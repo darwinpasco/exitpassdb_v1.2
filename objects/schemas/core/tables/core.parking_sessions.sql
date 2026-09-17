@@ -4,6 +4,7 @@ CREATE TABLE "core"."parking_sessions" (
   "site_group_id" uuid NOT NULL,
   "site_id" uuid NOT NULL,
   "vendor_system_id" uuid NOT NULL,
+  "source_adapter_identity_id" uuid NULL,
   "vendor_session_ref" character varying(128) NOT NULL,
   "plate_number_hash" character(64) NULL,
   "plate_number_masked" character varying(32) NULL,

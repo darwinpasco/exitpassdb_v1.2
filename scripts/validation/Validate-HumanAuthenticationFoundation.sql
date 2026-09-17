@@ -35,6 +35,49 @@ DECLARE
     duplicate_site_group_blocked boolean := false;
     invalid_global_blocked boolean := false;
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_enum e
+        JOIN pg_type t ON t.oid = e.enumtypid
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE n.nspname = 'identity'
+          AND t.typname = 'human_session_audience_enum'
+          AND e.enumlabel = 'NATIVE_PARKING_APP'
+    ) THEN
+        RAISE EXCEPTION 'NATIVE_PARKING_APP human-session audience is missing.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_attribute a
+        WHERE a.attrelid = 'identity.local_credentials'::regclass
+          AND a.attname = 'temporary_password_expires_at'
+          AND NOT a.attisdropped
+          AND format_type(a.atttypid, a.atttypmod) = 'timestamp with time zone'
+    ) THEN
+        RAISE EXCEPTION 'temporary_password_expires_at timestamptz is missing.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'identity.local_credentials'::regclass
+          AND conname = 'ck_local_credentials_temporary_password_expiry'
+          AND contype = 'c'
+    ) THEN
+        RAISE EXCEPTION 'Temporary-password expiry constraint is missing.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'identity'
+          AND tablename = 'local_credentials'
+          AND indexname = 'ix_local_credentials_temporary_password_expiry'
+          AND indexdef ILIKE '%(temporary_password_expires_at)%'
+          AND indexdef ILIKE '%WHERE (credential_status = ''CHANGE_REQUIRED''%'
+    ) THEN
+        RAISE EXCEPTION 'Temporary-password expiry partial index is missing or incompatible.';
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM information_schema.columns

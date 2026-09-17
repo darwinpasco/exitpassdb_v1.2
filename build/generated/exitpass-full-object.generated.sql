@@ -2557,6 +2557,7 @@ CREATE TABLE "core"."parking_sessions" (
   "site_group_id" uuid NOT NULL,
   "site_id" uuid NOT NULL,
   "vendor_system_id" uuid NOT NULL,
+  "source_adapter_identity_id" uuid NULL,
   "vendor_session_ref" character varying(128) NOT NULL,
   "plate_number_hash" character(64) NULL,
   "plate_number_masked" character varying(32) NULL,
@@ -3123,6 +3124,7 @@ CREATE TABLE "core"."tariff_snapshots" (
   "parking_session_id" uuid NOT NULL,
   "superseded_by_tariff_snapshot_id" uuid NULL,
   "vendor_system_id" uuid NOT NULL,
+  "source_adapter_identity_id" uuid NULL,
   "vendor_tariff_ref" character varying(128) NULL,
   "tariff_version_reference" character varying(128) NULL,
   "currency_code" character(3) NOT NULL,
@@ -9641,7 +9643,7 @@ CREATE TYPE "identity"."external_identity_provider_status_enum" AS ENUM ('DISABL
 -- ============================================================================
 -- Source object: objects/schemas/identity/types/identity.human_session_audience_enum.sql
 -- ============================================================================
-CREATE TYPE "identity"."human_session_audience_enum" AS ENUM ('MANAGEMENT_PLATFORM', 'OPERATOR_CONSOLE', 'APT');;
+CREATE TYPE "identity"."human_session_audience_enum" AS ENUM ('MANAGEMENT_PLATFORM', 'OPERATOR_CONSOLE', 'APT', 'NATIVE_PARKING_APP');;
 
 
 -- ============================================================================
@@ -11025,6 +11027,7 @@ CREATE TABLE "identity"."local_credentials" (
   "revoked_by_user_id" uuid NULL,
   "revoked_by_service_identity_id" uuid NULL,
   "status_reason_code" character varying(64) NULL,
+  "temporary_password_expires_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "created_by_user_id" uuid NULL,
   "created_by_service_identity_id" uuid NULL,
@@ -11044,11 +11047,13 @@ CREATE TABLE "identity"."local_credentials" (
   CONSTRAINT "ck_local_credentials__revocation_actor" CHECK (("revoked_at" IS NULL AND "revoked_by_user_id" IS NULL AND "revoked_by_service_identity_id" IS NULL) OR ("revoked_at" IS NOT NULL AND num_nonnulls("revoked_by_user_id", "revoked_by_service_identity_id") = 1)),
   CONSTRAINT "ck_local_credentials__changed_at" CHECK ("last_changed_at" IS NULL OR "last_changed_at" >= "created_at"),
   CONSTRAINT "ck_local_credentials__credential_version" CHECK ("credential_version" > 0),
-  CONSTRAINT "ck_local_credentials__row_version" CHECK ("row_version" > 0)
+  CONSTRAINT "ck_local_credentials__row_version" CHECK ("row_version" > 0),
+  CONSTRAINT "ck_local_credentials_temporary_password_expiry" CHECK ((("credential_status" = 'CHANGE_REQUIRED') AND ("temporary_password_expires_at" IS NOT NULL)) OR (("credential_status" <> 'CHANGE_REQUIRED') AND ("temporary_password_expires_at" IS NULL)))
 );;
 
 CREATE UNIQUE INDEX "ux_local_credentials__current_user" ON "identity"."local_credentials" ("user_id") WHERE "credential_status" IN ('PENDING_ACTIVATION', 'ACTIVE', 'CHANGE_REQUIRED', 'LOCKED');;
 CREATE INDEX "ix_local_credentials__user_status" ON "identity"."local_credentials" ("user_id", "credential_status");;
+CREATE INDEX "ix_local_credentials_temporary_password_expiry" ON "identity"."local_credentials" ("temporary_password_expires_at") WHERE "credential_status" = 'CHANGE_REQUIRED';;
 
 COMMENT ON TABLE "identity"."local_credentials" IS 'Restricted local human credential verifier authority. Stores one-way verifier material and upgrade parameters only; it stores no plaintext or recoverable password, hint, reset token, session secret, or provider password.';;
 
@@ -27476,6 +27481,361 @@ SET permission_name = EXCLUDED.permission_name,
 -- only through apt.cashier.operate on APT_CASHIER_OPERATOR.
 
 COMMIT;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/tables/core.vendor_adapter_routing.v13-alignment.sql
+-- ============================================================================
+ALTER TABLE core.parking_sessions
+    ADD COLUMN IF NOT EXISTS source_adapter_identity_id uuid;
+
+ALTER TABLE core.tariff_snapshots
+    ADD COLUMN IF NOT EXISTS source_adapter_identity_id uuid;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_parking_sessions__source_adapter_identity_id.sql
+-- ============================================================================
+DO $do$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'core.parking_sessions'::regclass
+          AND conname = 'fk_parking_sessions__source_adapter_identity_id'
+    ) THEN
+        ALTER TABLE core.parking_sessions
+            ADD CONSTRAINT fk_parking_sessions__source_adapter_identity_id
+            FOREIGN KEY (source_adapter_identity_id)
+            REFERENCES identity.service_identities(service_identity_id);
+    END IF;
+END
+$do$;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_tariff_snapshots__source_adapter_identity_id.sql
+-- ============================================================================
+DO $do$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'core.tariff_snapshots'::regclass
+          AND conname = 'fk_tariff_snapshots__source_adapter_identity_id'
+    ) THEN
+        ALTER TABLE core.tariff_snapshots
+            ADD CONSTRAINT fk_tariff_snapshots__source_adapter_identity_id
+            FOREIGN KEY (source_adapter_identity_id)
+            REFERENCES identity.service_identities(service_identity_id);
+    END IF;
+END
+$do$;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ix_parking_sessions__source_adapter_identity_id.sql
+-- ============================================================================
+CREATE INDEX IF NOT EXISTS ix_parking_sessions__source_adapter_identity_id
+    ON core.parking_sessions (source_adapter_identity_id);
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ix_tariff_snapshots__source_adapter_identity_id.sql
+-- ============================================================================
+CREATE INDEX IF NOT EXISTS ix_tariff_snapshots__source_adapter_identity_id
+    ON core.tariff_snapshots (source_adapter_identity_id);
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.parking_sessions.source_adapter_identity_id.column-comment.sql
+-- ============================================================================
+COMMENT ON COLUMN core.parking_sessions.source_adapter_identity_id IS
+    'Immutable Site Integration Adapter service identity used for the resolved vendor session.';
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.tariff_snapshots.source_adapter_identity_id.column-comment.sql
+-- ============================================================================
+COMMENT ON COLUMN core.tariff_snapshots.source_adapter_identity_id IS
+    'Immutable Site Integration Adapter service identity used for authoritative vendor tariff evidence.';
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sessions/tables/sessions.vendor_session_projections.sql
+-- ============================================================================
+CREATE TABLE sessions.vendor_session_projections (
+    vendor_session_projection_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    vendor_system_id uuid,
+    site_id uuid,
+    site_group_id uuid,
+    source_adapter_identity_id uuid,
+    parking_lot_index_code text,
+    parking_lot_name text,
+    passageway_index_code text,
+    passageway_name text,
+    lane_index_code text,
+    lane_name text,
+    lane_direction text,
+    vendor_record_guid text,
+    card_num text,
+    plate_license text,
+    enter_time timestamptz,
+    exit_time timestamptz,
+    allow_type text,
+    allow_result text,
+    image_url text,
+    source_api text NOT NULL,
+    source_payload_hash char(64) NOT NULL,
+    source_payload_reference text,
+    source_event_at timestamptz,
+    stable_identity_type text NOT NULL,
+    stable_identity_key text NOT NULL,
+    first_seen_at timestamptz NOT NULL,
+    last_seen_at timestamptz NOT NULL,
+    last_refreshed_at timestamptz NOT NULL,
+    projection_status text NOT NULL,
+    correlation_id uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    created_by_service_identity_id uuid NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    updated_by_service_identity_id uuid,
+    row_version bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT pk_vendor_session_projections PRIMARY KEY (vendor_session_projection_id),
+    CONSTRAINT fk_vendor_session_projections__vendor_system_id
+        FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT fk_vendor_session_projections__site_id
+        FOREIGN KEY (site_id) REFERENCES sites.sites(site_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT fk_vendor_session_projections__site_group_id
+        FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT fk_vendor_session_projections__source_adapter_identity_id
+        FOREIGN KEY (source_adapter_identity_id) REFERENCES identity.service_identities(service_identity_id),
+    CONSTRAINT fk_vendor_session_projections__created_by_service_identity_id
+        FOREIGN KEY (created_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT fk_vendor_session_projections__updated_by_service_identity_id
+        FOREIGN KEY (updated_by_service_identity_id) REFERENCES identity.service_identities(service_identity_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT uq_vendor_session_projections__target_stable_identity
+        UNIQUE (vendor_system_id, site_group_id, site_id, parking_lot_index_code, stable_identity_key),
+    CONSTRAINT ck_vendor_session_projections__row_version_positive CHECK (row_version > 0),
+    CONSTRAINT ck_vendor_session_projections__projection_status
+        CHECK (projection_status IN ('ACTIVE', 'EXITED', 'STALE', 'INVALIDATED', 'UNKNOWN')),
+    CONSTRAINT ck_vendor_session_projections__source_payload_hash_sha256
+        CHECK (source_payload_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ck_vendor_session_projections__stable_identity_required
+        CHECK (length(btrim(stable_identity_type)) > 0 AND length(btrim(stable_identity_key)) > 0),
+    CONSTRAINT ck_vendor_session_projections__seen_window
+        CHECK (last_seen_at >= first_seen_at AND last_refreshed_at >= first_seen_at)
+);
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sessions/indexes/sessions.vendor_session_projections.indexes.sql
+-- ============================================================================
+CREATE UNIQUE INDEX ux_vendor_session_projections__target_vendor_record_guid
+ON sessions.vendor_session_projections (
+    vendor_system_id,
+    site_group_id,
+    site_id,
+    parking_lot_index_code,
+    vendor_record_guid
+)
+WHERE vendor_system_id IS NOT NULL
+  AND site_group_id IS NOT NULL
+  AND site_id IS NOT NULL
+  AND parking_lot_index_code IS NOT NULL
+  AND vendor_record_guid IS NOT NULL;
+
+CREATE INDEX ix_vendor_session_projections__card_num
+ON sessions.vendor_session_projections (card_num)
+WHERE card_num IS NOT NULL;
+
+CREATE INDEX ix_vendor_session_projections__plate_license
+ON sessions.vendor_session_projections (plate_license)
+WHERE plate_license IS NOT NULL;
+
+CREATE INDEX ix_vendor_session_projections__parking_lot_card
+ON sessions.vendor_session_projections (parking_lot_index_code, card_num)
+WHERE card_num IS NOT NULL;
+
+CREATE INDEX ix_vendor_session_projections__site_card
+ON sessions.vendor_session_projections (site_id, card_num)
+WHERE site_id IS NOT NULL AND card_num IS NOT NULL;
+
+CREATE INDEX ix_vendor_session_projections__status_refreshed
+ON sessions.vendor_session_projections (projection_status, last_refreshed_at DESC);
+
+CREATE INDEX ix_vendor_session_projections__active_open
+ON sessions.vendor_session_projections (parking_lot_index_code, last_refreshed_at DESC)
+WHERE projection_status = 'ACTIVE';
+
+CREATE INDEX ix_vendor_session_projections__last_refreshed_at
+ON sessions.vendor_session_projections (last_refreshed_at);
+
+CREATE INDEX ix_vendor_session_projections__correlation_id
+ON sessions.vendor_session_projections (correlation_id)
+WHERE correlation_id IS NOT NULL;
+
+CREATE INDEX ix_vendor_session_projections__source_adapter_identity_id
+ON sessions.vendor_session_projections (source_adapter_identity_id);
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sessions/comments/sessions.vendor_session_projections.comments.sql
+-- ============================================================================
+COMMENT ON TABLE sessions.vendor_session_projections IS 'ExitPass-owned read model of latest-known vendor session continuity snapshots. This projection is not parking-session authority, tariff authority, payment finality, or exit authorization.';
+COMMENT ON COLUMN sessions.vendor_session_projections.vendor_session_projection_id IS 'Canonical identifier of the projection snapshot.';
+COMMENT ON COLUMN sessions.vendor_session_projections.vendor_system_id IS 'Vendor PMS that supplied the passageway source record, where mapped.';
+COMMENT ON COLUMN sessions.vendor_session_projections.site_id IS 'ExitPass site scope, where mapped.';
+COMMENT ON COLUMN sessions.vendor_session_projections.site_group_id IS 'ExitPass site group scope, where mapped.';
+COMMENT ON COLUMN sessions.vendor_session_projections.source_adapter_identity_id IS 'Site Integration Adapter service identity that supplied the provider-neutral projection.';
+COMMENT ON COLUMN sessions.vendor_session_projections.parking_lot_index_code IS 'HikCentral parking lot index code.';
+COMMENT ON COLUMN sessions.vendor_session_projections.parking_lot_name IS 'HikCentral parking lot display name.';
+COMMENT ON COLUMN sessions.vendor_session_projections.passageway_index_code IS 'HikCentral passageway index code.';
+COMMENT ON COLUMN sessions.vendor_session_projections.passageway_name IS 'HikCentral passageway display name.';
+COMMENT ON COLUMN sessions.vendor_session_projections.lane_index_code IS 'HikCentral lane index code.';
+COMMENT ON COLUMN sessions.vendor_session_projections.lane_name IS 'HikCentral lane display name.';
+COMMENT ON COLUMN sessions.vendor_session_projections.lane_direction IS 'HikCentral lane direction, where supplied.';
+COMMENT ON COLUMN sessions.vendor_session_projections.vendor_record_guid IS 'HikCentral passageway record GUID, where supplied.';
+COMMENT ON COLUMN sessions.vendor_session_projections.card_num IS 'HikCentral personInfo.cardNum value used as ticket/card lookup value.';
+COMMENT ON COLUMN sessions.vendor_session_projections.plate_license IS 'Optional HikCentral plate license value.';
+COMMENT ON COLUMN sessions.vendor_session_projections.enter_time IS 'Entry timestamp from the vendor passageway record.';
+COMMENT ON COLUMN sessions.vendor_session_projections.exit_time IS 'Exit timestamp from the vendor passageway record.';
+COMMENT ON COLUMN sessions.vendor_session_projections.allow_type IS 'Vendor allow type from the passageway record.';
+COMMENT ON COLUMN sessions.vendor_session_projections.allow_result IS 'Vendor allow result from the passageway record.';
+COMMENT ON COLUMN sessions.vendor_session_projections.image_url IS 'Vendor image URL reference, where supplied.';
+COMMENT ON COLUMN sessions.vendor_session_projections.source_api IS 'Vendor source API path used to build the projection.';
+COMMENT ON COLUMN sessions.vendor_session_projections.source_payload_hash IS 'SHA-256 hash of the normalized source payload; raw payload is not retained in this table.';
+COMMENT ON COLUMN sessions.vendor_session_projections.source_payload_reference IS 'Safe source payload reference such as vendor record GUID or derived reference.';
+COMMENT ON COLUMN sessions.vendor_session_projections.source_event_at IS 'Best available source event timestamp from enter/exit time.';
+COMMENT ON COLUMN sessions.vendor_session_projections.stable_identity_type IS 'Stable identity strategy used for idempotent upsert.';
+COMMENT ON COLUMN sessions.vendor_session_projections.stable_identity_key IS 'Stable projection identity key used for idempotent upsert.';
+COMMENT ON COLUMN sessions.vendor_session_projections.first_seen_at IS 'First time ExitPass observed this projection identity.';
+COMMENT ON COLUMN sessions.vendor_session_projections.last_seen_at IS 'Most recent time ExitPass observed this projection identity.';
+COMMENT ON COLUMN sessions.vendor_session_projections.last_refreshed_at IS 'Most recent time ExitPass refreshed this projection snapshot.';
+COMMENT ON COLUMN sessions.vendor_session_projections.projection_status IS 'Projection snapshot status: ACTIVE, EXITED, STALE, INVALIDATED, or UNKNOWN.';
+COMMENT ON COLUMN sessions.vendor_session_projections.correlation_id IS 'Cross-service correlation identifier for the pull that last refreshed this projection.';
+COMMENT ON COLUMN sessions.vendor_session_projections.created_at IS 'Record creation timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projections.created_by_service_identity_id IS 'Service identity that created the projection.';
+COMMENT ON COLUMN sessions.vendor_session_projections.updated_at IS 'Last update timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projections.updated_by_service_identity_id IS 'Service identity that last updated the projection.';
+COMMENT ON COLUMN sessions.vendor_session_projections.row_version IS 'Optimistic concurrency version.';
+COMMENT ON CONSTRAINT uq_vendor_session_projections__target_stable_identity ON sessions.vendor_session_projections IS 'Idempotent projection identity isolated by Vendor System, Site Group, Site, and parking lot.';
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sessions/tables/sessions.vendor_session_projection_sync_targets.sql
+-- ============================================================================
+CREATE TABLE sessions.vendor_session_projection_sync_targets (
+    projection_sync_target_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    site_id uuid NOT NULL,
+    site_group_id uuid NOT NULL,
+    vendor_system_id uuid NOT NULL,
+    parking_lot_index_code text NOT NULL,
+    parking_lot_name text,
+    enabled_flag boolean DEFAULT false NOT NULL,
+    poll_interval_seconds integer DEFAULT 60 NOT NULL,
+    lookback_window_minutes integer DEFAULT 180 NOT NULL,
+    page_size integer DEFAULT 100 NOT NULL,
+    last_success_at timestamptz,
+    last_failure_at timestamptz,
+    last_attempt_at timestamptz,
+    health_status text DEFAULT 'DISABLED' NOT NULL,
+    failure_count integer DEFAULT 0 NOT NULL,
+    last_error_code text,
+    last_error_message text,
+    last_lock_contention_at timestamptz,
+    lock_contention_count integer DEFAULT 0 NOT NULL,
+    correlation_id uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    row_version integer DEFAULT 1 NOT NULL,
+    CONSTRAINT pk_vendor_session_projection_sync_targets PRIMARY KEY (projection_sync_target_id),
+    CONSTRAINT fk_vendor_session_projection_sync_targets__site_id
+        FOREIGN KEY (site_id) REFERENCES sites.sites(site_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT fk_vendor_session_projection_sync_targets__site_group_id
+        FOREIGN KEY (site_group_id) REFERENCES sites.site_groups(site_group_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT fk_vendor_session_projection_sync_targets__vendor_system_id
+        FOREIGN KEY (vendor_system_id) REFERENCES integration.vendor_systems(vendor_system_id)
+        DEFERRABLE INITIALLY IMMEDIATE,
+    CONSTRAINT ck_vendor_session_projection_sync_targets__row_version_positive CHECK (row_version > 0),
+    CONSTRAINT ck_vendor_session_projection_sync_targets__health_status
+        CHECK (health_status IN ('HEALTHY', 'DEGRADED', 'FAILING', 'DISABLED', 'DEFERRED', 'UNKNOWN')),
+    CONSTRAINT ck_vendor_session_projection_sync_targets__parking_lot_required
+        CHECK (length(btrim(parking_lot_index_code)) > 0),
+    CONSTRAINT ck_vendor_session_projection_sync_targets__poll_interval_positive
+        CHECK (poll_interval_seconds > 0),
+    CONSTRAINT ck_vendor_session_projection_sync_targets__lookback_positive
+        CHECK (lookback_window_minutes > 0),
+    CONSTRAINT ck_vendor_session_projection_sync_targets__page_size_bounds
+        CHECK (page_size BETWEEN 1 AND 500),
+    CONSTRAINT ck_vendor_session_projection_sync_targets__failure_count_non_negative
+        CHECK (failure_count >= 0),
+    CONSTRAINT ck_vendor_projection_targets__lock_contention_non_negative
+        CHECK (lock_contention_count >= 0)
+);
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sessions/indexes/sessions.vendor_session_projection_sync_targets.indexes.sql
+-- ============================================================================
+CREATE UNIQUE INDEX ux_vendor_session_projection_sync_targets__scope
+ON sessions.vendor_session_projection_sync_targets (site_id, vendor_system_id, parking_lot_index_code);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__enabled_due
+ON sessions.vendor_session_projection_sync_targets (enabled_flag, last_attempt_at, poll_interval_seconds)
+WHERE enabled_flag = TRUE;
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__site
+ON sessions.vendor_session_projection_sync_targets (site_id);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__parking_lot
+ON sessions.vendor_session_projection_sync_targets (parking_lot_index_code);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__vendor_system
+ON sessions.vendor_session_projection_sync_targets (vendor_system_id);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__health
+ON sessions.vendor_session_projection_sync_targets (health_status, last_success_at DESC, last_failure_at DESC);
+
+CREATE INDEX ix_vendor_session_projection_sync_targets__correlation_id
+ON sessions.vendor_session_projection_sync_targets (correlation_id)
+WHERE correlation_id IS NOT NULL;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/sessions/comments/sessions.vendor_session_projection_sync_targets.comments.sql
+-- ============================================================================
+COMMENT ON TABLE sessions.vendor_session_projection_sync_targets IS 'Site-scoped HikCentral vendor session projection scheduler targets. This table configures refresh of continuity snapshots and is not parking-session authority, tariff authority, payment finality, or exit authorization.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.projection_sync_target_id IS 'Canonical identifier of the projection sync target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.site_id IS 'ExitPass site scope for this projection sync target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.site_group_id IS 'ExitPass site group scope for this projection sync target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.vendor_system_id IS 'Vendor PMS that supplies passageway records for this target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.parking_lot_index_code IS 'HikCentral parking lot index code scoped to this target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.parking_lot_name IS 'Optional HikCentral parking lot display name.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.enabled_flag IS 'Whether the centralized scheduler may run this target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.poll_interval_seconds IS 'Minimum interval between scheduled attempts for this target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.lookback_window_minutes IS 'Lookback window used for passageway record pulls.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.page_size IS 'Vendor API page size used for passageway record pulls.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.last_success_at IS 'Last successful projection sync completion timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.last_failure_at IS 'Last failed projection sync completion timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.last_attempt_at IS 'Last projection sync attempt timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.health_status IS 'Operational target health: HEALTHY, DEGRADED, FAILING, DISABLED, DEFERRED, or UNKNOWN.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.failure_count IS 'Consecutive failure count for this target.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.last_error_code IS 'Last sync error code, when failed.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.last_error_message IS 'Last sync error message, when failed.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.last_lock_contention_at IS 'Last cycle deferred because another scheduler held the target-scoped advisory lock.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.lock_contention_count IS 'Cumulative target-scoped advisory lock contention count.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.correlation_id IS 'Correlation identifier for the last scheduler/manual attempt.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.created_at IS 'Record creation timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.updated_at IS 'Last update timestamp.';
+COMMENT ON COLUMN sessions.vendor_session_projection_sync_targets.row_version IS 'Optimistic concurrency version.';
 
 
 -- ============================================================================
