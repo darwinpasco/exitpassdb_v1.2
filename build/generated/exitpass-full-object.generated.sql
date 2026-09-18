@@ -27868,14 +27868,14 @@ CREATE TEMP TABLE wave3_roles (
 ) ON COMMIT DROP;
 
 INSERT INTO wave3_roles VALUES
-('SYSTEM_ADMINISTRATOR','System Administrator','Administrative authority only: identity/RBAC, site, device, shift, POS Server/fiscal configuration, connector, platform configuration, and access audit.','SYSTEM','CANONICAL_ROLE','ACTIVE',true,true,false,true),
-('OPERATIONS_SUPERVISOR','Operations Supervisor','Assigned-site operations, operational exception, and shift supervision; plus all-site statutory discount supervision on Management Platform only.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,true,false,true),
+('SYSTEM_ADMINISTRATOR','System Administrator','Administrative authority only: identity/RBAC, site, device, shift, POS Server/fiscal configuration, connector, platform configuration, and access audit.','SYSTEM','CANONICAL_ROLE','ACTIVE',true,true,true,true),
+('OPERATIONS_SUPERVISOR','Operations Supervisor','Assigned-site operations, operational exception, and shift supervision; plus all-site statutory discount supervision on Management Platform only.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,true,true,true),
 ('SITE_OPERATOR','Site Operator','Assigned-site operation, support, and statutory discount processing without approval.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('PARKING_ATTENDANT','Parking Attendant','Native Parking App authority at assigned sites and devices.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('APT_CASHIER_OPERATOR','APT / Cashier Operator','APT authority at assigned sites and terminals.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('FINANCE_RECONCILIATION_ANALYST','Finance / Reconciliation Analyst','Finance and reconciliation responsibilities within assigned scope.','FINANCE','CANONICAL_ROLE','ACTIVE',false,false,true,true),
-('COMPLIANCE_POLICY_ADMINISTRATOR','Compliance / Policy Administrator','Global-by-default compliance and policy responsibilities.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,true,false,true),
-('EXECUTIVE_MANAGEMENT','Executive / Management','Read-only management reporting with mandatory Global scope.','OTHER','CANONICAL_ROLE','ACTIVE',false,true,false,true),
+('COMPLIANCE_POLICY_ADMINISTRATOR','Compliance / Policy Administrator','Global-by-default compliance and policy responsibilities.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,true,true,true),
+('EXECUTIVE_MANAGEMENT','Executive / Management','Read-only management reporting with mandatory Global scope.','OTHER','CANONICAL_ROLE','ACTIVE',false,true,true,true),
 ('SYSTEM_ADMIN','System Administrator (superseded)','Superseded v1.2 role retained only for migration evidence.','SYSTEM','HISTORICAL_LEGACY_ROLE','RETIRED',true,true,false,false),
 ('SYSTEM_RBAC_ADMINISTRATOR','System / RBAC Administrator (superseded)','Superseded split-administrator role retained only for migration evidence.','SYSTEM','HISTORICAL_LEGACY_ROLE','RETIRED',true,true,false,false),
 ('PLATFORM_ADMINISTRATOR','Platform Administrator (superseded)','Superseded split-administrator role retained only for migration evidence.','OPERATIONS','HISTORICAL_LEGACY_ROLE','RETIRED',true,true,false,false),
