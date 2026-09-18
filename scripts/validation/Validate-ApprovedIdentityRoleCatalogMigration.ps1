@@ -9,6 +9,7 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 
 $sourcePath = Join-Path $RepoRoot 'objects\reference-data\identity.v13-management-platform-role-permission-bundles.sql'
 $migrationPath = Join-Path $RepoRoot 'migrations\20260917120000_v13_approved_identity_role_catalog.sql'
+$directAddMigrationPath = Join-Path $RepoRoot 'migrations\20260918120000_v13_all_approved_roles_direct_add.sql'
 
 function Read-NormalizedSql([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { throw "Required SQL file not found: $Path" }
@@ -27,7 +28,15 @@ $approvedCodes = @(
     'COMPLIANCE_POLICY_ADMINISTRATOR','EXECUTIVE_MANAGEMENT'
 )
 foreach ($roleCode in $approvedCodes) {
-    if (-not $source.Contains("('$roleCode'")) { throw "Canonical role source is missing $roleCode." }
+    $matchingRow = @(Get-Content -LiteralPath $sourcePath | Where-Object { $_.StartsWith("('$roleCode',") -and $_.Contains("'CANONICAL_ROLE'") })
+    if ($matchingRow.Count -ne 1 -or $matchingRow[0] -notmatch ',true,true\),$') {
+        throw "Canonical role $roleCode must be human-assignable and direct-add eligible."
+    }
+}
+if ($approvedCodes.Count -ne 8) { throw 'Exactly eight approved roles are required.' }
+$directAddMigration = Read-NormalizedSql $directAddMigrationPath
+foreach ($roleCode in $approvedCodes) {
+    if (-not $directAddMigration.Contains("'$roleCode'")) { throw "Direct Add User migration is missing $roleCode." }
 }
 if ($source.Contains("SELECT 'SYSTEM_ADMIN',p.permission_code")) {
     throw 'Superseded SYSTEM_ADMIN all-permissions expansion remains in canonical source.'

@@ -53,7 +53,7 @@ DECLARE
 BEGIN
   SELECT array_agg(role_code ORDER BY role_code) INTO actual_roles
   FROM identity.roles
-  WHERE human_assignable AND role_status='ACTIVE'
+  WHERE human_assignable AND direct_add_user_eligible AND role_status='ACTIVE'
     AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now());
   IF actual_roles IS DISTINCT FROM expected_roles THEN
     RAISE EXCEPTION 'Expected approved active role catalog %, found %.', expected_roles, actual_roles;
@@ -62,9 +62,16 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM identity.roles
     WHERE role_code=ANY(expected_roles)
-      AND (role_provenance<>'CANONICAL_ROLE' OR role_status<>'ACTIVE' OR NOT human_assignable)
+      AND (role_provenance<>'CANONICAL_ROLE' OR role_status<>'ACTIVE' OR NOT human_assignable OR NOT direct_add_user_eligible)
   ) THEN
-    RAISE EXCEPTION 'An approved role is not active, canonical, and human-assignable.';
+    RAISE EXCEPTION 'An approved role is not active, canonical, human-assignable, and direct-add eligible.';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM identity.roles
+    WHERE role_status='ACTIVE' AND (human_assignable OR direct_add_user_eligible)
+      AND (NOT human_assignable OR NOT direct_add_user_eligible OR role_code<>ALL(expected_roles))
+  ) THEN
+    RAISE EXCEPTION 'Only the eight approved roles may be active and selectable for Add User.';
   END IF;
   IF EXISTS (
     SELECT 1 FROM identity.roles
