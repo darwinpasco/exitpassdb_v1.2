@@ -642,8 +642,15 @@ COMMENT ON TABLE "identity"."privileged_access_decisions" IS 'Immutable independ
 
 CREATE TABLE IF NOT EXISTS core.fiscal_issuance_references (
     fiscal_issuance_reference_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    payment_confirmation_id uuid NOT NULL,
-    payment_attempt_id uuid NOT NULL,
+    payment_confirmation_id uuid,
+    payment_attempt_id uuid,
+    completion_basis varchar(64) NOT NULL,
+    completion_authority_reference_id uuid NOT NULL,
+    statutory_discount_decision_command_id uuid,
+    statutory_discount_payable_basis_application_command_id uuid,
+    statutory_discount_validation_id uuid,
+    applied_policy_reference_id uuid,
+    statutory_discount_policy_version_id uuid,
     parking_session_id uuid NOT NULL,
     tariff_snapshot_id uuid,
     site_id uuid,
@@ -663,6 +670,7 @@ CREATE TABLE IF NOT EXISTS core.fiscal_issuance_references (
     fiscal_number_suffix_text varchar(80),
     fiscal_number_assigned_at timestamptz,
     fiscal_number_assigned_by_ref varchar(160),
+    electronic_journal_event_reference varchar(192),
     fiscal_document_status_code_id uuid,
     result_classification varchar(40),
     fiscal_issuance_evidence_status varchar(80),
@@ -688,6 +696,32 @@ CREATE TABLE IF NOT EXISTS core.fiscal_issuance_references (
     is_superseded boolean DEFAULT false NOT NULL,
     is_reconciled boolean DEFAULT false NOT NULL,
     CONSTRAINT pk_fiscal_issuance_references PRIMARY KEY (fiscal_issuance_reference_id),
+    CONSTRAINT ck_fiscal_issuance_references__completion_ancestry CHECK (
+        (
+            completion_basis = 'PAYMENT_FINALITY'
+            AND payment_attempt_id IS NOT NULL
+            AND payment_confirmation_id IS NOT NULL
+            AND completion_authority_reference_id = payment_confirmation_id
+            AND statutory_discount_decision_command_id IS NULL
+            AND statutory_discount_payable_basis_application_command_id IS NULL
+            AND statutory_discount_validation_id IS NULL
+            AND applied_policy_reference_id IS NULL
+            AND statutory_discount_policy_version_id IS NULL
+        ) OR (
+            completion_basis = 'ZERO_PAYABLE_STATUTORY_FINALITY'
+            AND payment_attempt_id IS NULL
+            AND payment_confirmation_id IS NULL
+            AND completion_authority_reference_id = statutory_discount_payable_basis_application_command_id
+            AND statutory_discount_decision_command_id IS NOT NULL
+            AND statutory_discount_payable_basis_application_command_id IS NOT NULL
+            AND statutory_discount_validation_id IS NOT NULL
+            AND (
+                (applied_policy_reference_id IS NOT NULL AND statutory_discount_policy_version_id IS NULL)
+                OR
+                (applied_policy_reference_id IS NULL AND statutory_discount_policy_version_id IS NOT NULL)
+            )
+        )
+    ),
     CONSTRAINT ck_fiscal_issuance_references__fiscal_sequence_value_positive CHECK (fiscal_sequence_value IS NULL OR fiscal_sequence_value > 0),
     CONSTRAINT ck_fiscal_issuance_references__result_classification CHECK (
         result_classification IS NULL
@@ -2587,7 +2621,7 @@ COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."benefit_type
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."policy_effect_support_status" IS 'Whether the policy effect is supported by current calculation/application logic. Unsupported effects must not be applied as a distorted discount.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."beneficiary_residency_scope" IS 'Resident-only, non-resident, mixed, or unresolved eligibility scope. Residency evidence is separate from ID evidence.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."official_source_available" IS 'Whether an official source is available to the controlled publisher. False does not mean the benefit does not exist.';;
-COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_text_available" IS 'Whether governing ordinance text is available. ParaÃ±aque verified active operational policy can be represented with this false.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_text_available" IS 'Whether governing ordinance text is available. Parañaque verified active operational policy can be represented with this false.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_number_available" IS 'Whether the ordinance number is available. Unknown numbers remain null and must not be fabricated.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."unresolved_policy_facts" IS 'Safe notes for unknown legal facts; never raw ID evidence, images, credentials, or unpublished legal notes.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."transaction_use_effective_from" IS 'Controlled publication effective instant for transaction use. This is distinct from unknown legal enactment dates.';;

@@ -309,6 +309,16 @@ if ($RunDbApply) {
             if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the realistic carpark catalog validator.' }
             & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-RealisticCarparkCatalog.sql
             if ($LASTEXITCODE -ne 0) { throw 'Realistic carpark catalog validation failed.' }
+            $paranaquePolicyValidation = Join-Path $RepoRoot 'scripts\validation\Validate-ParanaqueFreeParkingPolicies.sql'
+            & docker cp $paranaquePolicyValidation "$DockerContainer`:/tmp/Validate-ParanaqueFreeParkingPolicies.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the Paranaque free-parking policy validator.' }
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-ParanaqueFreeParkingPolicies.sql
+            if ($LASTEXITCODE -ne 0) { throw 'Paranaque free-parking policy validation failed.' }
+            $exitAuthorizationValidation = Join-Path $RepoRoot 'scripts\validation\Validate-ExitAuthorizationCompletionAuthority.sql'
+            & docker cp $exitAuthorizationValidation "$DockerContainer`:/tmp/Validate-ExitAuthorizationCompletionAuthority.sql"
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to copy the ExitAuthorization completion-authority validator.' }
+            & docker exec $DockerContainer psql -v ON_ERROR_STOP=1 -U $DbUser -d $ValidationDatabase -f /tmp/Validate-ExitAuthorizationCompletionAuthority.sql
+            if ($LASTEXITCODE -ne 0) { throw 'ExitAuthorization completion-authority validation failed.' }
         } else {
             $psql = Get-Command psql -ErrorAction Stop
             $previousPassword = $env:PGPASSWORD
@@ -332,6 +342,10 @@ if ($RunDbApply) {
                 if ($LASTEXITCODE -ne 0) { throw 'Canonical Management Platform RBAC validation failed.' }
                 & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-RealisticCarparkCatalog.sql')
                 if ($LASTEXITCODE -ne 0) { throw 'Realistic carpark catalog validation failed.' }
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-ParanaqueFreeParkingPolicies.sql')
+                if ($LASTEXITCODE -ne 0) { throw 'Paranaque free-parking policy validation failed.' }
+                & psql -h $DbHost -p $DbPort -U $DbUser -d $ValidationDatabase -v ON_ERROR_STOP=1 -f (Join-Path $RepoRoot 'scripts\validation\Validate-ExitAuthorizationCompletionAuthority.sql')
+                if ($LASTEXITCODE -ne 0) { throw 'ExitAuthorization completion-authority validation failed.' }
             } finally {
                 $env:PGPASSWORD = $previousPassword
             }

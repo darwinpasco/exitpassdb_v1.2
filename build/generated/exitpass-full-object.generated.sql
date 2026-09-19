@@ -2331,7 +2331,7 @@ COMMENT ON COLUMN "config"."ttl_policies"."row_version" IS 'Optimistic concurren
 -- Source object: objects/schemas/core/types/core.exit_authorization_status_enum.sql
 -- ============================================================================
 -- Create enum type "exit_authorization_status_enum"
-CREATE TYPE "core"."exit_authorization_status_enum" AS ENUM ('ISSUED', 'EXPIRED', 'INVALIDATED');;
+CREATE TYPE "core"."exit_authorization_status_enum" AS ENUM ('ISSUED', 'CONSUMED', 'EXPIRED', 'INVALIDATED');;
 
 
 -- ============================================================================
@@ -2369,12 +2369,21 @@ CREATE TYPE "core"."tariff_snapshot_status_enum" AS ENUM ('ACTIVE', 'CONSUMED', 
 CREATE TABLE "core"."exit_authorizations" (
   "exit_authorization_id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "parking_session_id" uuid NOT NULL,
-  "payment_attempt_id" uuid NOT NULL,
-  "payment_confirmation_id" uuid NOT NULL,
+  "tariff_snapshot_id" uuid NOT NULL,
+  "completion_basis" character varying(64) NOT NULL,
+  "completion_authority_reference_id" uuid NOT NULL,
+  "payment_attempt_id" uuid NULL,
+  "payment_confirmation_id" uuid NULL,
+  "statutory_discount_decision_command_id" uuid NULL,
+  "statutory_discount_payable_basis_application_command_id" uuid NULL,
+  "statutory_discount_validation_id" uuid NULL,
+  "applied_policy_reference_id" uuid NULL,
+  "statutory_discount_policy_version_id" uuid NULL,
   "authorization_token_hash" character(64) NOT NULL,
   "authorization_status" "core"."exit_authorization_status_enum" NOT NULL,
   "issued_at" timestamptz NOT NULL,
   "expires_at" timestamptz NOT NULL,
+  "consumed_at" timestamptz NULL,
   "invalidated_at" timestamptz NULL,
   "invalidation_reason_code" character varying(64) NULL,
   "correlation_id" uuid NULL,
@@ -2383,7 +2392,40 @@ CREATE TABLE "core"."exit_authorizations" (
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   "updated_by_service_identity_id" uuid NULL,
   "row_version" bigint NOT NULL DEFAULT 1,
-  CONSTRAINT "pk_exit_authorizations" PRIMARY KEY ("exit_authorization_id")
+  CONSTRAINT "pk_exit_authorizations" PRIMARY KEY ("exit_authorization_id"),
+  CONSTRAINT "ck_exit_authorizations__completion_basis" CHECK (completion_basis IN ('PAYMENT_FINALITY', 'ZERO_PAYABLE_STATUTORY_FINALITY')),
+  CONSTRAINT "ck_exit_authorizations__consumed_state" CHECK (
+    (authorization_status = 'CONSUMED' AND consumed_at IS NOT NULL)
+    OR (authorization_status <> 'CONSUMED' AND consumed_at IS NULL)
+  ),
+  CONSTRAINT "ck_exit_authorizations__completion_ancestry" CHECK (
+    (
+      completion_basis = 'PAYMENT_FINALITY'
+      AND payment_attempt_id IS NOT NULL
+      AND payment_confirmation_id IS NOT NULL
+      AND completion_authority_reference_id = payment_confirmation_id
+      AND statutory_discount_decision_command_id IS NULL
+      AND statutory_discount_payable_basis_application_command_id IS NULL
+      AND statutory_discount_validation_id IS NULL
+      AND applied_policy_reference_id IS NULL
+      AND statutory_discount_policy_version_id IS NULL
+    )
+    OR
+    (
+      completion_basis = 'ZERO_PAYABLE_STATUTORY_FINALITY'
+      AND payment_attempt_id IS NULL
+      AND payment_confirmation_id IS NULL
+      AND completion_authority_reference_id = statutory_discount_payable_basis_application_command_id
+      AND statutory_discount_decision_command_id IS NOT NULL
+      AND statutory_discount_payable_basis_application_command_id IS NOT NULL
+      AND statutory_discount_validation_id IS NOT NULL
+      AND (
+        (applied_policy_reference_id IS NOT NULL AND statutory_discount_policy_version_id IS NULL)
+        OR
+        (applied_policy_reference_id IS NULL AND statutory_discount_policy_version_id IS NOT NULL)
+      )
+    )
+  )
 );;
 
 
@@ -2423,6 +2465,27 @@ CREATE INDEX "ix_exit_authorizations__payment_confirmation_id" ON "core"."exit_a
 
 
 -- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ix_exit_authorizations__tariff_snapshot_id.sql
+-- ============================================================================
+CREATE INDEX "ix_exit_authorizations__tariff_snapshot_id"
+  ON "core"."exit_authorizations" ("tariff_snapshot_id");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ix_exit_authorizations__completion_basis.sql
+-- ============================================================================
+CREATE INDEX "ix_exit_authorizations__completion_basis"
+  ON "core"."exit_authorizations" ("completion_basis");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ux_exit_authorizations__completion_authority.sql
+-- ============================================================================
+CREATE UNIQUE INDEX "ux_exit_authorizations__completion_authority"
+  ON "core"."exit_authorizations" ("completion_basis", "completion_authority_reference_id");;
+
+
+-- ============================================================================
 -- Source object: objects/schemas/core/indexes/core.ux_exit_authorizations__active_by_session.sql
 -- ============================================================================
 -- Create index "ux_exit_authorizations__active_by_session" to table: "exit_authorizations"
@@ -2433,7 +2496,7 @@ CREATE UNIQUE INDEX "ux_exit_authorizations__active_by_session" ON "core"."exit_
 -- Source object: objects/schemas/core/comments/core.exit_authorizations.comments.sql
 -- ============================================================================
 -- Set comment to table: "exit_authorizations"
-COMMENT ON TABLE "core"."exit_authorizations" IS 'ExitPass v1.2 table generated from Section 13 physical table specifications.';;
+COMMENT ON TABLE "core"."exit_authorizations" IS 'Canonical single-use exit authority backed by transaction completion authority, including paid and statutory zero-payable completion.';;
 
 
 -- ============================================================================
@@ -2454,14 +2517,14 @@ COMMENT ON COLUMN "core"."exit_authorizations"."parking_session_id" IS 'Parking 
 -- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.2.sql
 -- ============================================================================
 -- Set comment to column: "payment_attempt_id" on table: "exit_authorizations"
-COMMENT ON COLUMN "core"."exit_authorizations"."payment_attempt_id" IS 'Confirmed payment attempt that established financial control state.';;
+COMMENT ON COLUMN "core"."exit_authorizations"."payment_attempt_id" IS 'Confirmed payment attempt for PAYMENT_FINALITY; null for statutory zero-payable completion.';;
 
 
 -- ============================================================================
 -- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.3.sql
 -- ============================================================================
 -- Set comment to column: "payment_confirmation_id" on table: "exit_authorizations"
-COMMENT ON COLUMN "core"."exit_authorizations"."payment_confirmation_id" IS 'Canonical payment confirmation supporting issuance.';;
+COMMENT ON COLUMN "core"."exit_authorizations"."payment_confirmation_id" IS 'Recorded payment confirmation for PAYMENT_FINALITY; null for statutory zero-payable completion.';;
 
 
 -- ============================================================================
@@ -2546,6 +2609,61 @@ COMMENT ON COLUMN "core"."exit_authorizations"."updated_by_service_identity_id" 
 -- ============================================================================
 -- Set comment to column: "row_version" on table: "exit_authorizations"
 COMMENT ON COLUMN "core"."exit_authorizations"."row_version" IS 'Optimistic concurrency version.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.16.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."tariff_snapshot_id" IS 'Immutable payable basis authorized for exit.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.17.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."completion_basis" IS 'Transaction completion basis: PAYMENT_FINALITY or ZERO_PAYABLE_STATUTORY_FINALITY.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.18.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."completion_authority_reference_id" IS 'Durable payment-confirmation or statutory payable-basis application command establishing completion.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.19.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."statutory_discount_decision_command_id" IS 'Approved statutory decision supporting zero-payable completion.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.20.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."statutory_discount_payable_basis_application_command_id" IS 'Applied statutory payable-basis command supporting zero-payable completion.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.21.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."statutory_discount_validation_id" IS 'Approved statutory validation supporting zero-payable completion.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.22.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."applied_policy_reference_id" IS 'Legacy applied policy reference supporting zero-payable completion when applicable.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.23.sql
+-- ============================================================================
+COMMENT ON COLUMN "core"."exit_authorizations"."statutory_discount_policy_version_id" IS 'Canonical immutable statutory policy version supporting zero-payable completion.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/comments/core.exit_authorizations.column-comments.24.sql
+-- ============================================================================
+COMMENT ON COLUMN core.exit_authorizations.consumed_at IS
+    'Canonical completion-consume timestamp for completion bases that do not route through payment-era gate-command handoff.';
 
 
 -- ============================================================================
@@ -19990,7 +20108,7 @@ COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."benefit_type
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."policy_effect_support_status" IS 'Whether the policy effect is supported by current calculation/application logic. Unsupported effects must not be applied as a distorted discount.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."beneficiary_residency_scope" IS 'Resident-only, non-resident, mixed, or unresolved eligibility scope. Residency evidence is separate from ID evidence.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."official_source_available" IS 'Whether an official source is available to the controlled publisher. False does not mean the benefit does not exist.';;
-COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_text_available" IS 'Whether governing ordinance text is available. ParaÃ±aque verified active operational policy can be represented with this false.';;
+COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_text_available" IS 'Whether governing ordinance text is available. Parañaque verified active operational policy can be represented with this false.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."ordinance_number_available" IS 'Whether the ordinance number is available. Unknown numbers remain null and must not be fabricated.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."unresolved_policy_facts" IS 'Safe notes for unknown legal facts; never raw ID evidence, images, credentials, or unpublished legal notes.';;
 COMMENT ON COLUMN "discounts"."statutory_discount_policy_versions"."transaction_use_effective_from" IS 'Controlled publication effective instant for transaction use. This is distinct from unknown legal enactment dates.';;
@@ -21160,7 +21278,7 @@ ON CONFLICT ON CONSTRAINT uq_philippine_provinces__psgc_code DO UPDATE SET
 WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, official_name, short_display_name, jurisdiction_type, city_classification) AS (
   VALUES
   ('CALOOCAN','NCR',NULL,'1380100000','PH-PSGC-1380100000','City of Caloocan','Caloocan','CITY','HIGHLY_URBANIZED'),
-  ('LAS_PINAS','NCR',NULL,'1380200000','PH-PSGC-1380200000','City of Las PiÃ±as','Las PiÃ±as','CITY','HIGHLY_URBANIZED'),
+  ('LAS_PINAS','NCR',NULL,'1380200000','PH-PSGC-1380200000','City of Las Piñas','Las Piñas','CITY','HIGHLY_URBANIZED'),
   ('MAKATI','NCR',NULL,'1380300000','PH-PSGC-1380300000','City of Makati','Makati','CITY','HIGHLY_URBANIZED'),
   ('MALABON','NCR',NULL,'1380400000','PH-PSGC-1380400000','City of Malabon','Malabon','CITY','HIGHLY_URBANIZED'),
   ('MANDALUYONG','NCR',NULL,'1380500000','PH-PSGC-1380500000','City of Mandaluyong','Mandaluyong','CITY','HIGHLY_URBANIZED'),
@@ -21168,7 +21286,7 @@ WITH seed(seed_key, region_code, province_code, psgc_code, jurisdiction_code, of
   ('MARIKINA','NCR',NULL,'1380700000','PH-PSGC-1380700000','City of Marikina','Marikina','CITY','HIGHLY_URBANIZED'),
   ('MUNTINLUPA','NCR',NULL,'1380800000','PH-PSGC-1380800000','City of Muntinlupa','Muntinlupa','CITY','HIGHLY_URBANIZED'),
   ('NAVOTAS','NCR',NULL,'1380900000','PH-PSGC-1380900000','City of Navotas','Navotas','CITY','HIGHLY_URBANIZED'),
-  ('PARANAQUE','NCR',NULL,'1381000000','PH-PSGC-1381000000','City of ParaÃ±aque','ParaÃ±aque','CITY','HIGHLY_URBANIZED'),
+  ('PARANAQUE','NCR',NULL,'1381000000','PH-PSGC-1381000000','City of Parañaque','Parañaque','CITY','HIGHLY_URBANIZED'),
   ('PASAY','NCR',NULL,'1381100000','PH-PSGC-1381100000','Pasay City','Pasay','CITY','HIGHLY_URBANIZED'),
   ('PASIG','NCR',NULL,'1381200000','PH-PSGC-1381200000','City of Pasig','Pasig','CITY','HIGHLY_URBANIZED'),
   ('QUEZON_CITY','NCR',NULL,'1381300000','PH-PSGC-1381300000','Quezon City','Quezon City','CITY','HIGHLY_URBANIZED'),
@@ -21365,12 +21483,12 @@ WITH override(psgc_code, entitlement_type, verification_status, coverage_availab
   ('1380600000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'Ordinance No. 8559, S-2019','INITIAL_RATE_EXEMPTION','NON_RESIDENT_ALLOWED',NULL,true,false,NULL,NULL,NULL,NULL,NULL,'Free initial parking rate; residency not clearly limited to residents.','I-006 research scan 2026-07-28: Manila Ordinance No. 8559 secondary reference.'),
   ('1380600000','PWD','VERIFIED_SECONDARY',true,'Ordinance No. 8559, S-2019','INITIAL_RATE_EXEMPTION','NON_RESIDENT_ALLOWED',NULL,true,false,NULL,NULL,NULL,NULL,NULL,'Free initial parking rate; overnight and driver/passenger conditions require source review.','I-006 research scan 2026-07-28: Manila Ordinance No. 8559 secondary reference.'),
   ('1380500000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'Ordinance No. 726, S-2019 and Ordinance No. 738, S-2019','LOCAL_RULE','MIXED_OR_CONFLICTING',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Coverage identified; mixed residency interpretation requires source review.','I-006 research scan 2026-07-28: Mandaluyong senior parking secondary reference.'),
-  ('1380200000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'City Ordinance No. 1623-19, S-2019','FREE_DURATION','RESIDENT_ONLY',180,false,false,NULL,NULL,NULL,NULL,NULL,'Likely resident-only; commonly reported first three hours free.','I-006 research scan 2026-07-28: Las PiÃ±as Ordinance No. 1623-19 secondary reference.'),
-  ('1380200000','PWD','VERIFIED_SECONDARY',true,'City Ordinance No. 1623-19, S-2019','FREE_DURATION','RESIDENT_ONLY',180,false,false,NULL,NULL,NULL,NULL,NULL,'Likely resident-only; commonly reported first three hours free.','I-006 research scan 2026-07-28: Las PiÃ±as Ordinance No. 1623-19 secondary reference.'),
+  ('1380200000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'City Ordinance No. 1623-19, S-2019','FREE_DURATION','RESIDENT_ONLY',180,false,false,NULL,NULL,NULL,NULL,NULL,'Likely resident-only; commonly reported first three hours free.','I-006 research scan 2026-07-28: Las Piñas Ordinance No. 1623-19 secondary reference.'),
+  ('1380200000','PWD','VERIFIED_SECONDARY',true,'City Ordinance No. 1623-19, S-2019','FREE_DURATION','RESIDENT_ONLY',180,false,false,NULL,NULL,NULL,NULL,NULL,'Likely resident-only; commonly reported first three hours free.','I-006 research scan 2026-07-28: Las Piñas Ordinance No. 1623-19 secondary reference.'),
   ('1380800000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'Ordinance No. 17-050; amended by Ordinance Nos. 2022-022 and 2023-129','LOCAL_RULE','NON_RESIDENT_ALLOWED',NULL,false,false,true,NULL,NULL,true,NULL,'Valid IDs from any government agency appear accepted; exclusions require source review.','I-006 research scan 2026-07-28: Muntinlupa ordinance secondary reference.'),
   ('1380800000','PWD','VERIFIED_SECONDARY',true,'Ordinance No. 17-050; amended by Ordinance Nos. 2022-022 and 2023-129','LOCAL_RULE','NON_RESIDENT_ALLOWED',NULL,false,false,true,NULL,NULL,true,NULL,'Valid IDs from any government agency appear accepted; exclusions require source review.','I-006 research scan 2026-07-28: Muntinlupa ordinance secondary reference.'),
-  ('1381000000','SENIOR_CITIZEN','VERIFIED_ACTIVE_OPERATIONAL',true,NULL,'FULL_FEE_EXEMPTION','RESIDENT_ONLY',NULL,false,true,NULL,NULL,NULL,NULL,false,'Coverage exists and is active in practice; ordinance number and official online text unavailable.','I-006 research scan 2026-07-28: ParaÃ±aque Senior Citizen verified active operational parking benefit.'),
-  ('1381000000','PWD','VERIFIED_ACTIVE_OPERATIONAL',true,'City Ordinance No. 48','FULL_FEE_EXEMPTION','RESIDENT_ONLY',NULL,false,true,NULL,NULL,NULL,NULL,NULL,'Coverage verified and active; detailed facility scope still requires authoritative review.','I-006 research scan 2026-07-28: ParaÃ±aque PWD verified active operational parking benefit.'),
+  ('1381000000','SENIOR_CITIZEN','VERIFIED_ACTIVE_OPERATIONAL',true,NULL,'FULL_FEE_EXEMPTION','RESIDENT_ONLY',NULL,false,true,NULL,NULL,NULL,NULL,false,'Coverage exists and is active in practice; ordinance number and official online text unavailable.','I-006 research scan 2026-07-28: Parañaque Senior Citizen verified active operational parking benefit.'),
+  ('1381000000','PWD','VERIFIED_ACTIVE_OPERATIONAL',true,'City Ordinance No. 48','FULL_FEE_EXEMPTION','RESIDENT_ONLY',NULL,false,true,NULL,NULL,NULL,NULL,NULL,'Coverage verified and active; detailed facility scope still requires authoritative review.','I-006 research scan 2026-07-28: Parañaque PWD verified active operational parking benefit.'),
   ('1380700000','SENIOR_CITIZEN','LEAD_UNVERIFIED',true,'City Ordinance No. 028, S-2026','FREE_DURATION','RESIDENT_ONLY',120,false,false,NULL,NULL,NULL,NULL,NULL,'Reported two-hour free parking; lead remains unverified.','I-006 research scan 2026-07-28: Marikina senior parking lead.'),
   ('0730600000','SENIOR_CITIZEN','VERIFIED_SECONDARY',true,'City Ordinance No. 2326; City Ordinance No. 2711','FREE_DURATION','MIXED_OR_CONFLICTING',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Mixed residency and entitlement scope; commonly reported initial free-parking period.','I-006 research scan 2026-07-28: Cebu City ordinances secondary reference.'),
   ('0730600000','PWD','VERIFIED_SECONDARY',true,'City Ordinance No. 2326; City Ordinance No. 2711','FREE_DURATION','MIXED_OR_CONFLICTING',NULL,false,false,NULL,NULL,NULL,NULL,NULL,'Mixed residency and entitlement scope; commonly reported initial free-parking period.','I-006 research scan 2026-07-28: Cebu City ordinances secondary reference.'),
@@ -21435,6 +21553,268 @@ ON CONFLICT ON CONSTRAINT uq_sd_policy_registry_lgu_scopes__registry_lgu DO UPDA
   scope_status = 'DRAFT',
   updated_at = now(),
   updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id;
+
+
+-- ============================================================================
+-- Source object: objects/reference-data/discounts.paranaque-free-parking-policies.seed.sql
+-- ============================================================================
+-- Canonical transaction-active City of Paranaque statutory free-parking policies.
+-- The controlled source establishes operational use, not VERIFIED_OFFICIAL status.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM sites.jurisdictions
+    WHERE jurisdiction_id = 'f7a1b4b9-17a9-89de-5059-f72779616f23'::uuid
+      AND display_name = 'City of Parañaque'
+      AND psgc_code = '1381000000'
+  ) THEN
+    RAISE EXCEPTION 'Canonical City of Paranaque jurisdiction is missing or inconsistent.';
+  END IF;
+END $$;
+
+WITH policy AS (
+  SELECT *
+  FROM (VALUES
+    (
+      '0afacef1-5dd5-009d-32dd-e93a2ea8e4bb'::uuid,
+      'PH_PARANAQUE_SENIOR_FREE_PARKING',
+      'Parañaque Senior Citizen Free Parking',
+      'SENIOR_CITIZEN'::discounts.statutory_entitlement_type_enum,
+      'SENIOR_CITIZEN_ID'::discounts.discount_evidence_type_enum,
+      NULL::varchar,
+      'I-006 controlled research scan 2026-07-28: Parañaque Senior Citizen verified active operational parking benefit; ordinance number and controlled official text are not retained.'
+    ),
+    (
+      'd08bee33-972d-8214-c409-6e0ffef264d5'::uuid,
+      'PH_PARANAQUE_PWD_FREE_PARKING',
+      'Parañaque PWD Free Parking',
+      'PWD'::discounts.statutory_entitlement_type_enum,
+      'PWD_ID'::discounts.discount_evidence_type_enum,
+      'City Ordinance No. 48'::varchar,
+      'I-006 controlled research scan 2026-07-28: Parañaque PWD verified active operational parking benefit; City Ordinance No. 48 is retained as the authority reference, without a controlled full ordinance source.'
+    )
+  ) AS v(registry_id, policy_code, policy_name, entitlement_type, evidence_type, authority_reference, source_reference)
+)
+INSERT INTO discounts.statutory_discount_policy_registry (
+  statutory_discount_policy_registry_id, policy_code, policy_name, policy_description,
+  entitlement_type, policy_status, verification_status, policy_level, policy_type,
+  policy_resolution_basis, benefit_type, discount_base_scope, jurisdiction_id,
+  local_government_unit_id, jurisdiction_code, jurisdiction_name, beneficiary_residency_scope,
+  facility_scope, free_duration_minutes, initial_rate_exempt, full_fee_exempt,
+  coverage_available, auto_application_allowed, source_scan_date, source_document_available,
+  requires_evidence, required_evidence_type, requires_operator_validation,
+  legal_basis_reference, ordinance_reference, source_reference, reviewed_by, reviewed_at,
+  approved_by, approved_at, effective_from, notes, correlation_id, created_at,
+  created_by_service_identity_id, updated_at, updated_by_service_identity_id, row_version)
+SELECT
+  registry_id, policy_code, policy_name,
+  'Resident-only full parking-fee exemption for an eligible City of Parañaque beneficiary. Review and evidence validation remain required.',
+  entitlement_type, 'ACTIVE', 'VERIFIED_ACTIVE_OPERATIONAL', 'LOCAL_ORDINANCE', 'LOCAL_ORDINANCE',
+  'LOCAL_ORDINANCE_APPLIED', 'FULL_FEE_EXEMPTION', 'NOT_APPLICABLE',
+  'f7a1b4b9-17a9-89de-5059-f72779616f23', 'f7a1b4b9-17a9-89de-5059-f72779616f23',
+  'PARANAQUE', 'City of Parañaque', 'RESIDENT_ONLY',
+  'Parking service at a Site assigned to the City of Parañaque jurisdiction.',
+  NULL, false, true, true, false, '2026-07-28', false,
+  true, evidence_type, true, authority_reference, authority_reference, source_reference,
+  'I-006 controlled research scan', '2026-07-28T00:00:00+08'::timestamptz,
+  'ExitPass v1.3 approved operational policy decision', '2026-09-19T00:00:00+08'::timestamptz,
+  '2026-09-19T00:00:00+08'::timestamptz,
+  'Transaction use is review-mediated. Operational verification does not claim that a controlled official ordinance source was reviewed.',
+  '0f8a1b4b-917a-489d-9050-9f72779616f2'::uuid,
+  '2026-09-19T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978',
+  '2026-09-19T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', 1
+FROM policy
+ON CONFLICT ON CONSTRAINT uq_sd_policy_registry__policy_code DO UPDATE SET
+  policy_name = EXCLUDED.policy_name,
+  policy_description = EXCLUDED.policy_description,
+  entitlement_type = EXCLUDED.entitlement_type,
+  policy_status = EXCLUDED.policy_status,
+  verification_status = EXCLUDED.verification_status,
+  policy_level = EXCLUDED.policy_level,
+  policy_type = EXCLUDED.policy_type,
+  policy_resolution_basis = EXCLUDED.policy_resolution_basis,
+  benefit_type = EXCLUDED.benefit_type,
+  discount_base_scope = EXCLUDED.discount_base_scope,
+  jurisdiction_id = EXCLUDED.jurisdiction_id,
+  local_government_unit_id = EXCLUDED.local_government_unit_id,
+  jurisdiction_code = EXCLUDED.jurisdiction_code,
+  jurisdiction_name = EXCLUDED.jurisdiction_name,
+  beneficiary_residency_scope = EXCLUDED.beneficiary_residency_scope,
+  facility_scope = EXCLUDED.facility_scope,
+  free_duration_minutes = EXCLUDED.free_duration_minutes,
+  initial_rate_exempt = EXCLUDED.initial_rate_exempt,
+  full_fee_exempt = EXCLUDED.full_fee_exempt,
+  coverage_available = EXCLUDED.coverage_available,
+  auto_application_allowed = EXCLUDED.auto_application_allowed,
+  source_scan_date = EXCLUDED.source_scan_date,
+  source_document_available = EXCLUDED.source_document_available,
+  requires_evidence = EXCLUDED.requires_evidence,
+  required_evidence_type = EXCLUDED.required_evidence_type,
+  requires_operator_validation = EXCLUDED.requires_operator_validation,
+  legal_basis_reference = EXCLUDED.legal_basis_reference,
+  ordinance_reference = EXCLUDED.ordinance_reference,
+  source_reference = EXCLUDED.source_reference,
+  reviewed_by = EXCLUDED.reviewed_by,
+  reviewed_at = EXCLUDED.reviewed_at,
+  approved_by = EXCLUDED.approved_by,
+  approved_at = EXCLUDED.approved_at,
+  effective_from = EXCLUDED.effective_from,
+  notes = EXCLUDED.notes,
+  correlation_id = EXCLUDED.correlation_id,
+  updated_at = EXCLUDED.updated_at,
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id
+WHERE (
+  discounts.statutory_discount_policy_registry.policy_name,
+  discounts.statutory_discount_policy_registry.policy_description,
+  discounts.statutory_discount_policy_registry.entitlement_type,
+  discounts.statutory_discount_policy_registry.policy_status,
+  discounts.statutory_discount_policy_registry.verification_status,
+  discounts.statutory_discount_policy_registry.benefit_type,
+  discounts.statutory_discount_policy_registry.discount_base_scope,
+  discounts.statutory_discount_policy_registry.jurisdiction_id,
+  discounts.statutory_discount_policy_registry.beneficiary_residency_scope,
+  discounts.statutory_discount_policy_registry.full_fee_exempt,
+  discounts.statutory_discount_policy_registry.coverage_available,
+  discounts.statutory_discount_policy_registry.required_evidence_type,
+  discounts.statutory_discount_policy_registry.legal_basis_reference,
+  discounts.statutory_discount_policy_registry.source_reference,
+  discounts.statutory_discount_policy_registry.effective_from
+) IS DISTINCT FROM (
+  EXCLUDED.policy_name, EXCLUDED.policy_description, EXCLUDED.entitlement_type,
+  EXCLUDED.policy_status, EXCLUDED.verification_status, EXCLUDED.benefit_type,
+  EXCLUDED.discount_base_scope, EXCLUDED.jurisdiction_id, EXCLUDED.beneficiary_residency_scope,
+  EXCLUDED.full_fee_exempt, EXCLUDED.coverage_available, EXCLUDED.required_evidence_type,
+  EXCLUDED.legal_basis_reference, EXCLUDED.source_reference, EXCLUDED.effective_from
+);
+
+-- Semantic-hash material (UTF-8, exact field order):
+-- policyCode|policyVersion|entitlementType|jurisdictionId|publication|verification|parking|
+-- benefit|residency|discountBase|evidence|ordinance|fullFeeExempt|freeDuration|discountPercent.
+WITH version AS (
+  SELECT * FROM (VALUES
+    ('3a22b6e2-5433-9a8b-cc60-139cf2a89a8e'::uuid, '0afacef1-5dd5-009d-32dd-e93a2ea8e4bb'::uuid,
+     'PH_PARANAQUE_SENIOR_FREE_PARKING', 'SENIOR_CITIZEN'::discounts.statutory_entitlement_type_enum,
+     NULL::varchar, 'SENIOR_CITIZEN_ID'::discounts.discount_evidence_type_enum,
+     'sha256:d8bea52915fb948caa5d65c7ac56dd671c8a280aa76f8f08feef611a7d85a560',
+     'I-006 controlled research scan 2026-07-28: Parañaque Senior Citizen verified active operational parking benefit; ordinance number and controlled official text are not retained.'),
+    ('4c7c504c-6ac1-8e79-3f88-4fbeae06f00d'::uuid, 'd08bee33-972d-8214-c409-6e0ffef264d5'::uuid,
+     'PH_PARANAQUE_PWD_FREE_PARKING', 'PWD'::discounts.statutory_entitlement_type_enum,
+     'City Ordinance No. 48'::varchar, 'PWD_ID'::discounts.discount_evidence_type_enum,
+     'sha256:92b871fe9f4b018c0f91a2675761b1b6920365a8917ef06f62578330eabcd268',
+     'I-006 controlled research scan 2026-07-28: Parañaque PWD verified active operational parking benefit; City Ordinance No. 48 is retained as the authority reference, without a controlled full ordinance source.')
+  ) AS v(version_id, registry_id, policy_code, entitlement_type, authority_reference, evidence_type, semantic_hash, source_reference)
+)
+INSERT INTO discounts.statutory_discount_policy_versions (
+  statutory_discount_policy_version_id, statutory_discount_policy_registry_id, policy_code,
+  policy_version, policy_version_label, entitlement_type, jurisdiction_id,
+  local_government_unit_id, jurisdiction_code, jurisdiction_display_name, policy_scope_type,
+  policy_level, policy_type, policy_resolution_basis, source_verification_status,
+  transaction_publication_status, detailed_rule_verification_status,
+  parking_service_applicability, benefit_type, policy_effect_support_status,
+  discount_base_scope, beneficiary_residency_scope, official_source_identified,
+  official_source_available, ordinance_text_available, ordinance_number_available,
+  ordinance_number, legal_basis_reference, source_type, source_reference,
+  source_verified_at, unresolved_policy_facts, safe_channel_summary, safe_reviewer_guidance,
+  facility_scope, discount_percentage_basis_points, free_duration_minutes, full_fee_exempt,
+  operational_confirmed_at, transaction_use_effective_from, precedence_rank,
+  conflict_group_key, policy_semantic_hash, policy_semantic_hash_source_version,
+  reviewed_by, reviewed_at, approved_by, approved_at, correlation_id, created_at,
+  created_by_service_identity_id, updated_at, updated_by_service_identity_id, row_version)
+SELECT
+  version_id, registry_id, policy_code, '2026.09.1', 'Parañaque operational free-parking policy v2026.09.1',
+  entitlement_type, 'f7a1b4b9-17a9-89de-5059-f72779616f23',
+  'f7a1b4b9-17a9-89de-5059-f72779616f23', 'PARANAQUE', 'City of Parañaque', 'JURISDICTION',
+  'LOCAL_ORDINANCE', 'LOCAL_ORDINANCE', 'LOCAL_ORDINANCE_APPLIED',
+  'VERIFIED_ACTIVE_OPERATIONAL', 'ACTIVE_FOR_TRANSACTION_USE', 'PARTIALLY_VERIFIED',
+  'COVERED', 'FULL_FEE_EXEMPTION', 'SUPPORTED_BY_CURRENT_CALCULATION',
+  'NOT_APPLICABLE', 'RESIDENT_ONLY', false, false, false,
+  authority_reference IS NOT NULL, authority_reference, authority_reference,
+  'OPERATIONAL_OBSERVATION', source_reference, '2026-07-28T00:00:00+08'::timestamptz,
+  CASE WHEN authority_reference IS NULL
+    THEN 'A controlled official ordinance number and full ordinance text are not retained.'
+    ELSE 'The authority reference is retained, but a controlled full ordinance text is not retained.' END,
+  'Qualified Parañaque residents may receive free parking after evidence validation and authorized review.',
+  'Verify the statutory ID and Parañaque residency using privacy-safe evidence metadata before supervisor decision.',
+  'Parking service at a Site assigned to the City of Parañaque jurisdiction.',
+  NULL, NULL, true, '2026-07-28T00:00:00+08'::timestamptz,
+  '2026-09-19T00:00:00+08'::timestamptz, 100,
+  'PARANAQUE_' || entitlement_type::text || '_PARKING', semantic_hash,
+  'statutory-parking-policy-authority:sha256:v1',
+  'I-006 controlled research scan', '2026-07-28T00:00:00+08'::timestamptz,
+  'ExitPass v1.3 approved operational policy decision', '2026-09-19T00:00:00+08'::timestamptz,
+  '0f8a1b4b-917a-489d-9050-9f72779616f2',
+  '2026-09-19T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978',
+  '2026-09-19T00:00:00+08'::timestamptz, '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', 1
+FROM version
+ON CONFLICT ON CONSTRAINT uq_sd_policy_versions__code_version DO UPDATE SET
+  transaction_publication_status = EXCLUDED.transaction_publication_status,
+  source_verification_status = EXCLUDED.source_verification_status,
+  detailed_rule_verification_status = EXCLUDED.detailed_rule_verification_status,
+  parking_service_applicability = EXCLUDED.parking_service_applicability,
+  benefit_type = EXCLUDED.benefit_type,
+  policy_effect_support_status = EXCLUDED.policy_effect_support_status,
+  discount_base_scope = EXCLUDED.discount_base_scope,
+  beneficiary_residency_scope = EXCLUDED.beneficiary_residency_scope,
+  ordinance_number_available = EXCLUDED.ordinance_number_available,
+  ordinance_number = EXCLUDED.ordinance_number,
+  legal_basis_reference = EXCLUDED.legal_basis_reference,
+  source_reference = EXCLUDED.source_reference,
+  unresolved_policy_facts = EXCLUDED.unresolved_policy_facts,
+  safe_channel_summary = EXCLUDED.safe_channel_summary,
+  safe_reviewer_guidance = EXCLUDED.safe_reviewer_guidance,
+  discount_percentage_basis_points = NULL,
+  free_duration_minutes = NULL,
+  full_fee_exempt = true,
+  transaction_use_effective_from = EXCLUDED.transaction_use_effective_from,
+  policy_semantic_hash = EXCLUDED.policy_semantic_hash,
+  approved_by = EXCLUDED.approved_by,
+  approved_at = EXCLUDED.approved_at,
+  updated_at = EXCLUDED.updated_at,
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id
+WHERE (
+  discounts.statutory_discount_policy_versions.transaction_publication_status,
+  discounts.statutory_discount_policy_versions.source_verification_status,
+  discounts.statutory_discount_policy_versions.parking_service_applicability,
+  discounts.statutory_discount_policy_versions.benefit_type,
+  discounts.statutory_discount_policy_versions.policy_effect_support_status,
+  discounts.statutory_discount_policy_versions.discount_base_scope,
+  discounts.statutory_discount_policy_versions.beneficiary_residency_scope,
+  discounts.statutory_discount_policy_versions.ordinance_number,
+  discounts.statutory_discount_policy_versions.policy_semantic_hash
+) IS DISTINCT FROM (
+  EXCLUDED.transaction_publication_status, EXCLUDED.source_verification_status,
+  EXCLUDED.parking_service_applicability, EXCLUDED.benefit_type,
+  EXCLUDED.policy_effect_support_status, EXCLUDED.discount_base_scope,
+  EXCLUDED.beneficiary_residency_scope, EXCLUDED.ordinance_number,
+  EXCLUDED.policy_semantic_hash
+);
+
+INSERT INTO discounts.statutory_discount_policy_version_evidence_requirements (
+  statutory_discount_policy_version_evidence_requirement_id,
+  statutory_discount_policy_version_id, evidence_type, requirement_status,
+  safe_requirement_label, safe_requirement_notes, created_at,
+  created_by_service_identity_id, updated_at, updated_by_service_identity_id)
+VALUES
+  ('0beb4ceb-638e-9811-e45a-9a63013103e9', '3a22b6e2-5433-9a8b-cc60-139cf2a89a8e', 'SENIOR_CITIZEN_ID', 'REQUIRED',
+   'Valid Senior Citizen ID', 'Record privacy-safe verification metadata only; do not store a full ID number or raw document image.',
+   '2026-09-19T00:00:00+08', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '2026-09-19T00:00:00+08', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978'),
+  ('cb62d837-7c07-f52e-1609-6af98f5820d5', '4c7c504c-6ac1-8e79-3f88-4fbeae06f00d', 'PWD_ID', 'REQUIRED',
+   'Valid PWD ID', 'Record privacy-safe verification metadata only; do not store a full ID number or raw document image.',
+   '2026-09-19T00:00:00+08', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978', '2026-09-19T00:00:00+08', '1f2ffdfb-c4a9-5a00-a656-9f3a132b1978')
+ON CONFLICT ON CONSTRAINT uq_sd_policy_version_evidence_requirements__type DO UPDATE SET
+  requirement_status = EXCLUDED.requirement_status,
+  safe_requirement_label = EXCLUDED.safe_requirement_label,
+  safe_requirement_notes = EXCLUDED.safe_requirement_notes,
+  updated_at = EXCLUDED.updated_at,
+  updated_by_service_identity_id = EXCLUDED.updated_by_service_identity_id
+WHERE (
+  discounts.statutory_discount_policy_version_evidence_requirements.requirement_status,
+  discounts.statutory_discount_policy_version_evidence_requirements.safe_requirement_label,
+  discounts.statutory_discount_policy_version_evidence_requirements.safe_requirement_notes
+) IS DISTINCT FROM (
+  EXCLUDED.requirement_status, EXCLUDED.safe_requirement_label, EXCLUDED.safe_requirement_notes
+);
 
 
 -- ============================================================================
@@ -21858,8 +22238,15 @@ COMMIT;
 
 CREATE TABLE IF NOT EXISTS core.fiscal_issuance_references (
     fiscal_issuance_reference_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    payment_confirmation_id uuid NOT NULL,
-    payment_attempt_id uuid NOT NULL,
+    payment_confirmation_id uuid,
+    payment_attempt_id uuid,
+    completion_basis varchar(64) NOT NULL,
+    completion_authority_reference_id uuid NOT NULL,
+    statutory_discount_decision_command_id uuid,
+    statutory_discount_payable_basis_application_command_id uuid,
+    statutory_discount_validation_id uuid,
+    applied_policy_reference_id uuid,
+    statutory_discount_policy_version_id uuid,
     parking_session_id uuid NOT NULL,
     tariff_snapshot_id uuid,
     site_id uuid,
@@ -21879,6 +22266,7 @@ CREATE TABLE IF NOT EXISTS core.fiscal_issuance_references (
     fiscal_number_suffix_text varchar(80),
     fiscal_number_assigned_at timestamptz,
     fiscal_number_assigned_by_ref varchar(160),
+    electronic_journal_event_reference varchar(192),
     fiscal_document_status_code_id uuid,
     result_classification varchar(40),
     fiscal_issuance_evidence_status varchar(80),
@@ -21904,6 +22292,32 @@ CREATE TABLE IF NOT EXISTS core.fiscal_issuance_references (
     is_superseded boolean DEFAULT false NOT NULL,
     is_reconciled boolean DEFAULT false NOT NULL,
     CONSTRAINT pk_fiscal_issuance_references PRIMARY KEY (fiscal_issuance_reference_id),
+    CONSTRAINT ck_fiscal_issuance_references__completion_ancestry CHECK (
+        (
+            completion_basis = 'PAYMENT_FINALITY'
+            AND payment_attempt_id IS NOT NULL
+            AND payment_confirmation_id IS NOT NULL
+            AND completion_authority_reference_id = payment_confirmation_id
+            AND statutory_discount_decision_command_id IS NULL
+            AND statutory_discount_payable_basis_application_command_id IS NULL
+            AND statutory_discount_validation_id IS NULL
+            AND applied_policy_reference_id IS NULL
+            AND statutory_discount_policy_version_id IS NULL
+        ) OR (
+            completion_basis = 'ZERO_PAYABLE_STATUTORY_FINALITY'
+            AND payment_attempt_id IS NULL
+            AND payment_confirmation_id IS NULL
+            AND completion_authority_reference_id = statutory_discount_payable_basis_application_command_id
+            AND statutory_discount_decision_command_id IS NOT NULL
+            AND statutory_discount_payable_basis_application_command_id IS NOT NULL
+            AND statutory_discount_validation_id IS NOT NULL
+            AND (
+                (applied_policy_reference_id IS NOT NULL AND statutory_discount_policy_version_id IS NULL)
+                OR
+                (applied_policy_reference_id IS NULL AND statutory_discount_policy_version_id IS NOT NULL)
+            )
+        )
+    ),
     CONSTRAINT ck_fiscal_issuance_references__fiscal_sequence_value_positive CHECK (fiscal_sequence_value IS NULL OR fiscal_sequence_value > 0),
     CONSTRAINT ck_fiscal_issuance_references__result_classification CHECK (
         result_classification IS NULL
@@ -22210,6 +22624,22 @@ CREATE INDEX IF NOT EXISTS ix_fiscal_issuance_references__state
 -- ============================================================================
 CREATE INDEX IF NOT EXISTS ix_fiscal_issuance_references__upstream_finality_reference
     ON core.fiscal_issuance_references (upstream_finality_reference);;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ix_fiscal_issuance_references__completion_basis.sql
+-- ============================================================================
+CREATE INDEX "ix_fiscal_issuance_references__completion_basis"
+  ON "core"."fiscal_issuance_references" ("completion_basis");;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/indexes/core.ux_fiscal_issuance_references__active_statutory_application.sql
+-- ============================================================================
+CREATE UNIQUE INDEX "ux_fiscal_issuance_references__active_statutory_application"
+  ON "core"."fiscal_issuance_references" ("statutory_discount_payable_basis_application_command_id")
+  WHERE is_active AND NOT is_superseded
+    AND statutory_discount_payable_basis_application_command_id IS NOT NULL;;
 
 
 -- ============================================================================
@@ -23885,387 +24315,6 @@ BEGIN
         v_confirmation.provider_transaction_ref::text,
         v_normalized_provider_status::text,
         v_confirmation.verified_at::timestamptz;
-END;
-$function$;
-
-
--- ============================================================================
--- Source object: objects/schemas/core/functions/core.issue_exit_authorization.sql
--- ============================================================================
-/*
- * ExitPass v1.2 durable SQL patch.
- *
- * BRD:
- * - 9.12 Exit Authorization
- * - 9.13 Timeout, Retry, and Duplicate Handling
- * - 10.7.2 Payment Finality Invariant
- * - 10.7.7 Exit Token Integrity Invariant
- *
- * SDD:
- * - 6.5 Issue Exit Authorization
- * - 8.5 ExitAuthorization State Machine
- * - 9.6 Integrity Constraints and Concurrency Rules
- *
- * System Invariants:
- * - ExitAuthorization must be anchored to an existing finalized/confirmed PaymentAttempt.
- * - ExitAuthorization must be tied back to the canonical ParkingSession and PaymentConfirmation chain.
- * - Replayed issuance for the same confirmed PaymentAttempt returns the existing authorization deterministically.
- * - All writes use ExitPass v1.2 table names, v1.2 enums, hashed token storage, and service-identity audit attribution.
- */
-
-CREATE OR REPLACE FUNCTION core.issue_exit_authorization(
-    p_parking_session_id uuid,
-    p_payment_attempt_id uuid,
-    p_requested_by uuid,
-    p_correlation_id uuid,
-    p_now timestamptz
-)
-RETURNS TABLE (
-    exit_authorization_id uuid,
-    parking_session_id uuid,
-    payment_attempt_id uuid,
-    authorization_token text,
-    authorization_status text,
-    issued_at timestamptz,
-    expiration_timestamp timestamptz
-)
-LANGUAGE plpgsql
-AS $function$
-DECLARE
-    v_attempt core.payment_attempts%ROWTYPE;
-    v_confirmation core.payment_confirmations%ROWTYPE;
-    v_authorization core.exit_authorizations%ROWTYPE;
-    v_requested_by_service_identity_id uuid;
-    v_authorization_token text;
-BEGIN
-    SELECT pa.*
-    INTO v_attempt
-    FROM core.payment_attempts AS pa
-    WHERE pa.payment_attempt_id = p_payment_attempt_id
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'payment attempt % was not found', p_payment_attempt_id
-            USING ERRCODE = 'P0002';
-    END IF;
-
-    IF v_attempt.parking_session_id <> p_parking_session_id THEN
-        RAISE EXCEPTION 'payment attempt % does not belong to parking session %', p_payment_attempt_id, p_parking_session_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    SELECT ea.*
-    INTO v_authorization
-    FROM core.exit_authorizations AS ea
-    WHERE ea.payment_attempt_id = p_payment_attempt_id
-    FOR UPDATE;
-
-    IF FOUND THEN
-        RETURN QUERY
-        SELECT
-            v_authorization.exit_authorization_id::uuid,
-            v_authorization.parking_session_id::uuid,
-            v_authorization.payment_attempt_id::uuid,
-            v_authorization.exit_authorization_id::text,
-            v_authorization.authorization_status::text,
-            v_authorization.issued_at::timestamptz,
-            v_authorization.expires_at::timestamptz;
-        RETURN;
-    END IF;
-
-    IF v_attempt.attempt_status <> 'CONFIRMED' THEN
-        RAISE EXCEPTION 'payment attempt % is not confirmed', p_payment_attempt_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    SELECT pc.*
-    INTO v_confirmation
-    FROM core.payment_confirmations AS pc
-    WHERE pc.payment_attempt_id = p_payment_attempt_id
-      AND pc.confirmation_status = 'RECORDED'
-    ORDER BY pc.confirmed_at DESC, pc.created_at DESC
-    LIMIT 1;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'payment attempt % has no recorded payment confirmation', p_payment_attempt_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    IF v_confirmation.payment_attempt_id <> v_attempt.payment_attempt_id THEN
-        RAISE EXCEPTION 'payment confirmation % is not anchored to payment attempt %', v_confirmation.payment_confirmation_id, p_payment_attempt_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    SELECT si.service_identity_id
-    INTO v_requested_by_service_identity_id
-    FROM identity.service_identities AS si
-    WHERE si.service_identity_id = p_requested_by
-    LIMIT 1;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        v_requested_by_service_identity_id := v_attempt.updated_by_service_identity_id;
-    END IF;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        v_requested_by_service_identity_id := v_confirmation.created_by_service_identity_id;
-    END IF;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        v_requested_by_service_identity_id := v_attempt.created_by_service_identity_id;
-    END IF;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        RAISE EXCEPTION 'requested_by service identity could not be resolved'
-            USING ERRCODE = 'P0002';
-    END IF;
-
-    v_authorization_token := 'EXIT-' || replace(gen_random_uuid()::text, '-', '');
-
-    INSERT INTO core.exit_authorizations (
-        exit_authorization_id,
-        parking_session_id,
-        payment_attempt_id,
-        payment_confirmation_id,
-        authorization_token_hash,
-        authorization_status,
-        issued_at,
-        expires_at,
-        correlation_id,
-        created_at,
-        created_by_service_identity_id,
-        updated_at,
-        updated_by_service_identity_id
-    )
-    VALUES (
-        gen_random_uuid(),
-        v_attempt.parking_session_id,
-        v_attempt.payment_attempt_id,
-        v_confirmation.payment_confirmation_id,
-        encode(digest(v_authorization_token, 'sha256'), 'hex'),
-        'ISSUED',
-        p_now,
-        p_now + interval '15 minutes',
-        p_correlation_id,
-        p_now,
-        v_requested_by_service_identity_id,
-        p_now,
-        v_requested_by_service_identity_id
-    )
-    RETURNING *
-    INTO v_authorization;
-
-    RETURN QUERY
-    SELECT
-        v_authorization.exit_authorization_id::uuid,
-        v_authorization.parking_session_id::uuid,
-        v_authorization.payment_attempt_id::uuid,
-        v_authorization_token::text,
-        v_authorization.authorization_status::text,
-        v_authorization.issued_at::timestamptz,
-        v_authorization.expires_at::timestamptz;
-END;
-$function$;
-
-
--- ============================================================================
--- Source object: objects/schemas/core/functions/core.consume_exit_authorization.sql
--- ============================================================================
-/*
- * ExitPass v1.2 durable SQL patch.
- *
- * BRD:
- * - 9.12 Exit Authorization
- * - 9.13 Timeout, Retry, and Duplicate Handling
- * - 10.7.7 Exit Token Integrity Invariant
- * - 10.7.8 Single-Use Consume Invariant
- *
- * SDD:
- * - 6.6 Consume Exit Authorization
- * - 8.5 ExitAuthorization State Machine
- * - 9.6 Integrity Constraints and Concurrency Rules
- *
- * System Invariants:
- * - AuthorizationConsumption must be anchored to an existing issued ExitAuthorization.
- * - Consumption must be single-use, auditable, and deterministic.
- * - Expired, invalidated, and already-consumed authorizations fail closed.
- * - All writes use ExitPass v1.2 core and gates table names, v1.2 enums, and service-identity audit attribution.
- */
-
-CREATE OR REPLACE FUNCTION core.consume_exit_authorization(
-    p_exit_authorization_id uuid,
-    p_requested_by uuid,
-    p_correlation_id uuid,
-    p_now timestamptz
-)
-RETURNS TABLE (
-    exit_authorization_id uuid,
-    authorization_status text,
-    consumed_at timestamptz
-)
-LANGUAGE plpgsql
-AS $function$
-DECLARE
-    v_authorization core.exit_authorizations%ROWTYPE;
-    v_session core.parking_sessions%ROWTYPE;
-    v_existing_consumed_at timestamptz;
-    v_requested_by_service_identity_id uuid;
-    v_consumption gates.gate_authorization_consumptions%ROWTYPE;
-BEGIN
-    SELECT ea.*
-    INTO v_authorization
-    FROM core.exit_authorizations AS ea
-    WHERE ea.exit_authorization_id = p_exit_authorization_id
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'exit authorization % was not found', p_exit_authorization_id
-            USING ERRCODE = 'P0002';
-    END IF;
-
-    SELECT ps.*
-    INTO v_session
-    FROM core.parking_sessions AS ps
-    WHERE ps.parking_session_id = v_authorization.parking_session_id;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'parking session % was not found for exit authorization %',
-            v_authorization.parking_session_id,
-            p_exit_authorization_id
-            USING ERRCODE = 'P0002';
-    END IF;
-
-    SELECT gac.consumed_at
-    INTO v_existing_consumed_at
-    FROM gates.gate_authorization_consumptions AS gac
-    WHERE gac.exit_authorization_id = p_exit_authorization_id
-      AND gac.consume_status = 'CONSUMED'
-    ORDER BY gac.consumed_at DESC
-    LIMIT 1;
-
-    IF FOUND THEN
-        RAISE EXCEPTION 'exit authorization % has already been consumed', p_exit_authorization_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    IF v_authorization.authorization_status <> 'ISSUED' THEN
-        RAISE EXCEPTION 'exit authorization % is not issued', p_exit_authorization_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    IF v_authorization.expires_at <= p_now THEN
-        INSERT INTO gates.gate_authorization_consumptions (
-            gate_authorization_consumption_id,
-            exit_authorization_id,
-            authorization_token_hash,
-            site_id,
-            consume_status,
-            consume_reason_code,
-            requested_at,
-            validated_at,
-            command_requested,
-            command_result_status,
-            failure_detail,
-            correlation_id,
-            created_at,
-            created_by_service_identity_id,
-            updated_at,
-            updated_by_service_identity_id
-        )
-        VALUES (
-            gen_random_uuid(),
-            v_authorization.exit_authorization_id,
-            v_authorization.authorization_token_hash,
-            v_session.site_id,
-            'EXPIRED',
-            'EXIT_AUTHORIZATION_EXPIRED',
-            p_now,
-            p_now,
-            false,
-            'NOT_REQUESTED',
-            'Exit authorization expired before consume.',
-            p_correlation_id,
-            p_now,
-            COALESCE(v_authorization.updated_by_service_identity_id, v_authorization.created_by_service_identity_id),
-            p_now,
-            COALESCE(v_authorization.updated_by_service_identity_id, v_authorization.created_by_service_identity_id)
-        );
-
-        RAISE EXCEPTION 'exit authorization % is expired', p_exit_authorization_id
-            USING ERRCODE = 'P0001';
-    END IF;
-
-    SELECT si.service_identity_id
-    INTO v_requested_by_service_identity_id
-    FROM identity.service_identities AS si
-    WHERE si.service_identity_id = p_requested_by
-    LIMIT 1;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        v_requested_by_service_identity_id := v_authorization.updated_by_service_identity_id;
-    END IF;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        v_requested_by_service_identity_id := v_authorization.created_by_service_identity_id;
-    END IF;
-
-    IF v_requested_by_service_identity_id IS NULL THEN
-        RAISE EXCEPTION 'requested_by service identity could not be resolved'
-            USING ERRCODE = 'P0002';
-    END IF;
-
-    INSERT INTO gates.gate_authorization_consumptions (
-        gate_authorization_consumption_id,
-        exit_authorization_id,
-        authorization_token_hash,
-        site_id,
-        consume_status,
-        consume_reason_code,
-        requested_at,
-        validated_at,
-        consumed_at,
-        command_requested,
-        command_result_status,
-        command_result_at,
-        correlation_id,
-        created_at,
-        created_by_service_identity_id,
-        updated_at,
-        updated_by_service_identity_id
-    )
-    VALUES (
-        gen_random_uuid(),
-        v_authorization.exit_authorization_id,
-        v_authorization.authorization_token_hash,
-        v_session.site_id,
-        'CONSUMED',
-        'EXIT_AUTHORIZATION_CONSUMED',
-        p_now,
-        p_now,
-        p_now,
-        true,
-        'REQUESTED',
-        p_now,
-        p_correlation_id,
-        p_now,
-        v_requested_by_service_identity_id,
-        p_now,
-        v_requested_by_service_identity_id
-    )
-    RETURNING *
-    INTO v_consumption;
-
-    UPDATE core.exit_authorizations AS ea
-    SET
-        updated_at = p_now,
-        updated_by_service_identity_id = v_requested_by_service_identity_id,
-        row_version = ea.row_version + 1
-    WHERE ea.exit_authorization_id = p_exit_authorization_id;
-
-    RETURN QUERY
-    SELECT
-        v_authorization.exit_authorization_id::uuid,
-        'CONSUMED'::text,
-        v_consumption.consumed_at::timestamptz;
 END;
 $function$;
 
@@ -26926,6 +26975,931 @@ $function$;;
 -- ============================================================================
 COMMENT ON FUNCTION discounts.apply_statutory_discount_payable_basis(uuid, uuid, uuid) IS
     'Finalizes a REQUESTED statutory discount payable-basis application by superseding the original active tariff snapshot, creating one statutory-adjusted ACTIVE tariff snapshot, and marking the application APPLIED. The routine does not create payment, provider, gate, coupon, reconciliation, or AUB records.';;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_exit_authorizations__tariff_snapshot_id.sql
+-- ============================================================================
+ALTER TABLE "core"."exit_authorizations"
+  ADD CONSTRAINT "fk_exit_authorizations__tariff_snapshot_id"
+  FOREIGN KEY ("tariff_snapshot_id") REFERENCES "core"."tariff_snapshots" ("tariff_snapshot_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_exit_authorizations__statutory_decision.sql
+-- ============================================================================
+ALTER TABLE "core"."exit_authorizations"
+  ADD CONSTRAINT "fk_exit_authorizations__statutory_decision"
+  FOREIGN KEY ("statutory_discount_decision_command_id")
+  REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_exit_authorizations__statutory_application.sql
+-- ============================================================================
+ALTER TABLE "core"."exit_authorizations"
+  ADD CONSTRAINT "fk_exit_authorizations__statutory_application"
+  FOREIGN KEY ("statutory_discount_payable_basis_application_command_id")
+  REFERENCES "discounts"."statutory_discount_payable_basis_application_commands" ("statutory_discount_payable_basis_application_command_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_exit_authorizations__statutory_validation.sql
+-- ============================================================================
+ALTER TABLE "core"."exit_authorizations"
+  ADD CONSTRAINT "fk_exit_authorizations__statutory_validation"
+  FOREIGN KEY ("statutory_discount_validation_id")
+  REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_exit_authorizations__applied_policy.sql
+-- ============================================================================
+ALTER TABLE "core"."exit_authorizations"
+  ADD CONSTRAINT "fk_exit_authorizations__applied_policy"
+  FOREIGN KEY ("applied_policy_reference_id")
+  REFERENCES "discounts"."discount_policy_references" ("discount_policy_reference_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_exit_authorizations__policy_version.sql
+-- ============================================================================
+ALTER TABLE "core"."exit_authorizations"
+  ADD CONSTRAINT "fk_exit_authorizations__policy_version"
+  FOREIGN KEY ("statutory_discount_policy_version_id")
+  REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_fiscal_issuance_references__statutory_decision.sql
+-- ============================================================================
+ALTER TABLE "core"."fiscal_issuance_references"
+  ADD CONSTRAINT "fk_fiscal_issuance_references__statutory_decision"
+  FOREIGN KEY ("statutory_discount_decision_command_id")
+  REFERENCES "discounts"."statutory_discount_decision_commands" ("statutory_discount_decision_command_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_fiscal_issuance_references__statutory_application.sql
+-- ============================================================================
+ALTER TABLE "core"."fiscal_issuance_references"
+  ADD CONSTRAINT "fk_fiscal_issuance_references__statutory_application"
+  FOREIGN KEY ("statutory_discount_payable_basis_application_command_id")
+  REFERENCES "discounts"."statutory_discount_payable_basis_application_commands" ("statutory_discount_payable_basis_application_command_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_fiscal_issuance_references__statutory_validation.sql
+-- ============================================================================
+ALTER TABLE "core"."fiscal_issuance_references"
+  ADD CONSTRAINT "fk_fiscal_issuance_references__statutory_validation"
+  FOREIGN KEY ("statutory_discount_validation_id")
+  REFERENCES "discounts"."statutory_discount_validations" ("statutory_discount_validation_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_fiscal_issuance_references__applied_policy.sql
+-- ============================================================================
+ALTER TABLE "core"."fiscal_issuance_references"
+  ADD CONSTRAINT "fk_fiscal_issuance_references__applied_policy"
+  FOREIGN KEY ("applied_policy_reference_id")
+  REFERENCES "discounts"."discount_policy_references" ("discount_policy_reference_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/constraints/core.fk_fiscal_issuance_references__policy_version.sql
+-- ============================================================================
+ALTER TABLE "core"."fiscal_issuance_references"
+  ADD CONSTRAINT "fk_fiscal_issuance_references__policy_version"
+  FOREIGN KEY ("statutory_discount_policy_version_id")
+  REFERENCES "discounts"."statutory_discount_policy_versions" ("statutory_discount_policy_version_id") DEFERRABLE;;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/functions/core.issue_exit_authorization.sql
+-- ============================================================================
+/*
+ * ExitPass v1.2 durable SQL patch.
+ *
+ * BRD:
+ * - 9.12 Exit Authorization
+ * - 9.13 Timeout, Retry, and Duplicate Handling
+ * - 10.7.2 Payment Finality Invariant
+ * - 10.7.7 Exit Token Integrity Invariant
+ *
+ * SDD:
+ * - 6.5 Issue Exit Authorization
+ * - 8.5 ExitAuthorization State Machine
+ * - 9.6 Integrity Constraints and Concurrency Rules
+ *
+ * System Invariants:
+ * - ExitAuthorization must be anchored to an existing finalized/confirmed PaymentAttempt.
+ * - ExitAuthorization must be tied back to the canonical ParkingSession and PaymentConfirmation chain.
+ * - Replayed issuance for the same confirmed PaymentAttempt returns the existing authorization deterministically.
+ * - All writes use ExitPass v1.2 table names, v1.2 enums, hashed token storage, and service-identity audit attribution.
+ */
+
+CREATE OR REPLACE FUNCTION core.issue_exit_authorization(
+    p_parking_session_id uuid,
+    p_payment_attempt_id uuid,
+    p_requested_by uuid,
+    p_correlation_id uuid,
+    p_now timestamptz
+)
+RETURNS TABLE (
+    exit_authorization_id uuid,
+    parking_session_id uuid,
+    payment_attempt_id uuid,
+    authorization_token text,
+    authorization_status text,
+    issued_at timestamptz,
+    expiration_timestamp timestamptz
+)
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_attempt core.payment_attempts%ROWTYPE;
+    v_confirmation core.payment_confirmations%ROWTYPE;
+    v_authorization core.exit_authorizations%ROWTYPE;
+    v_requested_by_service_identity_id uuid;
+    v_authorization_token text;
+BEGIN
+    SELECT pa.*
+    INTO v_attempt
+    FROM core.payment_attempts AS pa
+    WHERE pa.payment_attempt_id = p_payment_attempt_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'payment attempt % was not found', p_payment_attempt_id
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    IF v_attempt.parking_session_id <> p_parking_session_id THEN
+        RAISE EXCEPTION 'payment attempt % does not belong to parking session %', p_payment_attempt_id, p_parking_session_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT ea.*
+    INTO v_authorization
+    FROM core.exit_authorizations AS ea
+    WHERE ea.payment_attempt_id = p_payment_attempt_id
+    FOR UPDATE;
+
+    IF FOUND THEN
+        RETURN QUERY
+        SELECT
+            v_authorization.exit_authorization_id::uuid,
+            v_authorization.parking_session_id::uuid,
+            v_authorization.payment_attempt_id::uuid,
+            v_authorization.exit_authorization_id::text,
+            v_authorization.authorization_status::text,
+            v_authorization.issued_at::timestamptz,
+            v_authorization.expires_at::timestamptz;
+        RETURN;
+    END IF;
+
+    IF v_attempt.attempt_status <> 'CONFIRMED' THEN
+        RAISE EXCEPTION 'payment attempt % is not confirmed', p_payment_attempt_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT pc.*
+    INTO v_confirmation
+    FROM core.payment_confirmations AS pc
+    WHERE pc.payment_attempt_id = p_payment_attempt_id
+      AND pc.confirmation_status = 'RECORDED'
+    ORDER BY pc.confirmed_at DESC, pc.created_at DESC
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'payment attempt % has no recorded payment confirmation', p_payment_attempt_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_confirmation.payment_attempt_id <> v_attempt.payment_attempt_id THEN
+        RAISE EXCEPTION 'payment confirmation % is not anchored to payment attempt %', v_confirmation.payment_confirmation_id, p_payment_attempt_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT si.service_identity_id
+    INTO v_requested_by_service_identity_id
+    FROM identity.service_identities AS si
+    WHERE si.service_identity_id = p_requested_by
+    LIMIT 1;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        v_requested_by_service_identity_id := v_attempt.updated_by_service_identity_id;
+    END IF;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        v_requested_by_service_identity_id := v_confirmation.created_by_service_identity_id;
+    END IF;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        v_requested_by_service_identity_id := v_attempt.created_by_service_identity_id;
+    END IF;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        RAISE EXCEPTION 'requested_by service identity could not be resolved'
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    v_authorization_token := 'EXIT-' || replace(gen_random_uuid()::text, '-', '');
+
+    INSERT INTO core.exit_authorizations (
+        exit_authorization_id,
+        parking_session_id,
+        tariff_snapshot_id,
+        completion_basis,
+        completion_authority_reference_id,
+        payment_attempt_id,
+        payment_confirmation_id,
+        authorization_token_hash,
+        authorization_status,
+        issued_at,
+        expires_at,
+        correlation_id,
+        created_at,
+        created_by_service_identity_id,
+        updated_at,
+        updated_by_service_identity_id
+    )
+    VALUES (
+        gen_random_uuid(),
+        v_attempt.parking_session_id,
+        v_attempt.tariff_snapshot_id,
+        'PAYMENT_FINALITY',
+        v_confirmation.payment_confirmation_id,
+        v_attempt.payment_attempt_id,
+        v_confirmation.payment_confirmation_id,
+        encode(digest(v_authorization_token, 'sha256'), 'hex'),
+        'ISSUED',
+        p_now,
+        p_now + interval '15 minutes',
+        p_correlation_id,
+        p_now,
+        v_requested_by_service_identity_id,
+        p_now,
+        v_requested_by_service_identity_id
+    )
+    RETURNING *
+    INTO v_authorization;
+
+    RETURN QUERY
+    SELECT
+        v_authorization.exit_authorization_id::uuid,
+        v_authorization.parking_session_id::uuid,
+        v_authorization.payment_attempt_id::uuid,
+        v_authorization_token::text,
+        v_authorization.authorization_status::text,
+        v_authorization.issued_at::timestamptz,
+        v_authorization.expires_at::timestamptz;
+END;
+$function$;
+
+/*
+ * v1.3 completion-authority overload. The v1.2 five-argument signature above
+ * remains available for PAYMENT_FINALITY callers during rolling upgrades.
+ */
+CREATE OR REPLACE FUNCTION core.issue_exit_authorization(
+    p_parking_session_id uuid,
+    p_tariff_snapshot_id uuid,
+    p_completion_basis text,
+    p_completion_authority_reference_id uuid,
+    p_payment_attempt_id uuid,
+    p_payment_confirmation_id uuid,
+    p_statutory_discount_decision_command_id uuid,
+    p_statutory_discount_payable_basis_application_command_id uuid,
+    p_statutory_discount_validation_id uuid,
+    p_applied_policy_reference_id uuid,
+    p_statutory_discount_policy_version_id uuid,
+    p_requested_by uuid,
+    p_correlation_id uuid,
+    p_now timestamptz
+)
+RETURNS TABLE (
+    exit_authorization_id uuid,
+    parking_session_id uuid,
+    tariff_snapshot_id uuid,
+    completion_basis text,
+    completion_authority_reference_id uuid,
+    payment_attempt_id uuid,
+    payment_confirmation_id uuid,
+    authorization_token text,
+    authorization_status text,
+    issued_at timestamptz,
+    expiration_timestamp timestamptz
+)
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_attempt core.payment_attempts%ROWTYPE;
+    v_confirmation core.payment_confirmations%ROWTYPE;
+    v_application discounts.statutory_discount_payable_basis_application_commands%ROWTYPE;
+    v_decision discounts.statutory_discount_decision_commands%ROWTYPE;
+    v_validation discounts.statutory_discount_validations%ROWTYPE;
+    v_fiscal core.fiscal_issuance_references%ROWTYPE;
+    v_authorization core.exit_authorizations%ROWTYPE;
+    v_requested_by_service_identity_id uuid;
+    v_authorization_token text;
+    v_tariff_snapshot_id uuid := p_tariff_snapshot_id;
+    v_authority_reference_id uuid := p_completion_authority_reference_id;
+    v_payment_confirmation_id uuid := p_payment_confirmation_id;
+BEGIN
+    IF p_parking_session_id IS NULL OR p_completion_basis IS NULL THEN
+        RAISE EXCEPTION 'parking session and completion basis are required' USING ERRCODE = 'P0001';
+    END IF;
+
+    IF p_completion_basis = 'PAYMENT_FINALITY' THEN
+        IF p_payment_attempt_id IS NULL OR
+           p_statutory_discount_decision_command_id IS NOT NULL OR
+           p_statutory_discount_payable_basis_application_command_id IS NOT NULL OR
+           p_statutory_discount_validation_id IS NOT NULL OR
+           p_applied_policy_reference_id IS NOT NULL OR
+           p_statutory_discount_policy_version_id IS NOT NULL THEN
+            RAISE EXCEPTION 'PAYMENT_FINALITY requires payment ancestry only' USING ERRCODE = 'P0001';
+        END IF;
+
+        SELECT pa.* INTO v_attempt
+        FROM core.payment_attempts AS pa
+        WHERE pa.payment_attempt_id = p_payment_attempt_id
+        FOR UPDATE;
+
+        IF NOT FOUND OR v_attempt.parking_session_id <> p_parking_session_id OR
+           v_attempt.attempt_status <> 'CONFIRMED' OR v_attempt.finalized_at IS NULL THEN
+            RAISE EXCEPTION 'PAYMENT_FINALITY payment attempt is not eligible' USING ERRCODE = 'P0001';
+        END IF;
+
+        SELECT pc.* INTO v_confirmation
+        FROM core.payment_confirmations AS pc
+        WHERE pc.payment_attempt_id = v_attempt.payment_attempt_id
+          AND pc.confirmation_status = 'RECORDED'
+          AND (p_payment_confirmation_id IS NULL OR pc.payment_confirmation_id = p_payment_confirmation_id)
+        ORDER BY pc.confirmed_at DESC, pc.created_at DESC
+        LIMIT 1;
+
+        IF NOT FOUND OR v_confirmation.confirmed_amount <> v_attempt.amount OR
+           v_confirmation.currency_code <> v_attempt.currency_code THEN
+            RAISE EXCEPTION 'PAYMENT_FINALITY confirmation is not eligible' USING ERRCODE = 'P0001';
+        END IF;
+
+        v_tariff_snapshot_id := v_attempt.tariff_snapshot_id;
+        v_authority_reference_id := v_confirmation.payment_confirmation_id;
+        v_payment_confirmation_id := v_confirmation.payment_confirmation_id;
+
+        IF p_tariff_snapshot_id IS NOT NULL AND p_tariff_snapshot_id <> v_tariff_snapshot_id THEN
+            RAISE EXCEPTION 'PAYMENT_FINALITY tariff snapshot mismatch' USING ERRCODE = 'P0001';
+        END IF;
+        IF p_completion_authority_reference_id IS NOT NULL AND
+           p_completion_authority_reference_id <> v_authority_reference_id THEN
+            RAISE EXCEPTION 'PAYMENT_FINALITY completion authority mismatch' USING ERRCODE = 'P0001';
+        END IF;
+    ELSIF p_completion_basis = 'ZERO_PAYABLE_STATUTORY_FINALITY' THEN
+        IF p_tariff_snapshot_id IS NULL OR p_completion_authority_reference_id IS NULL OR
+           p_payment_attempt_id IS NOT NULL OR p_payment_confirmation_id IS NOT NULL OR
+           p_statutory_discount_decision_command_id IS NULL OR
+           p_statutory_discount_payable_basis_application_command_id IS NULL OR
+           p_statutory_discount_validation_id IS NULL OR
+           ((p_applied_policy_reference_id IS NULL) = (p_statutory_discount_policy_version_id IS NULL)) THEN
+            RAISE EXCEPTION 'ZERO_PAYABLE_STATUTORY_FINALITY ancestry is incomplete or mixed with payment ancestry'
+                USING ERRCODE = 'P0001';
+        END IF;
+
+        SELECT app.* INTO v_application
+        FROM discounts.statutory_discount_payable_basis_application_commands AS app
+        WHERE app.statutory_discount_payable_basis_application_command_id =
+                  p_statutory_discount_payable_basis_application_command_id
+        FOR UPDATE;
+
+        IF NOT FOUND OR v_application.command_status <> 'APPLIED' OR
+           v_application.parking_session_id <> p_parking_session_id OR
+           v_application.applied_tariff_snapshot_id <> p_tariff_snapshot_id OR
+           v_application.statutory_discount_decision_command_id <>
+               p_statutory_discount_decision_command_id OR
+           v_application.statutory_discount_validation_id <> p_statutory_discount_validation_id OR
+           v_application.approved_final_payable_amount_minor_units <> 0 OR
+           p_completion_authority_reference_id <>
+               p_statutory_discount_payable_basis_application_command_id OR
+           COALESCE(
+               v_application.statutory_discount_policy_version_id,
+               v_application.applied_policy_reference_id) IS DISTINCT FROM
+               COALESCE(p_statutory_discount_policy_version_id, p_applied_policy_reference_id) OR
+           (v_application.applied_policy_reference_id IS NOT NULL AND
+            v_application.statutory_discount_policy_version_id IS NOT NULL AND
+            v_application.applied_policy_reference_id <>
+                v_application.statutory_discount_policy_version_id) THEN
+            RAISE EXCEPTION 'ZERO_PAYABLE_STATUTORY_FINALITY payable-basis authority is invalid'
+                USING ERRCODE = 'P0001';
+        END IF;
+
+        SELECT decision.* INTO v_decision
+        FROM discounts.statutory_discount_decision_commands AS decision
+        WHERE decision.statutory_discount_decision_command_id =
+                  p_statutory_discount_decision_command_id;
+
+        IF NOT FOUND OR v_decision.parking_session_id <> p_parking_session_id OR
+           v_decision.command_status <> 'COMPLETED' OR
+           v_decision.decision_result_status <> 'APPROVED' OR
+           v_decision.statutory_discount_validation_id <> p_statutory_discount_validation_id OR
+           v_decision.applied_tariff_snapshot_id <> p_tariff_snapshot_id OR
+           v_decision.net_payable_amount_minor_units <> 0 THEN
+            RAISE EXCEPTION 'ZERO_PAYABLE_STATUTORY_FINALITY decision authority is invalid'
+                USING ERRCODE = 'P0001';
+        END IF;
+
+        SELECT validation.* INTO v_validation
+        FROM discounts.statutory_discount_validations AS validation
+        WHERE validation.statutory_discount_validation_id = p_statutory_discount_validation_id;
+
+        IF NOT FOUND OR v_validation.parking_session_id <> p_parking_session_id OR
+           v_validation.validation_status <> 'APPROVED' OR
+           v_validation.net_amount_after_discount <> 0 THEN
+            RAISE EXCEPTION 'ZERO_PAYABLE_STATUTORY_FINALITY validation authority is invalid'
+                USING ERRCODE = 'P0001';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'unsupported ExitAuthorization completion basis: %', p_completion_basis
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT ea.* INTO v_authorization
+    FROM core.exit_authorizations AS ea
+    WHERE ea.completion_basis = p_completion_basis
+      AND ea.completion_authority_reference_id = v_authority_reference_id
+    FOR UPDATE;
+
+    IF FOUND THEN
+        RETURN QUERY SELECT
+            v_authorization.exit_authorization_id, v_authorization.parking_session_id,
+            v_authorization.tariff_snapshot_id, v_authorization.completion_basis::text,
+            v_authorization.completion_authority_reference_id,
+            v_authorization.payment_attempt_id, v_authorization.payment_confirmation_id,
+            v_authorization.exit_authorization_id::text,
+            v_authorization.authorization_status::text,
+            v_authorization.issued_at, v_authorization.expires_at;
+        RETURN;
+    END IF;
+
+    SELECT fir.* INTO v_fiscal
+    FROM core.fiscal_issuance_references AS fir
+    WHERE fir.is_active AND NOT fir.is_superseded
+      AND fir.parking_session_id = p_parking_session_id
+      AND fir.tariff_snapshot_id = v_tariff_snapshot_id
+      AND fir.completion_basis = p_completion_basis
+      AND fir.completion_authority_reference_id = v_authority_reference_id
+      AND fir.fiscal_issuance_state IN (
+          'FISCAL_ISSUANCE_RECORDED', 'FISCAL_ISSUANCE_REPLAYED', 'FISCAL_ISSUANCE_RECONCILED')
+      AND fir.pos_server_fiscal_document_id IS NOT NULL
+      AND fir.fiscal_document_number IS NOT NULL
+    ORDER BY fir.last_updated_at DESC
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'required fiscal completion is not recorded for ExitAuthorization'
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT si.service_identity_id INTO v_requested_by_service_identity_id
+    FROM identity.service_identities AS si
+    WHERE si.service_identity_id = p_requested_by
+    LIMIT 1;
+
+    v_requested_by_service_identity_id := COALESCE(
+        v_requested_by_service_identity_id,
+        v_fiscal.updated_by_service_identity_id,
+        v_fiscal.recorded_by_service_identity_id,
+        v_attempt.updated_by_service_identity_id,
+        v_attempt.created_by_service_identity_id);
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        RAISE EXCEPTION 'requested_by service identity could not be resolved' USING ERRCODE = 'P0002';
+    END IF;
+
+    v_authorization_token := 'EXIT-' || replace(gen_random_uuid()::text, '-', '');
+    INSERT INTO core.exit_authorizations (
+        exit_authorization_id, parking_session_id, tariff_snapshot_id,
+        completion_basis, completion_authority_reference_id,
+        payment_attempt_id, payment_confirmation_id,
+        statutory_discount_decision_command_id,
+        statutory_discount_payable_basis_application_command_id,
+        statutory_discount_validation_id, applied_policy_reference_id,
+        statutory_discount_policy_version_id, authorization_token_hash,
+        authorization_status, issued_at, expires_at, correlation_id,
+        created_at, created_by_service_identity_id, updated_at,
+        updated_by_service_identity_id)
+    VALUES (
+        gen_random_uuid(), p_parking_session_id, v_tariff_snapshot_id,
+        p_completion_basis, v_authority_reference_id,
+        p_payment_attempt_id, v_payment_confirmation_id,
+        p_statutory_discount_decision_command_id,
+        p_statutory_discount_payable_basis_application_command_id,
+        p_statutory_discount_validation_id, p_applied_policy_reference_id,
+        p_statutory_discount_policy_version_id,
+        encode(digest(v_authorization_token, 'sha256'), 'hex'),
+        'ISSUED', p_now, p_now + interval '15 minutes', p_correlation_id,
+        p_now, v_requested_by_service_identity_id, p_now,
+        v_requested_by_service_identity_id)
+    RETURNING * INTO v_authorization;
+
+    RETURN QUERY SELECT
+        v_authorization.exit_authorization_id, v_authorization.parking_session_id,
+        v_authorization.tariff_snapshot_id, v_authorization.completion_basis::text,
+        v_authorization.completion_authority_reference_id,
+        v_authorization.payment_attempt_id, v_authorization.payment_confirmation_id,
+        v_authorization_token, v_authorization.authorization_status::text,
+        v_authorization.issued_at, v_authorization.expires_at;
+END;
+$function$;
+
+
+-- ============================================================================
+-- Source object: objects/schemas/core/functions/core.consume_exit_authorization.sql
+-- ============================================================================
+/*
+ * ExitPass v1.2 durable SQL patch.
+ *
+ * BRD:
+ * - 9.12 Exit Authorization
+ * - 9.13 Timeout, Retry, and Duplicate Handling
+ * - 10.7.7 Exit Token Integrity Invariant
+ * - 10.7.8 Single-Use Consume Invariant
+ *
+ * SDD:
+ * - 6.6 Consume Exit Authorization
+ * - 8.5 ExitAuthorization State Machine
+ * - 9.6 Integrity Constraints and Concurrency Rules
+ *
+ * System Invariants:
+ * - AuthorizationConsumption must be anchored to an existing issued ExitAuthorization.
+ * - Consumption must be single-use, auditable, and deterministic.
+ * - Expired, invalidated, and already-consumed authorizations fail closed.
+ * - All writes use ExitPass v1.2 core and gates table names, v1.2 enums, and service-identity audit attribution.
+ */
+
+CREATE OR REPLACE FUNCTION core.consume_exit_authorization(
+    p_exit_authorization_id uuid,
+    p_requested_by uuid,
+    p_correlation_id uuid,
+    p_now timestamptz
+)
+RETURNS TABLE (
+    exit_authorization_id uuid,
+    authorization_status text,
+    consumed_at timestamptz
+)
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_authorization core.exit_authorizations%ROWTYPE;
+    v_session core.parking_sessions%ROWTYPE;
+    v_existing_consumed_at timestamptz;
+    v_requested_by_service_identity_id uuid;
+    v_consumption gates.gate_authorization_consumptions%ROWTYPE;
+BEGIN
+    SELECT ea.*
+    INTO v_authorization
+    FROM core.exit_authorizations AS ea
+    WHERE ea.exit_authorization_id = p_exit_authorization_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'exit authorization % was not found', p_exit_authorization_id
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    SELECT ps.*
+    INTO v_session
+    FROM core.parking_sessions AS ps
+    WHERE ps.parking_session_id = v_authorization.parking_session_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'parking session % was not found for exit authorization %',
+            v_authorization.parking_session_id,
+            p_exit_authorization_id
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    SELECT gac.consumed_at
+    INTO v_existing_consumed_at
+    FROM gates.gate_authorization_consumptions AS gac
+    WHERE gac.exit_authorization_id = p_exit_authorization_id
+      AND gac.consume_status = 'CONSUMED'
+    ORDER BY gac.consumed_at DESC
+    LIMIT 1;
+
+    IF FOUND THEN
+        RAISE EXCEPTION 'exit authorization % has already been consumed', p_exit_authorization_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_authorization.authorization_status <> 'ISSUED' THEN
+        RAISE EXCEPTION 'exit authorization % is not issued', p_exit_authorization_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_authorization.expires_at <= p_now THEN
+        INSERT INTO gates.gate_authorization_consumptions (
+            gate_authorization_consumption_id,
+            exit_authorization_id,
+            authorization_token_hash,
+            site_id,
+            consume_status,
+            consume_reason_code,
+            requested_at,
+            validated_at,
+            command_requested,
+            command_result_status,
+            failure_detail,
+            correlation_id,
+            created_at,
+            created_by_service_identity_id,
+            updated_at,
+            updated_by_service_identity_id
+        )
+        VALUES (
+            gen_random_uuid(),
+            v_authorization.exit_authorization_id,
+            v_authorization.authorization_token_hash,
+            v_session.site_id,
+            'EXPIRED',
+            'EXIT_AUTHORIZATION_EXPIRED',
+            p_now,
+            p_now,
+            false,
+            'NOT_REQUESTED',
+            'Exit authorization expired before consume.',
+            p_correlation_id,
+            p_now,
+            COALESCE(v_authorization.updated_by_service_identity_id, v_authorization.created_by_service_identity_id),
+            p_now,
+            COALESCE(v_authorization.updated_by_service_identity_id, v_authorization.created_by_service_identity_id)
+        );
+
+        RAISE EXCEPTION 'exit authorization % is expired', p_exit_authorization_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT si.service_identity_id
+    INTO v_requested_by_service_identity_id
+    FROM identity.service_identities AS si
+    WHERE si.service_identity_id = p_requested_by
+    LIMIT 1;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        v_requested_by_service_identity_id := v_authorization.updated_by_service_identity_id;
+    END IF;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        v_requested_by_service_identity_id := v_authorization.created_by_service_identity_id;
+    END IF;
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        RAISE EXCEPTION 'requested_by service identity could not be resolved'
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    INSERT INTO gates.gate_authorization_consumptions (
+        gate_authorization_consumption_id,
+        exit_authorization_id,
+        authorization_token_hash,
+        site_id,
+        consume_status,
+        consume_reason_code,
+        requested_at,
+        validated_at,
+        consumed_at,
+        command_requested,
+        command_result_status,
+        command_result_at,
+        correlation_id,
+        created_at,
+        created_by_service_identity_id,
+        updated_at,
+        updated_by_service_identity_id
+    )
+    VALUES (
+        gen_random_uuid(),
+        v_authorization.exit_authorization_id,
+        v_authorization.authorization_token_hash,
+        v_session.site_id,
+        'CONSUMED',
+        'EXIT_AUTHORIZATION_CONSUMED',
+        p_now,
+        p_now,
+        p_now,
+        true,
+        'REQUESTED',
+        p_now,
+        p_correlation_id,
+        p_now,
+        v_requested_by_service_identity_id,
+        p_now,
+        v_requested_by_service_identity_id
+    )
+    RETURNING *
+    INTO v_consumption;
+
+    UPDATE core.exit_authorizations AS ea
+    SET
+        authorization_status = 'CONSUMED',
+        consumed_at = p_now,
+        updated_at = p_now,
+        updated_by_service_identity_id = v_requested_by_service_identity_id,
+        row_version = ea.row_version + 1
+    WHERE ea.exit_authorization_id = p_exit_authorization_id;
+
+    RETURN QUERY
+    SELECT
+        v_authorization.exit_authorization_id::uuid,
+        'CONSUMED'::text,
+        v_consumption.consumed_at::timestamptz;
+END;
+$function$;
+
+/*
+ * v1.3 completion-aware overload. PAYMENT_FINALITY delegates to the proven
+ * four-argument routine. Zero-payable statutory completion is consumed on
+ * core.exit_authorizations and never requests an ExitPass physical gate command.
+ */
+CREATE OR REPLACE FUNCTION core.consume_exit_authorization(
+    p_exit_authorization_id uuid,
+    p_requested_by uuid,
+    p_correlation_id uuid,
+    p_now timestamptz,
+    p_completion_basis text
+)
+RETURNS TABLE (
+    exit_authorization_id uuid,
+    authorization_status text,
+    consumed_at timestamptz
+)
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_authorization core.exit_authorizations%ROWTYPE;
+    v_session core.parking_sessions%ROWTYPE;
+    v_requested_by_service_identity_id uuid;
+    v_valid boolean;
+BEGIN
+    IF p_completion_basis = 'PAYMENT_FINALITY' THEN
+        RETURN QUERY
+        SELECT consumed.exit_authorization_id, consumed.authorization_status, consumed.consumed_at
+        FROM core.consume_exit_authorization(
+            p_exit_authorization_id,
+            p_requested_by,
+            p_correlation_id,
+            p_now) AS consumed;
+        UPDATE core.exit_authorizations AS ea
+        SET authorization_status = 'CONSUMED',
+            consumed_at = p_now,
+            correlation_id = COALESCE(p_correlation_id, ea.correlation_id),
+            updated_at = p_now,
+            updated_by_service_identity_id = COALESCE(
+                ea.updated_by_service_identity_id,
+                ea.created_by_service_identity_id),
+            row_version = ea.row_version + 1
+        WHERE ea.exit_authorization_id = p_exit_authorization_id
+          AND ea.authorization_status <> 'CONSUMED';
+        RETURN;
+    END IF;
+
+    IF p_completion_basis <> 'ZERO_PAYABLE_STATUTORY_FINALITY' THEN
+        RAISE EXCEPTION 'unsupported ExitAuthorization completion basis: %', p_completion_basis
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT ea.* INTO v_authorization
+    FROM core.exit_authorizations AS ea
+    WHERE ea.exit_authorization_id = p_exit_authorization_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'exit authorization % was not found', p_exit_authorization_id
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    IF v_authorization.completion_basis <> p_completion_basis THEN
+        RAISE EXCEPTION 'ExitAuthorization completion basis mismatch'
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_authorization.authorization_status = 'CONSUMED' THEN
+        RAISE EXCEPTION 'exit authorization % has already been consumed', p_exit_authorization_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_authorization.authorization_status <> 'ISSUED' OR
+       v_authorization.expires_at <= p_now THEN
+        RAISE EXCEPTION 'exit authorization % is not currently valid', p_exit_authorization_id
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT ps.* INTO v_session
+    FROM core.parking_sessions AS ps
+    WHERE ps.parking_session_id = v_authorization.parking_session_id;
+
+    IF NOT FOUND OR v_session.session_status <> 'ACTIVE' THEN
+        RAISE EXCEPTION 'parking session is not eligible for ExitAuthorization consume'
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM discounts.statutory_discount_payable_basis_application_commands AS app
+        JOIN discounts.statutory_discount_decision_commands AS decision
+          ON decision.statutory_discount_decision_command_id =
+             app.statutory_discount_decision_command_id
+        JOIN discounts.statutory_discount_validations AS validation
+          ON validation.statutory_discount_validation_id =
+             app.statutory_discount_validation_id
+        JOIN core.fiscal_issuance_references AS fir
+          ON fir.parking_session_id = v_authorization.parking_session_id
+         AND fir.tariff_snapshot_id = v_authorization.tariff_snapshot_id
+         AND fir.completion_basis = v_authorization.completion_basis
+         AND fir.completion_authority_reference_id =
+             v_authorization.completion_authority_reference_id
+         AND fir.is_active
+         AND NOT fir.is_superseded
+         AND fir.fiscal_issuance_state IN (
+             'FISCAL_ISSUANCE_RECORDED',
+             'FISCAL_ISSUANCE_REPLAYED',
+             'FISCAL_ISSUANCE_RECONCILED')
+         AND fir.pos_server_fiscal_document_id IS NOT NULL
+        WHERE app.statutory_discount_payable_basis_application_command_id =
+                  v_authorization.statutory_discount_payable_basis_application_command_id
+          AND app.command_status = 'APPLIED'
+          AND app.parking_session_id = v_authorization.parking_session_id
+          AND app.applied_tariff_snapshot_id = v_authorization.tariff_snapshot_id
+          AND app.approved_final_payable_amount_minor_units = 0
+          AND app.statutory_discount_decision_command_id =
+              v_authorization.statutory_discount_decision_command_id
+          AND app.statutory_discount_validation_id =
+              v_authorization.statutory_discount_validation_id
+          AND COALESCE(
+                  app.statutory_discount_policy_version_id,
+                  app.applied_policy_reference_id) =
+              COALESCE(
+                  v_authorization.statutory_discount_policy_version_id,
+                  v_authorization.applied_policy_reference_id)
+          AND (app.applied_policy_reference_id IS NULL OR
+               app.statutory_discount_policy_version_id IS NULL OR
+               app.applied_policy_reference_id = app.statutory_discount_policy_version_id)
+          AND decision.decision_result_status = 'APPROVED'
+          AND decision.command_status = 'COMPLETED'
+          AND validation.validation_status = 'APPROVED'
+          AND validation.net_amount_after_discount = 0
+          AND fir.statutory_discount_decision_command_id =
+              v_authorization.statutory_discount_decision_command_id
+          AND fir.statutory_discount_payable_basis_application_command_id =
+              v_authorization.statutory_discount_payable_basis_application_command_id
+          AND fir.statutory_discount_validation_id =
+              v_authorization.statutory_discount_validation_id
+          AND COALESCE(
+                  fir.statutory_discount_policy_version_id,
+                  fir.applied_policy_reference_id) =
+              COALESCE(
+                  v_authorization.statutory_discount_policy_version_id,
+                  v_authorization.applied_policy_reference_id)
+          AND v_authorization.payment_attempt_id IS NULL
+          AND v_authorization.payment_confirmation_id IS NULL)
+    INTO v_valid;
+
+    IF NOT v_valid THEN
+        RAISE EXCEPTION 'zero-payable ExitAuthorization completion authority is no longer valid'
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT si.service_identity_id INTO v_requested_by_service_identity_id
+    FROM identity.service_identities AS si
+    WHERE si.service_identity_id = p_requested_by
+    LIMIT 1;
+
+    v_requested_by_service_identity_id := COALESCE(
+        v_requested_by_service_identity_id,
+        v_authorization.updated_by_service_identity_id,
+        v_authorization.created_by_service_identity_id);
+
+    IF v_requested_by_service_identity_id IS NULL THEN
+        RAISE EXCEPTION 'requested_by service identity could not be resolved'
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    UPDATE core.exit_authorizations AS ea
+    SET authorization_status = 'CONSUMED',
+        consumed_at = p_now,
+        correlation_id = COALESCE(p_correlation_id, ea.correlation_id),
+        updated_at = p_now,
+        updated_by_service_identity_id = v_requested_by_service_identity_id,
+        row_version = ea.row_version + 1
+    WHERE ea.exit_authorization_id = p_exit_authorization_id;
+
+    RETURN QUERY SELECT
+        v_authorization.exit_authorization_id,
+        'CONSUMED'::text,
+        p_now;
+END;
+$function$;
 
 
 -- ============================================================================

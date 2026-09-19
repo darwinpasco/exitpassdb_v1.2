@@ -1,3 +1,3 @@
 ﻿-- Set comment to table: "exit_authorizations"
-COMMENT ON TABLE "core"."exit_authorizations" IS 'ExitPass v1.2 table generated from Section 13 physical table specifications.';;
+COMMENT ON TABLE "core"."exit_authorizations" IS 'Canonical single-use exit authority backed by transaction completion authority, including paid and statutory zero-payable completion.';;
 
