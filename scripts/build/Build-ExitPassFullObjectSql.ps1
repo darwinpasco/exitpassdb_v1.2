@@ -58,7 +58,7 @@ try {
         $writer.WriteLine('-- ============================================================================')
         $writer.WriteLine("-- Source object: $path")
         $writer.WriteLine('-- ============================================================================')
-        $writer.WriteLine((Convert-ToLfTrimmed -Text (Get-Content -LiteralPath $full -Raw)))
+        $writer.WriteLine((Convert-ToLfTrimmed -Text (Get-Content -LiteralPath $full -Raw -Encoding UTF8)))
         $writer.WriteLine()
     }
 }
