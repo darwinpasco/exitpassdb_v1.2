@@ -25,14 +25,14 @@ CREATE TEMP TABLE wave3_roles (
 ) ON COMMIT DROP;
 
 INSERT INTO wave3_roles VALUES
-('SYSTEM_ADMINISTRATOR','System Administrator','Administrative authority only: identity/RBAC, site, device, shift, POS Server/fiscal configuration, connector, platform configuration, and access audit.','SYSTEM','CANONICAL_ROLE','ACTIVE',true,true,true,true),
-('OPERATIONS_SUPERVISOR','Operations Supervisor','Assigned-site operations, operational exception, and shift supervision; plus all-site statutory discount supervision on Management Platform only.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,true,true,true),
+('SYSTEM_ADMINISTRATOR','System Administrator','Administrative authority only: identity/RBAC, site, device, shift, POS Server/fiscal configuration, connector, platform configuration, and access audit.','SYSTEM','CANONICAL_ROLE','ACTIVE',true,false,true,true),
+('OPERATIONS_SUPERVISOR','Operations Supervisor','Assigned-site operations, operational exception, and shift supervision; plus all-site statutory discount supervision on Management Platform only.','OPERATIONS','CANONICAL_ROLE','ACTIVE',true,false,true,true),
 ('SITE_OPERATOR','Site Operator','Assigned-site operation, support, and statutory discount processing without approval.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('PARKING_ATTENDANT','Parking Attendant','Native Parking App authority at assigned sites and devices.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('APT_CASHIER_OPERATOR','APT / Cashier Operator','APT authority at assigned sites and terminals.','OPERATIONS','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('FINANCE_RECONCILIATION_ANALYST','Finance / Reconciliation Analyst','Finance and reconciliation responsibilities within assigned scope.','FINANCE','CANONICAL_ROLE','ACTIVE',false,false,true,true),
-('COMPLIANCE_POLICY_ADMINISTRATOR','Compliance / Policy Administrator','Global-by-default compliance and policy responsibilities.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,true,true,true),
-('EXECUTIVE_MANAGEMENT','Executive / Management','Read-only management reporting with mandatory Global scope.','OTHER','CANONICAL_ROLE','ACTIVE',false,true,true,true),
+('COMPLIANCE_POLICY_ADMINISTRATOR','Compliance / Policy Administrator','Global-by-default compliance and policy responsibilities.','COMPLIANCE','CANONICAL_ROLE','ACTIVE',true,false,true,true),
+('EXECUTIVE_MANAGEMENT','Executive / Management','Read-only management reporting with mandatory Global scope.','OTHER','CANONICAL_ROLE','ACTIVE',false,false,true,true),
 ('SYSTEM_ADMIN','System Administrator (superseded)','Superseded v1.2 role retained only for migration evidence.','SYSTEM','HISTORICAL_LEGACY_ROLE','RETIRED',true,true,false,false),
 ('SYSTEM_RBAC_ADMINISTRATOR','System / RBAC Administrator (superseded)','Superseded split-administrator role retained only for migration evidence.','SYSTEM','HISTORICAL_LEGACY_ROLE','RETIRED',true,true,false,false),
 ('PLATFORM_ADMINISTRATOR','Platform Administrator (superseded)','Superseded split-administrator role retained only for migration evidence.','OPERATIONS','HISTORICAL_LEGACY_ROLE','RETIRED',true,true,false,false),
@@ -284,6 +284,8 @@ INSERT INTO wave3_role_permissions VALUES
 ('SYSTEM_ADMINISTRATOR','identity.role-assignment.manage'),('SYSTEM_ADMINISTRATOR','identity.scope-assignment.manage'),
 ('SYSTEM_ADMINISTRATOR','identity.privileged-access.decide'),('SYSTEM_ADMINISTRATOR','identity.access-review.manage'),
 ('SYSTEM_ADMINISTRATOR','human-authentication.session.admin.view'),('SYSTEM_ADMINISTRATOR','human-authentication.session.admin.revoke'),
+('SYSTEM_ADMINISTRATOR','human-authentication.credential.reset'),('SYSTEM_ADMINISTRATOR','human-authentication.mfa.status.view'),
+('SYSTEM_ADMINISTRATOR','human-authentication.mfa.reset'),('SYSTEM_ADMINISTRATOR','human-authentication.mfa.remove'),
 ('SYSTEM_ADMINISTRATOR','site.view'),('SYSTEM_ADMINISTRATOR','site.manage'),
 ('SYSTEM_ADMINISTRATOR','site-group.view'),('SYSTEM_ADMINISTRATOR','site-group.manage'),
 ('SYSTEM_ADMINISTRATOR','device.view'),('SYSTEM_ADMINISTRATOR','device.manage'),

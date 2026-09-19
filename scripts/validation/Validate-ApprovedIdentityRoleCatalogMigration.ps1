@@ -10,6 +10,7 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 $sourcePath = Join-Path $RepoRoot 'objects\reference-data\identity.v13-management-platform-role-permission-bundles.sql'
 $migrationPath = Join-Path $RepoRoot 'migrations\20260917120000_v13_approved_identity_role_catalog.sql'
 $directAddMigrationPath = Join-Path $RepoRoot 'migrations\20260918120000_v13_all_approved_roles_direct_add.sql'
+$removeElevatedMigrationPath = Join-Path $RepoRoot 'migrations\20260919120000_v13_remove_elevated_role_workflow.sql'
 
 function Read-NormalizedSql([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { throw "Required SQL file not found: $Path" }
@@ -29,14 +30,16 @@ $approvedCodes = @(
 )
 foreach ($roleCode in $approvedCodes) {
     $matchingRow = @(Get-Content -LiteralPath $sourcePath | Where-Object { $_.StartsWith("('$roleCode',") -and $_.Contains("'CANONICAL_ROLE'") })
-    if ($matchingRow.Count -ne 1 -or $matchingRow[0] -notmatch ',true,true\),$') {
-        throw "Canonical role $roleCode must be human-assignable and direct-add eligible."
+    if ($matchingRow.Count -ne 1 -or $matchingRow[0] -notmatch ',(true|false),false,true,true\),$') {
+        throw "Canonical role $roleCode must be human-assignable, direct-add eligible, and free of elevated approval."
     }
 }
 if ($approvedCodes.Count -ne 8) { throw 'Exactly eight approved roles are required.' }
 $directAddMigration = Read-NormalizedSql $directAddMigrationPath
+$removeElevatedMigration = Read-NormalizedSql $removeElevatedMigrationPath
 foreach ($roleCode in $approvedCodes) {
     if (-not $directAddMigration.Contains("'$roleCode'")) { throw "Direct Add User migration is missing $roleCode." }
+    if (-not $removeElevatedMigration.Contains("'$roleCode'")) { throw "Elevated workflow removal migration is missing $roleCode." }
 }
 if ($source.Contains("SELECT 'SYSTEM_ADMIN',p.permission_code")) {
     throw 'Superseded SYSTEM_ADMIN all-permissions expansion remains in canonical source.'

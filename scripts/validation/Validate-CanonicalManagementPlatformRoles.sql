@@ -62,9 +62,9 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM identity.roles
     WHERE role_code=ANY(expected_roles)
-      AND (role_provenance<>'CANONICAL_ROLE' OR role_status<>'ACTIVE' OR NOT human_assignable OR NOT direct_add_user_eligible)
+      AND (role_provenance<>'CANONICAL_ROLE' OR role_status<>'ACTIVE' OR NOT human_assignable OR NOT direct_add_user_eligible OR requires_elevated_approval)
   ) THEN
-    RAISE EXCEPTION 'An approved role is not active, canonical, human-assignable, and direct-add eligible.';
+    RAISE EXCEPTION 'An approved role is not active, canonical, human-assignable, direct-add eligible, and free of elevated approval.';
   END IF;
   IF EXISTS (
     SELECT 1 FROM identity.roles
@@ -100,7 +100,7 @@ BEGIN
 
   IF (SELECT count(*) FROM identity.role_permissions rp
       JOIN identity.roles r ON r.role_id=rp.role_id
-      WHERE r.role_code='SYSTEM_ADMINISTRATOR' AND rp.binding_status='ACTIVE')<>34
+      WHERE r.role_code='SYSTEM_ADMINISTRATOR' AND rp.binding_status='ACTIVE')<>38
      OR EXISTS (
       SELECT 1 FROM identity.role_permissions rp
       JOIN identity.roles r ON r.role_id=rp.role_id
@@ -118,7 +118,27 @@ BEGIN
           OR p.permission_code LIKE 'policy-import.%'
           OR p.permission_code LIKE 'apt.%'
           OR p.permission_code LIKE 'parking-attendant.%')) THEN
-    RAISE EXCEPTION 'System Administrator is not restricted to its 34 administrative permissions.';
+    RAISE EXCEPTION 'System Administrator is not restricted to its 38 administrative permissions.';
+  END IF;
+
+  IF EXISTS (
+    SELECT required.permission_code
+    FROM unnest(ARRAY[
+      'human-authentication.session.admin.view',
+      'human-authentication.session.admin.revoke',
+      'human-authentication.credential.reset',
+      'human-authentication.mfa.status.view',
+      'human-authentication.mfa.reset',
+      'human-authentication.mfa.remove']) required(permission_code)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM identity.role_permissions rp
+      JOIN identity.roles r ON r.role_id=rp.role_id
+      JOIN identity.permissions p ON p.permission_id=rp.permission_id
+      WHERE r.role_code='SYSTEM_ADMINISTRATOR'
+        AND rp.binding_status='ACTIVE'
+        AND p.permission_code=required.permission_code)
+  ) THEN
+    RAISE EXCEPTION 'System Administrator is missing a required human-authentication administration permission.';
   END IF;
 
   IF (SELECT array_agg(p.permission_code::text ORDER BY p.permission_code)
