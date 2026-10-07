@@ -43,7 +43,7 @@ DECLARE
     'operator-console.policy-import-review.approve.qa',
     'operator-console.policy-import-review.approve.db',
     'statutory-discount-policy.view','statutory-discount-policy.manage',
-    'evidence-rule-policy.view','evidence-rule-policy.manage','reports.export'];
+    'evidence-rule-policy.view','evidence-rule-policy.manage','jurisdiction.view','reports.export'];
   executive_permissions constant text[] := ARRAY[
     'dashboard.view','reports.view','executive-summary.view','site-performance.view',
     'site-group-performance.view','revenue-summary.view','payment-summary.view',
@@ -100,7 +100,7 @@ BEGIN
 
   IF (SELECT count(*) FROM identity.role_permissions rp
       JOIN identity.roles r ON r.role_id=rp.role_id
-      WHERE r.role_code='SYSTEM_ADMINISTRATOR' AND rp.binding_status='ACTIVE')<>38
+      WHERE r.role_code='SYSTEM_ADMINISTRATOR' AND rp.binding_status='ACTIVE')<>42
      OR EXISTS (
       SELECT 1 FROM identity.role_permissions rp
       JOIN identity.roles r ON r.role_id=rp.role_id
@@ -118,7 +118,7 @@ BEGIN
           OR p.permission_code LIKE 'policy-import.%'
           OR p.permission_code LIKE 'apt.%'
           OR p.permission_code LIKE 'parking-attendant.%')) THEN
-    RAISE EXCEPTION 'System Administrator is not restricted to its 38 administrative permissions.';
+    RAISE EXCEPTION 'System Administrator is not restricted to its 42 administrative permissions.';
   END IF;
 
   IF EXISTS (

@@ -256,9 +256,17 @@ BEGIN
       AND s.country_code = 'PH'
       AND s.lgu_code = e.psgc_code
       AND s.local_government_unit_id = e.jurisdiction_id
-      AND s.site_status = 'DRAFT'
-      AND NOT s.public_lookup_enabled
-      AND NOT s.payment_enabled
+      AND (
+        (e.site_code = 'PITX-LEVEL-3'
+         AND s.site_status = 'ACTIVE'
+         AND s.public_lookup_enabled
+         AND s.payment_enabled)
+        OR
+        (e.site_code <> 'PITX-LEVEL-3'
+         AND s.site_status = 'DRAFT'
+         AND NOT s.public_lookup_enabled
+         AND NOT s.payment_enabled)
+      )
       AND s.effective_from = e.effective_from
       AND s.effective_to IS NULL
     )
@@ -319,7 +327,10 @@ SELECT e.site_id, e.site_group_id, e.site_code, e.site_name,
        'Non-operational canonical realistic carpark catalog entry from approved ExitPass manifest ee7bc7545054f8277301a8bf66cdf4ee8628afb7.',
        e.site_type::sites.site_type_enum, e.timezone_name, NULL, NULL,
        j.display_name, j.province_name, 'PH', e.psgc_code, e.jurisdiction_id,
-       'DRAFT', false, false, e.effective_from, NULL
+       (CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN 'ACTIVE' ELSE 'DRAFT' END)::sites.site_status_enum,
+       CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN true ELSE false END,
+       CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN true ELSE false END,
+       e.effective_from, NULL
 FROM ep_realistic_catalog_sites e
 JOIN sites.jurisdictions j ON j.jurisdiction_id = e.jurisdiction_id
 WHERE NOT EXISTS (
@@ -374,8 +385,19 @@ BEGIN
   ) OR EXISTS (
     SELECT 1 FROM sites.sites s JOIN ep_realistic_catalog_sites e USING (site_id)
     WHERE s.site_group_id <> e.site_group_id OR s.site_code <> e.site_code OR s.site_name <> e.site_name
-       OR s.site_type::text <> e.site_type OR s.site_status <> 'DRAFT'
-       OR s.public_lookup_enabled OR s.payment_enabled OR s.effective_from <> e.effective_from
+       OR s.site_type::text <> e.site_type
+       OR NOT (
+         (e.site_code = 'PITX-LEVEL-3'
+          AND s.site_status = 'ACTIVE'
+          AND s.public_lookup_enabled
+          AND s.payment_enabled)
+         OR
+         (e.site_code <> 'PITX-LEVEL-3'
+          AND s.site_status = 'DRAFT'
+          AND NOT s.public_lookup_enabled
+          AND NOT s.payment_enabled)
+       )
+       OR s.effective_from <> e.effective_from
        OR s.effective_to IS NOT NULL OR s.local_government_unit_id <> e.jurisdiction_id
   ) OR EXISTS (
     SELECT 1 FROM sites.site_jurisdiction_assignments a
