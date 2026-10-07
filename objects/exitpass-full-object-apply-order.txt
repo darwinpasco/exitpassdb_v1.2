@@ -2746,3 +2746,4 @@ objects/schemas/sessions/tables/sessions.vendor_session_projection_sync_targets.
 objects/schemas/sessions/indexes/sessions.vendor_session_projection_sync_targets.indexes.sql
 objects/schemas/sessions/comments/sessions.vendor_session_projection_sync_targets.comments.sql
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
+objects/schemas/sites/tables/sites.site-vehicle-tariff-configuration.sql
