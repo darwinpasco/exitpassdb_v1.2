@@ -327,7 +327,7 @@ SELECT e.site_id, e.site_group_id, e.site_code, e.site_name,
        'Non-operational canonical realistic carpark catalog entry from approved ExitPass manifest ee7bc7545054f8277301a8bf66cdf4ee8628afb7.',
        e.site_type::sites.site_type_enum, e.timezone_name, NULL, NULL,
        j.display_name, j.province_name, 'PH', e.psgc_code, e.jurisdiction_id,
-       CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN 'ACTIVE' ELSE 'DRAFT' END,
+       (CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN 'ACTIVE' ELSE 'DRAFT' END)::sites.site_status_enum,
        CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN true ELSE false END,
        CASE WHEN e.site_code = 'PITX-LEVEL-3' THEN true ELSE false END,
        e.effective_from, NULL
