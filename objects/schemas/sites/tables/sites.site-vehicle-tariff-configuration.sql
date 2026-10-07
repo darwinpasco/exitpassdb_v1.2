@@ -241,9 +241,16 @@ WHERE role.role_code = 'COMPLIANCE_POLICY_ADMINISTRATOR'
         AND existing.permission_id = permission.permission_id
         AND existing.binding_status = 'ACTIVE');
 
--- PITX Level 3 retains the realistic-catalog clean-build lifecycle posture.
--- Site activation/public lookup/payment enablement is an explicit governed runtime action,
--- separate from installing the approved Site/vehicle tariff configuration.
+-- PITX Level 3 is the approved realistic operational test Site for this slice.
+UPDATE sites.sites
+SET site_status = 'ACTIVE',
+    public_lookup_enabled = true,
+    payment_enabled = true,
+    updated_at = now(),
+    row_version = row_version + 1
+WHERE site_id = '2d1dcdf8-f563-537c-8542-0bde7cc9da97'::uuid
+  AND site_code = 'PITX-LEVEL-3'
+  AND (site_status <> 'ACTIVE' OR NOT public_lookup_enabled OR NOT payment_enabled);
 
 -- Approved PITX Level 3 CAR continuity tariff. No other Site/vehicle tariff is inferred.
 INSERT INTO sites.site_tariff_definitions (

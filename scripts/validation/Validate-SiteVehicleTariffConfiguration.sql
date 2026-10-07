@@ -24,10 +24,10 @@ BEGIN
         FROM sites.sites
         WHERE site_id = '2d1dcdf8-f563-537c-8542-0bde7cc9da97'::uuid
           AND site_code = 'PITX-LEVEL-3'
-          AND site_status = 'DRAFT'
-          AND NOT public_lookup_enabled
-          AND NOT payment_enabled) THEN
-        RAISE EXCEPTION 'PITX Level 3 clean-build Site lifecycle posture changed unexpectedly.';
+          AND site_status = 'ACTIVE'
+          AND public_lookup_enabled
+          AND payment_enabled) THEN
+        RAISE EXCEPTION 'PITX Level 3 is not in the approved realistic operational test posture.';
     END IF;
 
     SELECT count(*) INTO definition_count

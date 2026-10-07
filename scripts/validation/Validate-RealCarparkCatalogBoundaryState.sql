@@ -102,13 +102,15 @@ BEGIN
          WHERE site_id = '2d1dcdf8-f563-537c-8542-0bde7cc9da97'
            AND site_group_id = 'a6dbadf6-68b5-5bed-a7e0-a75faee70841'
            AND site_code = 'PITX-LEVEL-3' AND site_name = 'PITX Level 3'
-           AND site_status = 'DRAFT') <> 1
+           AND site_status = 'ACTIVE'
+           AND public_lookup_enabled
+           AND payment_enabled) <> 1
      OR (SELECT count(*) FROM sites.sites
          WHERE site_id = 'b336964f-3b84-5404-8690-97ead0929b1f'
            AND site_group_id = 'a6dbadf6-68b5-5bed-a7e0-a75faee70841'
            AND site_code = 'PITX-OPEN-LOT' AND site_name = 'PITX Open Lot'
            AND site_status = 'DRAFT') <> 1 THEN
-    RAISE EXCEPTION 'Real carpark boundary failed: protected PITX identities or clean-build activation semantics changed.';
+    RAISE EXCEPTION 'Real carpark boundary failed: protected PITX identities or approved realistic-test activation semantics changed.';
   END IF;
 
   IF expected.expect_synthetic_fixture THEN
