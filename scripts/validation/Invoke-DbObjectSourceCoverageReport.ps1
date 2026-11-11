@@ -52,7 +52,7 @@ function Add-Failure {
     [void]$failures.Add($Message)
 }
 
-$ownedSchemas = @('audit','config','core','coupons','discounts','events','gates','identity','integration','merchants','operations','operator_console','payments','reconciliation','sessions','sites')
+$ownedSchemas = @('audit','config','core','coupons','discounts','events','gates','identity','integration','ist_configuration','merchants','operations','operator_console','payments','reconciliation','sessions','sites')
 $excludedSchemas = @('public','pagila')
 $objectsRoot = Join-Path $RepoRoot 'objects'
 $outputRoot = Join-Path $RepoRoot $OutputDirectory
@@ -252,7 +252,13 @@ $requiredMarkers = @(
     'cashier-shifts.operate',
     'cash-custody.operate',
     'terminal-cash.receive',
-    'HUMAN_IDENTITY_EVENT_TYPE'
+    'HUMAN_IDENTITY_EVENT_TYPE',
+    'payments.payment_provider_routing_policies',
+    'identity.devices',
+    'operator_console.operator_session_contexts',
+    'core.terminal_cash_payment_commands',
+    'ist_configuration.real_site_catalog_members',
+    'ist_configuration.real_site_operational_readiness'
 )
 $presence = @()
 foreach ($marker in $requiredMarkers) {
