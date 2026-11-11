@@ -76,11 +76,18 @@ $required = @(
     'APT_CASHIER_OPERATOR',
     'parking-attendant.operate',
     'apt.cashier.operate',
-    'HUMAN_IDENTITY_EVENT_TYPE'
+    'HUMAN_IDENTITY_EVENT_TYPE',
+    'payments.payment_provider_routing_policies',
+    'identity.devices',
+    'operator_console.operator_session_contexts',
+    'core.terminal_cash_payment_commands',
+    'ist_configuration.real_site_catalog_members',
+    'ist_configuration.real_site_operational_readiness'
 )
 
 foreach ($needle in $required) {
-    if (-not $sql.Contains($needle)) {
+    $quoted = '"' + ($needle -replace '\.', '"."') + '"'
+    if (-not ($sql.Contains($needle) -or $sql.Contains($quoted))) {
         throw "Generated SQL does not contain required object or seed marker: $needle"
     }
 }

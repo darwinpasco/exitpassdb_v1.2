@@ -2747,3 +2747,7 @@ objects/schemas/sessions/indexes/sessions.vendor_session_projection_sync_targets
 objects/schemas/sessions/comments/sessions.vendor_session_projection_sync_targets.comments.sql
 objects/reference-data/identity.v13-management-platform-role-permission-bundles.sql
 objects/schemas/sites/tables/sites.site-vehicle-tariff-configuration.sql
+
+# Accepted v1.3 Central PMS live-schema structural alignment. No environment data is seeded.
+objects/schemas/ist_configuration/schema/ist_configuration.schema.sql
+objects/schemas/core/tables/core.v13-accepted-live-schema-alignment.sql

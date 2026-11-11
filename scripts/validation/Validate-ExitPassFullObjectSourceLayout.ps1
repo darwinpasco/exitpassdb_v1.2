@@ -10,7 +10,7 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = (Resolve-Path (Join-Path $scriptRoot '..\..')).Path
 }
 
-$ownedSchemas = @('audit','config','core','coupons','discounts','events','gates','identity','integration','merchants','operations','operator_console','payments','reconciliation','sessions','sites')
+$ownedSchemas = @('audit','config','core','coupons','discounts','events','gates','identity','integration','ist_configuration','merchants','operations','operator_console','payments','reconciliation','sessions','sites')
 foreach ($schema in $ownedSchemas) {
     $schemaPath = Join-Path $RepoRoot "objects\schemas\$schema"
     if (-not (Test-Path -LiteralPath $schemaPath)) { throw "Missing object source schema folder: objects/schemas/$schema" }
@@ -94,6 +94,12 @@ $requiredMarkers = @(
     'discounts.statutory_discount_payable_basis_applications',
     'discounts.apply_statutory_discount_payable_basis',
     'operator_console.operator_device_bindings'
+    'payments.payment_provider_routing_policies'
+    'identity.devices'
+    'operator_console.operator_session_contexts'
+    'core.terminal_cash_payment_commands'
+    'ist_configuration.real_site_catalog_members'
+    'ist_configuration.real_site_operational_readiness'
 )
 foreach ($marker in $requiredMarkers) {
     $quoted = '"' + ($marker -replace '\.', '"."') + '"'
